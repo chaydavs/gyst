@@ -14,10 +14,77 @@
  */
 
 import { Database } from "bun:sqlite";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { logger } from "../utils/logger.js";
 import { DatabaseError } from "../utils/errors.js";
+
+// ---------------------------------------------------------------------------
+// Custom SQLite binary (required for extension loading)
+// ---------------------------------------------------------------------------
+// Bun's bundled SQLite does NOT allow loading extensions, which is needed
+// for sqlite-vec. We point at a system libsqlite3 that supports extensions.
+// This is done lazily on first Database construction, process-wide.
+//
+// Probe order:
+//   1. GYST_SQLITE_PATH environment override
+//   2. Homebrew on macOS (/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib)
+//   3. Homebrew Intel (/usr/local/opt/sqlite/lib/libsqlite3.dylib)
+//   4. Ubuntu / Debian (/usr/lib/x86_64-linux-gnu/libsqlite3.so.0)
+//   5. Ubuntu ARM64 (/usr/lib/aarch64-linux-gnu/libsqlite3.so.0)
+//
+// If none found, fall back to Bun's bundled SQLite — extensions won't
+// work (semantic search will be disabled), but every other feature
+// keeps running.
+
+const SQLITE_PROBE_PATHS = [
+  "/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib",
+  "/usr/local/opt/sqlite/lib/libsqlite3.dylib",
+  "/usr/lib/x86_64-linux-gnu/libsqlite3.so.0",
+  "/usr/lib/aarch64-linux-gnu/libsqlite3.so.0",
+  "/usr/lib/libsqlite3.so.0",
+] as const;
+
+let customSqliteApplied = false;
+
+function applyCustomSqliteOnce(): boolean {
+  if (customSqliteApplied) {
+    return true;
+  }
+  const overridePath = process.env["GYST_SQLITE_PATH"];
+  const candidates = overridePath !== undefined
+    ? [overridePath, ...SQLITE_PROBE_PATHS]
+    : [...SQLITE_PROBE_PATHS];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      try {
+        Database.setCustomSQLite(candidate);
+        customSqliteApplied = true;
+        logger.info("Custom SQLite loaded", { path: candidate });
+        return true;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.warn("setCustomSQLite failed", { path: candidate, error: msg });
+      }
+    }
+  }
+
+  logger.warn(
+    "No system libsqlite3 found — falling back to bundled Bun SQLite. " +
+      "Semantic search will be disabled.",
+  );
+  return false;
+}
+
+/**
+ * Returns true if the process is using a system SQLite that supports
+ * extension loading. Callers that need vec0 should check this before
+ * attempting initVectorStore.
+ */
+export function canLoadExtensions(): boolean {
+  return customSqliteApplied;
+}
 
 // ---------------------------------------------------------------------------
 // DDL statements executed at startup
@@ -156,6 +223,10 @@ const SCHEMA_STATEMENTS: readonly string[] = [
  */
 export function initDatabase(path: string = "gyst-wiki/.wiki.db"): Database {
   logger.info("Initialising database", { path });
+
+  // Try to switch to a system SQLite that supports extension loading.
+  // Safe to call repeatedly — internal guard makes it a one-shot.
+  applyCustomSqliteOnce();
 
   // Ensure parent directory exists (bun:sqlite won't create it)
   try {
