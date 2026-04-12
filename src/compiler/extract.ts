@@ -19,7 +19,7 @@ import { ValidationError } from "../utils/errors.js";
 /** Zod schema for a compiled knowledge entry. */
 export const KnowledgeEntrySchema = z.object({
   id: z.string(),
-  type: z.enum(["error_pattern", "convention", "decision", "learning"]),
+  type: z.enum(["error_pattern", "convention", "decision", "learning", "ghost_knowledge"]),
   title: z.string().min(5).max(200),
   content: z.string().min(10).max(5000),
   files: z.array(z.string()).default([]),
@@ -53,8 +53,8 @@ export type KnowledgeEntry = z.infer<typeof KnowledgeEntrySchema>;
  * any processing.
  */
 export const LearnInputSchema = z.object({
-  /** One of the four canonical knowledge types. */
-  type: z.enum(["error_pattern", "convention", "decision", "learning"]),
+  /** One of the five canonical knowledge types. */
+  type: z.enum(["error_pattern", "convention", "decision", "learning", "ghost_knowledge"]),
   /** Short human-readable title for the entry. */
   title: z.string().min(5).max(200),
   /** Full description, explanation, or fix instructions. */
@@ -142,11 +142,19 @@ export function extractEntry(input: LearnInput): KnowledgeEntry {
   const now = new Date().toISOString();
 
   // Determine scope: use explicit input if provided, otherwise apply
-  // type-based defaults (learning → personal; everything else → team).
+  // type-based defaults (learning → personal; ghost_knowledge → team;
+  // everything else → team).
   const defaultScope =
     valid.type === "learning" ? "personal" : "team";
   const resolvedScope: "personal" | "team" | "project" =
     valid.scope ?? defaultScope;
+
+  // Ghost knowledge always has confidence 1.0 — these are team-wide
+  // constraints that are considered ground-truth until removed.
+  const resolvedConfidence =
+    valid.type === "ghost_knowledge"
+      ? (valid.confidence ?? 1.0)
+      : (valid.confidence ?? 0.5);
 
   const entry: KnowledgeEntry = {
     id: crypto.randomUUID(),
@@ -159,7 +167,7 @@ export function extractEntry(input: LearnInput): KnowledgeEntry {
     errorMessage: safeErrorMessage,
     errorSignature,
     fingerprint,
-    confidence: valid.confidence ?? 0.5,
+    confidence: resolvedConfidence,
     sourceCount: 1,
     sourceTool: valid.sourceTool,
     createdAt: now,

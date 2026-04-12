@@ -25,6 +25,12 @@ const HALF_LIFE_DAYS: Record<string, number> = {
   decision: 365,
   /** Learnings decay moderately — 60-day half-life. */
   learning: 60,
+  /**
+   * Ghost knowledge (tribal team rules) never decays — these are
+   * timeless constraints that remain true until explicitly removed.
+   * `0.5 ** (days / Infinity) === 1` for any finite `days`.
+   */
+  ghost_knowledge: Infinity,
 };
 
 /** Multiplier applied when a contradicting entry exists. */

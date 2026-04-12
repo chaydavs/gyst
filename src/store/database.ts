@@ -102,7 +102,7 @@ const SCHEMA_STATEMENTS: readonly string[] = [
   // ----- tables -----
   `CREATE TABLE IF NOT EXISTS entries (
     id               TEXT    NOT NULL PRIMARY KEY,
-    type             TEXT    NOT NULL CHECK (type IN ('error_pattern','convention','decision','learning')),
+    type             TEXT    NOT NULL CHECK (type IN ('error_pattern','convention','decision','learning','ghost_knowledge')),
     title            TEXT    NOT NULL,
     content          TEXT    NOT NULL DEFAULT '',
     file_path        TEXT,
@@ -114,7 +114,7 @@ const SCHEMA_STATEMENTS: readonly string[] = [
     last_confirmed   TEXT    NOT NULL,
     superseded_by    TEXT,
     status           TEXT    NOT NULL DEFAULT 'active'
-                            CHECK (status IN ('active','stale','conflicted','archived')),
+                            CHECK (status IN ('active','stale','conflicted','archived','consolidated')),
     scope            TEXT    NOT NULL DEFAULT 'team'
                             CHECK (scope IN ('personal','team','project')),
     developer_id     TEXT
