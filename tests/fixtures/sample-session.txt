@@ -1,0 +1,106 @@
+Human: Lets work on improving the database layer.
+
+System: You are a helpful assistant. See CLAUDE.md for project context.
+
+Assistant: Sure. Before we start, let me review the current schema.
+
+Tool: read_file
+Reading src/store/database.ts...
+  const db = new Database(path);
+  db.exec(SCHEMA);
+
+Human: The main issue is we keep hitting SQLITE_BUSY errors under load.
+
+Assistant: That is a known problem with default SQLite settings.
+The issue was that by default SQLite only waits 0ms before returning SQLITE_BUSY.
+
+Error: SQLITE_BUSY database is locked
+
+The fix is to add a busy_timeout pragma at connection open time.
+Fixed: added PRAGMA busy_timeout = 5000 to the PRAGMAS array in database.ts
+
+Human: Great. What about write-ahead logging?
+
+Assistant: We already have WAL mode enabled via PRAGMA journal_mode = WAL.
+Turns out FTS5 AND-binds implicit tokens, so we need explicit OR groups
+when we want synonym expansion to work correctly with multiple terms.
+
+Human: While we are at it, can we look at the query layer?
+
+Tool: read_file
+Reading src/store/search.ts...
+  SELECT rowid, bm25(entries_fts)
+  FROM entries_fts WHERE entries_fts MATCH ?
+
+Assistant: The search looks fine. Always use parameterized queries
+for all user input to prevent SQL injection. I see a few places where we
+could tighten this up.
+
+Human: Also I noticed we have some console.log calls in the source.
+
+Assistant: Yes, we should remove those. Never use console.log in src/
+instead always use the structured logger from src/utils/logger.ts which writes
+JSON to stderr. This keeps the MCP stdio transport clean.
+
+Human: Makes sense. Should we switch from redis to sqlite for local dev?
+
+Assistant: Yes, switching from redis to sqlite for local dev makes a lot of
+sense. Redis requires a running daemon which adds setup friction.
+
+I decided to use SQLite for local caching instead of Redis because it
+eliminates a runtime dependency and bun:sqlite is already bundled.
+
+Human: What about the runtime choice?
+
+Assistant: We chose bun because startup is 5x faster than node for CLI commands.
+This matters a lot for the git hook path where latency directly affects developer
+experience. The built-in SQLite and native TypeScript support are additional wins.
+
+Human: Agreed. The FTS5 search is sometimes missing results.
+
+Assistant: Learned that bun.serve is faster than http.createServer for the
+HTTP transport layer - we measured about 2x throughput in our benchmarks.
+
+The FTS5 issue: discovered that the porter stemmer does not handle camelCase
+tokens well. We need to pre-process with codeTokenize() before FTS5 insertion.
+
+Human: Can you show me the codeTokenize function?
+
+Tool: read_file
+Reading src/store/search.ts...
+function codeTokenize(text) {
+  return text.replace(/([a-z])([A-Z])/g, chr_dollar_1 + chr_space + chr_dollar_2).toLowerCase();
+}
+
+Human: Perfect. What about connection strings in config?
+
+Assistant: The connection string for the database should never include
+credentials in source code. For example do not hardcode values like
+api_key = "SK_TEST_abc123def456ghi789jkl" in any config files.
+Always use environment variables for secrets.
+
+Human: Right. Should we add retry logic for the busy errors?
+
+Assistant: The busy_timeout pragma handles this automatically at the SQLite
+level. It is more reliable than application-level retry because it avoids
+the thundering herd problem.
+
+The bug was that we were not setting busy_timeout before running migrations,
+so schema creation could also fail under concurrent startup.
+Resolved by moving the PRAGMA busy_timeout statement before all DDL.
+
+Human: Ok. Any final conventions we should document?
+
+Assistant: A few important ones:
+
+Convention: all database writes must use transactions to ensure atomicity.
+
+We use parameterized SQL for all queries. This is mandatory for security.
+
+Standard: error handling must use custom GystError subclasses, never
+throw plain Error objects from module code.
+
+Note: the sources table session_id column is the mechanism for idempotent
+harvest operations - always check it before processing a transcript.
+
+Human: Perfect summary. Lets commit and move on.
