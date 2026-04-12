@@ -89,13 +89,25 @@ jobs:
 
       - name: Check for hardcoded secrets
         run: |
-          # Exclude src/compiler/security.ts — it contains the regex patterns
-          # that define what secrets look like, which would otherwise self-match.
+          # Scan source, test helpers, and the wiki for hardcoded creds.
+          # Exclusions:
+          #   security.ts  — the scanner's own regex patterns would self-match
+          #   *.test.ts    — test files intentionally contain fake credential
+          #                  strings as fixtures (e.g. AKIAIOSFODNN7EXAMPLE
+          #                  which is AWS's documented example key) to
+          #                  verify the security filter catches them.
+          # We still scan tests/**/*.ts non-test files (like eval harnesses
+          # and fixtures helpers) so a developer hardcoding a real cred in
+          # test infrastructure is still caught.
+          # Also scan *.md files so a learned wiki entry containing a real
+          # secret would fail CI.
           ! grep -rn \
               "AKIA\|sk-[a-zA-Z0-9]\|-----BEGIN.*KEY\|xoxb-\|xapp-\|gho_" \
               src/ tests/ gyst-wiki/ \
               --include="*.ts" \
-              --exclude="security.ts"
+              --include="*.md" \
+              --exclude="security.ts" \
+              --exclude="*.test.ts"
 
       - name: Check for console.log statements
         run: |
