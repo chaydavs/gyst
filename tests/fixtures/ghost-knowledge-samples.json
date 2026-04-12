@@ -1,0 +1,62 @@
+[
+  {
+    "question_id": "deploy_rules",
+    "answer": "Never deploy on Fridays after 3pm — the oncall rotation is thin and we've had 3 bad Friday incidents",
+    "expected_files": [],
+    "expected_tags": ["ghost", "deploy_rules"]
+  },
+  {
+    "question_id": "sacred_files",
+    "answer": "Don't modify src/billing/reconcile.ts without asking Sarah — that file is the source of truth for revenue",
+    "expected_files": ["src/billing/reconcile.ts"],
+    "expected_tags": ["ghost", "sacred_files"]
+  },
+  {
+    "question_id": "onboarding",
+    "answer": "New hires always forget to run bun run setup before starting dev — the DB won't initialise and you'll get confusing errors for hours",
+    "expected_files": [],
+    "expected_tags": ["ghost", "onboarding"]
+  },
+  {
+    "question_id": "dont_touch",
+    "answer": "The migrations/legacy/001-init.sql file looks like it should be cleaned up but it's referenced by the Docker build — deleting it breaks the CI pipeline",
+    "expected_files": ["migrations/legacy/001-init.sql"],
+    "expected_tags": ["ghost", "dont_touch"]
+  },
+  {
+    "question_id": "common_mistake",
+    "answer": "People always try to import directly from src/server/auth.ts inside the MCP layer — that creates a circular dep. Use the public re-export in src/index.ts instead",
+    "expected_files": ["src/server/auth.ts", "src/index.ts"],
+    "expected_tags": ["ghost", "common_mistake"]
+  },
+  {
+    "question_id": "conventions",
+    "answer": "All database queries must use parameterized SQL — no string interpolation. The linter doesn't catch this but every PR reviewer will reject it",
+    "expected_files": [],
+    "expected_tags": ["ghost", "conventions"]
+  },
+  {
+    "question_id": "historical",
+    "answer": "We switched from Node.js to Bun in early 2025. Any third-party library that uses native Node addons will break — check compatibility before adding deps",
+    "expected_files": [],
+    "expected_tags": ["ghost", "historical"]
+  },
+  {
+    "question_id": "sacred_files",
+    "answer": "src/mcp/server.ts and src/store/database.ts are the two files that touch every feature — changes there require a full test run and a second reviewer",
+    "expected_files": ["src/mcp/server.ts", "src/store/database.ts"],
+    "expected_tags": ["ghost", "sacred_files"]
+  },
+  {
+    "question_id": "deploy_rules",
+    "answer": "Database migrations are manual — you must run the migration script against production yourself after deploying. The app does NOT auto-migrate on startup",
+    "expected_files": [],
+    "expected_tags": ["ghost", "deploy_rules"]
+  },
+  {
+    "question_id": "onboarding",
+    "answer": "The .gyst-wiki.json config file in the project root controls the DB path and token limits. If you clone the repo without it, gyst falls back to defaults but logs a warning you can safely ignore on day one",
+    "expected_files": [],
+    "expected_tags": ["ghost", "onboarding"]
+  }
+]
