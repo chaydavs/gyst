@@ -37,7 +37,16 @@ import { getTeamMembers, removeMember } from "../server/team.js";
 
 const execFileAsync = promisify(execFile);
 
-const WIKI_SUBDIRS = ["errors", "conventions", "decisions", "learnings"] as const;
+// Matches the entry type enum in src/compiler/extract.ts + src/store/database.ts.
+// writeEntry() writes to `{wikiDir}/{entry.type}/{slug}.md`, so these directory
+// names MUST match the type literals exactly.
+const WIKI_SUBDIRS = [
+  "error_pattern",
+  "convention",
+  "decision",
+  "learning",
+  "ghost_knowledge",
+] as const;
 
 const program = new Command();
 
