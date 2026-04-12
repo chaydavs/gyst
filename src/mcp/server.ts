@@ -21,6 +21,7 @@ import { registerFailuresTool } from "./tools/failures.js";
 import { registerActivityTool } from "./tools/activity.js";
 import { registerStatusTool } from "./tools/status.js";
 import { registerFeedbackTool } from "./tools/feedback.js";
+import { registerHarvestTool } from "./tools/harvest.js";
 
 // ---------------------------------------------------------------------------
 // Bootstrap
@@ -69,6 +70,7 @@ async function main(): Promise<void> {
   registerActivityTool(server, db);
   registerStatusTool(server, db);
   registerFeedbackTool(server, db);
+  registerHarvestTool(server, db);
 
   // Connect via stdio transport
   const transport = new StdioServerTransport();

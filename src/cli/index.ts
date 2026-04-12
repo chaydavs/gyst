@@ -510,4 +510,87 @@ program
     }
   });
 
+// ---------------------------------------------------------------------------
+// gyst ghost-init — interactive tribal knowledge onboarding
+// ---------------------------------------------------------------------------
+
+program
+  .command("ghost-init")
+  .description("Interactive onboarding to capture tribal team knowledge")
+  .action(async () => {
+    try {
+      const { runGhostInit } = await import("./ghost-init.js");
+      const count = await runGhostInit();
+      logger.info("ghost-init complete", { count });
+    } catch (err) {
+      const message = err instanceof GystError
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : String(err);
+      logger.error("ghost-init failed", { error: message });
+      process.stdout.write(`Error: ${message}\n`);
+      process.exit(1);
+    }
+  });
+
+// ---------------------------------------------------------------------------
+// gyst consolidate — run the 5-stage consolidation pipeline
+// ---------------------------------------------------------------------------
+
+program
+  .command("consolidate")
+  .description(
+    "Run the 5-stage consolidation pipeline (decay, dedupe, merge clusters, archive, reindex)",
+  )
+  .action(async () => {
+    try {
+      const config = loadConfig();
+      const db = initDatabase(config.dbPath);
+      const { consolidate } = await import("../compiler/consolidate.js");
+      const report = await consolidate(db);
+      db.close();
+
+      process.stdout.write("Consolidation complete.\n");
+      process.stdout.write(`  Entries decayed (>0.05): ${report.entriesDecayed}\n`);
+      process.stdout.write(`  Duplicates merged      : ${report.duplicatesMerged}\n`);
+      process.stdout.write(`  Clusters consolidated  : ${report.clustersConsolidated}\n`);
+      process.stdout.write(`  Entries archived       : ${report.entriesArchived}\n`);
+      process.stdout.write(`  Active entries after   : ${report.indexEntries}\n`);
+      process.stdout.write(`  Duration               : ${report.durationMs.toFixed(0)}ms\n`);
+
+      logger.info("consolidate complete", { ...report });
+    } catch (err) {
+      const message = err instanceof GystError
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : String(err);
+      logger.error("consolidate failed", { error: message });
+      process.stdout.write(`Error: ${message}\n`);
+      process.exit(1);
+    }
+  });
+
+// ---------------------------------------------------------------------------
+// gyst harvest-session — extract knowledge from the most recent Claude Code session
+// ---------------------------------------------------------------------------
+
+program
+  .command("harvest-session")
+  .description(
+    "Read the most recent Claude Code session transcript and harvest knowledge entries",
+  )
+  .action(async () => {
+    try {
+      const { runHarvestSession } = await import("./harvest.js");
+      await runHarvestSession();
+    } catch (err) {
+      // Hooks must NEVER fail the parent operation (PreCompact must not block).
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error("harvest-session failed", { error: message });
+      process.exit(0);
+    }
+  });
+
 program.parse();
