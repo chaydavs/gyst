@@ -1,0 +1,999 @@
+{
+  "timestamp": "2026-04-12T03:27:08.415Z",
+  "totalConfigurations": 96,
+  "gridSpace": {
+    "rrfKValues": [
+      10,
+      20,
+      30,
+      40,
+      60,
+      80,
+      100,
+      120
+    ],
+    "filePathWeights": [
+      0.5,
+      1,
+      2,
+      3
+    ],
+    "graphWeights": [
+      0.5,
+      1,
+      2
+    ]
+  },
+  "bestConfig": {
+    "rrfK": 10,
+    "filePathWeight": 0.5,
+    "graphWeight": 0.5,
+    "mrr": 0.7240000000000001,
+    "meanPrecision": 0.16800000000000004,
+    "meanRecall": 0.69,
+    "meanNdcg": 0.6816703704926659,
+    "hitRate": 0.76
+  },
+  "allConfigs": [
+    {
+      "rrfK": 10,
+      "filePathWeight": 0.5,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 10,
+      "filePathWeight": 0.5,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 10,
+      "filePathWeight": 0.5,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 10,
+      "filePathWeight": 1,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 10,
+      "filePathWeight": 1,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 10,
+      "filePathWeight": 1,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 20,
+      "filePathWeight": 0.5,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 20,
+      "filePathWeight": 0.5,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 20,
+      "filePathWeight": 0.5,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 20,
+      "filePathWeight": 1,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 20,
+      "filePathWeight": 1,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 20,
+      "filePathWeight": 1,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 20,
+      "filePathWeight": 2,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 20,
+      "filePathWeight": 2,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 20,
+      "filePathWeight": 2,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 30,
+      "filePathWeight": 0.5,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 30,
+      "filePathWeight": 0.5,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 30,
+      "filePathWeight": 0.5,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 30,
+      "filePathWeight": 1,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 30,
+      "filePathWeight": 1,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 30,
+      "filePathWeight": 1,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 30,
+      "filePathWeight": 2,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 30,
+      "filePathWeight": 2,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 30,
+      "filePathWeight": 2,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 30,
+      "filePathWeight": 3,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 30,
+      "filePathWeight": 3,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 30,
+      "filePathWeight": 3,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 40,
+      "filePathWeight": 0.5,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 40,
+      "filePathWeight": 0.5,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 40,
+      "filePathWeight": 0.5,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 40,
+      "filePathWeight": 1,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 40,
+      "filePathWeight": 1,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 40,
+      "filePathWeight": 1,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 40,
+      "filePathWeight": 2,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 40,
+      "filePathWeight": 2,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 40,
+      "filePathWeight": 2,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 40,
+      "filePathWeight": 3,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 40,
+      "filePathWeight": 3,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 40,
+      "filePathWeight": 3,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 60,
+      "filePathWeight": 0.5,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 60,
+      "filePathWeight": 0.5,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 60,
+      "filePathWeight": 0.5,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 60,
+      "filePathWeight": 1,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 60,
+      "filePathWeight": 1,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 60,
+      "filePathWeight": 1,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 60,
+      "filePathWeight": 2,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 60,
+      "filePathWeight": 2,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 60,
+      "filePathWeight": 2,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 60,
+      "filePathWeight": 3,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 60,
+      "filePathWeight": 3,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 60,
+      "filePathWeight": 3,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 80,
+      "filePathWeight": 0.5,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 80,
+      "filePathWeight": 0.5,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 80,
+      "filePathWeight": 0.5,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 80,
+      "filePathWeight": 1,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 80,
+      "filePathWeight": 1,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 80,
+      "filePathWeight": 1,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 80,
+      "filePathWeight": 2,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 80,
+      "filePathWeight": 2,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 80,
+      "filePathWeight": 2,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 80,
+      "filePathWeight": 3,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 80,
+      "filePathWeight": 3,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 80,
+      "filePathWeight": 3,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 100,
+      "filePathWeight": 0.5,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 100,
+      "filePathWeight": 0.5,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 100,
+      "filePathWeight": 0.5,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 100,
+      "filePathWeight": 1,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 100,
+      "filePathWeight": 1,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 100,
+      "filePathWeight": 1,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 100,
+      "filePathWeight": 2,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 100,
+      "filePathWeight": 2,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 100,
+      "filePathWeight": 2,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 100,
+      "filePathWeight": 3,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 100,
+      "filePathWeight": 3,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 100,
+      "filePathWeight": 3,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 120,
+      "filePathWeight": 0.5,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 120,
+      "filePathWeight": 0.5,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 120,
+      "filePathWeight": 0.5,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 120,
+      "filePathWeight": 1,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 120,
+      "filePathWeight": 1,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 120,
+      "filePathWeight": 1,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 120,
+      "filePathWeight": 2,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 120,
+      "filePathWeight": 2,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 120,
+      "filePathWeight": 2,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 120,
+      "filePathWeight": 3,
+      "graphWeight": 0.5,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 120,
+      "filePathWeight": 3,
+      "graphWeight": 1,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 120,
+      "filePathWeight": 3,
+      "graphWeight": 2,
+      "mrr": 0.7240000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6816703704926659,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 10,
+      "filePathWeight": 2,
+      "graphWeight": 0.5,
+      "mrr": 0.7140000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6771444827820475,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 10,
+      "filePathWeight": 2,
+      "graphWeight": 1,
+      "mrr": 0.7140000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6771444827820475,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 10,
+      "filePathWeight": 2,
+      "graphWeight": 2,
+      "mrr": 0.7140000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6771444827820475,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 20,
+      "filePathWeight": 3,
+      "graphWeight": 0.5,
+      "mrr": 0.7140000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6771444827820475,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 20,
+      "filePathWeight": 3,
+      "graphWeight": 1,
+      "mrr": 0.7140000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6771444827820475,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 20,
+      "filePathWeight": 3,
+      "graphWeight": 2,
+      "mrr": 0.7140000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6771444827820475,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 10,
+      "filePathWeight": 3,
+      "graphWeight": 0.5,
+      "mrr": 0.7090000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6746887890888086,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 10,
+      "filePathWeight": 3,
+      "graphWeight": 1,
+      "mrr": 0.7090000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6746887890888086,
+      "hitRate": 0.76
+    },
+    {
+      "rrfK": 10,
+      "filePathWeight": 3,
+      "graphWeight": 2,
+      "mrr": 0.7090000000000001,
+      "meanPrecision": 0.16800000000000004,
+      "meanRecall": 0.69,
+      "meanNdcg": 0.6746887890888086,
+      "hitRate": 0.76
+    }
+  ]
+}

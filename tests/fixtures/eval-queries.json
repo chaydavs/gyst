@@ -1,0 +1,402 @@
+[
+  {
+    "id": "q-001",
+    "query": "stripe webhook signature verification failing",
+    "description": "Developer encountering Stripe webhook signature errors",
+    "expected_ids": ["entry-005", "entry-042"],
+    "type_filter": null,
+    "file_context": ["src/webhooks/stripe.ts"]
+  },
+  {
+    "id": "q-002",
+    "query": "postgres connection pool exhausted serverless",
+    "description": "PostgreSQL connection pool exhaustion in serverless environment",
+    "expected_ids": ["entry-010"],
+    "type_filter": "error_pattern",
+    "file_context": []
+  },
+  {
+    "id": "q-003",
+    "query": "typescript cannot find module import extension",
+    "description": "TypeScript module resolution error with ESM imports",
+    "expected_ids": ["entry-007"],
+    "type_filter": null,
+    "file_context": ["tsconfig.json"]
+  },
+  {
+    "id": "q-004",
+    "query": "sqlite busy database locked",
+    "description": "SQLite SQLITE_BUSY error when multiple processes access the DB",
+    "expected_ids": ["entry-003", "entry-016"],
+    "type_filter": "error_pattern",
+    "file_context": ["src/store/database.ts"]
+  },
+  {
+    "id": "q-005",
+    "query": "how should we handle API errors response format",
+    "description": "Developer asking about the team's API error handling convention",
+    "expected_ids": ["entry-023"],
+    "type_filter": "convention",
+    "file_context": []
+  },
+  {
+    "id": "q-006",
+    "query": "why did we choose bun over node",
+    "description": "Developer wanting to understand the Bun vs Node.js decision",
+    "expected_ids": ["entry-033"],
+    "type_filter": "decision",
+    "file_context": []
+  },
+  {
+    "id": "q-007",
+    "query": "jwt sessions authentication why",
+    "description": "Developer asking why JWT was chosen over sessions",
+    "expected_ids": ["entry-035", "entry-017"],
+    "type_filter": null,
+    "file_context": []
+  },
+  {
+    "id": "q-008",
+    "query": "oauth token expired 401 refresh",
+    "description": "Developer hitting OAuth token expiry errors",
+    "expected_ids": ["entry-006"],
+    "type_filter": "error_pattern",
+    "file_context": ["src/auth/oauth.ts"]
+  },
+  {
+    "id": "q-009",
+    "query": "getUserProfile throwing null error",
+    "description": "Specific function name causing null reference errors",
+    "expected_ids": ["entry-020"],
+    "type_filter": null,
+    "file_context": ["src/api/profile.ts"]
+  },
+  {
+    "id": "q-010",
+    "query": "deployment environment variables not available build time",
+    "description": "Env vars missing during Vercel build step",
+    "expected_ids": ["entry-048", "entry-032"],
+    "type_filter": null,
+    "file_context": ["vercel.json"]
+  },
+  {
+    "id": "q-011",
+    "query": "naming convention for service files",
+    "description": "Developer asking how to name service layer files",
+    "expected_ids": ["entry-024"],
+    "type_filter": "convention",
+    "file_context": []
+  },
+  {
+    "id": "q-012",
+    "query": "database connection refused localhost 5432",
+    "description": "Postgres ECONNREFUSED during local development",
+    "expected_ids": ["entry-002"],
+    "type_filter": "error_pattern",
+    "file_context": []
+  },
+  {
+    "id": "q-013",
+    "query": "sqlite versus postgres why local storage",
+    "description": "Developer asking about the database choice",
+    "expected_ids": ["entry-034"],
+    "type_filter": "decision",
+    "file_context": []
+  },
+  {
+    "id": "q-014",
+    "query": "authentication issues middleware null user context",
+    "description": "Cross-type query about authentication problems",
+    "expected_ids": ["entry-020", "entry-006", "entry-017"],
+    "type_filter": null,
+    "file_context": ["src/middleware/auth.ts"]
+  },
+  {
+    "id": "q-015",
+    "query": "tests failing open handles process not exit",
+    "description": "Test suite hanging after tests complete",
+    "expected_ids": ["entry-021"],
+    "type_filter": "error_pattern",
+    "file_context": ["tests/"]
+  },
+  {
+    "id": "q-016",
+    "query": "commit message format conventional commits",
+    "description": "Developer asking about commit message conventions",
+    "expected_ids": ["entry-028"],
+    "type_filter": "convention",
+    "file_context": []
+  },
+  {
+    "id": "q-017",
+    "query": "redis connection per request exhaustion",
+    "description": "Redis connection pool exhaustion due to per-request client creation",
+    "expected_ids": ["entry-043"],
+    "type_filter": "learning",
+    "file_context": ["src/store/redis.ts"]
+  },
+  {
+    "id": "q-018",
+    "query": "bm25 fts5 search rank negative values",
+    "description": "Developer confused by negative FTS5 BM25 rank values",
+    "expected_ids": ["entry-045"],
+    "type_filter": "learning",
+    "file_context": ["src/store/search.ts"]
+  },
+  {
+    "id": "q-019",
+    "query": "why use reciprocal rank fusion instead of reranker",
+    "description": "Developer asking about the search ranking decision",
+    "expected_ids": ["entry-036"],
+    "type_filter": "decision",
+    "file_context": []
+  },
+  {
+    "id": "q-020",
+    "query": "database performance problems",
+    "description": "Vague query about database performance issues",
+    "expected_ids": ["entry-010", "entry-049", "entry-016"],
+    "type_filter": null,
+    "file_context": []
+  },
+  {
+    "id": "q-021",
+    "query": "memory leak event listeners node",
+    "description": "Memory leak from event listener accumulation",
+    "expected_ids": ["entry-009"],
+    "type_filter": "error_pattern",
+    "file_context": []
+  },
+  {
+    "id": "q-022",
+    "query": "unhandled promise rejection fetch timeout",
+    "description": "Unhandled rejections crashing the process",
+    "expected_ids": ["entry-008"],
+    "type_filter": null,
+    "file_context": []
+  },
+  {
+    "id": "q-023",
+    "query": "how to structure tests describe it nesting",
+    "description": "Developer asking about test organization conventions",
+    "expected_ids": ["entry-025"],
+    "type_filter": "convention",
+    "file_context": []
+  },
+  {
+    "id": "q-024",
+    "query": "zod schema validation required optional fields",
+    "description": "Zod validation throwing Required on optional fields",
+    "expected_ids": ["entry-022"],
+    "type_filter": "error_pattern",
+    "file_context": ["src/compiler/extract.ts"]
+  },
+  {
+    "id": "q-025",
+    "query": "why fts5 bm25 instead of vector embeddings search",
+    "description": "Asking about search architecture decision",
+    "expected_ids": ["entry-038", "entry-036"],
+    "type_filter": "decision",
+    "file_context": []
+  },
+  {
+    "id": "q-026",
+    "query": "postgres deadlock transaction locking order",
+    "description": "Deadlock in concurrent database transactions",
+    "expected_ids": ["entry-011"],
+    "type_filter": "error_pattern",
+    "file_context": []
+  },
+  {
+    "id": "q-027",
+    "query": "import ordering convention typescript files",
+    "description": "Developer asking about import organization rules",
+    "expected_ids": ["entry-026"],
+    "type_filter": "convention",
+    "file_context": []
+  },
+  {
+    "id": "q-028",
+    "query": "oauth pkce code verifier concurrent flows broken",
+    "description": "PKCE flow breaking with multiple concurrent auth flows",
+    "expected_ids": ["entry-044"],
+    "type_filter": "learning",
+    "file_context": ["src/auth/oauth.ts"]
+  },
+  {
+    "id": "q-029",
+    "query": "react hydration error className mismatch",
+    "description": "React SSR hydration mismatch for CSS class names",
+    "expected_ids": ["entry-019"],
+    "type_filter": "error_pattern",
+    "file_context": []
+  },
+  {
+    "id": "q-030",
+    "query": "stripe rate limit 429 bulk operations",
+    "description": "Getting rate limited when making bulk Stripe API calls",
+    "expected_ids": ["entry-012"],
+    "type_filter": "error_pattern",
+    "file_context": ["src/billing/stripe.ts"]
+  },
+  {
+    "id": "q-031",
+    "query": "logging standard structured logger console.log",
+    "description": "Developer asking about logging conventions",
+    "expected_ids": ["entry-027"],
+    "type_filter": "convention",
+    "file_context": []
+  },
+  {
+    "id": "q-032",
+    "query": "sql injection parameterized queries database",
+    "description": "Asking how to prevent SQL injection",
+    "expected_ids": ["entry-031"],
+    "type_filter": "convention",
+    "file_context": ["src/store/database.ts"]
+  },
+  {
+    "id": "q-033",
+    "query": "mcp tool error debugging claude not seeing errors",
+    "description": "MCP tool errors not surfacing to Claude",
+    "expected_ids": ["entry-050"],
+    "type_filter": "learning",
+    "file_context": ["src/mcp/server.ts"]
+  },
+  {
+    "id": "q-034",
+    "query": "typescript object possibly undefined index access",
+    "description": "TS2532 strict mode errors on array indexing",
+    "expected_ids": ["entry-013"],
+    "type_filter": "error_pattern",
+    "file_context": []
+  },
+  {
+    "id": "q-035",
+    "query": "wal mode sqlite enable order initialization",
+    "description": "When to enable WAL mode relative to schema creation",
+    "expected_ids": ["entry-046", "entry-016"],
+    "type_filter": "learning",
+    "file_context": ["src/store/database.ts"]
+  },
+  {
+    "id": "q-036",
+    "query": "why four knowledge types not free form taxonomy",
+    "description": "Asking about the decision to use fixed entry types",
+    "expected_ids": ["entry-040"],
+    "type_filter": "decision",
+    "file_context": []
+  },
+  {
+    "id": "q-037",
+    "query": "test isolation in memory database flaky tests",
+    "description": "Tests sharing database state causing flakiness",
+    "expected_ids": ["entry-052", "entry-021"],
+    "type_filter": "learning",
+    "file_context": ["tests/store/"]
+  },
+  {
+    "id": "q-038",
+    "query": "bun build dynamic require node fs not supported",
+    "description": "Node built-in require failing in Bun bundler",
+    "expected_ids": ["entry-014"],
+    "type_filter": "error_pattern",
+    "file_context": ["package.json"]
+  },
+  {
+    "id": "q-039",
+    "query": "environment variable validation startup config module",
+    "description": "How to validate env vars at startup",
+    "expected_ids": ["entry-032"],
+    "type_filter": "convention",
+    "file_context": ["src/config.ts"]
+  },
+  {
+    "id": "q-040",
+    "query": "file organization structure feature domain",
+    "description": "How to organize files in the project",
+    "expected_ids": ["entry-030"],
+    "type_filter": "convention",
+    "file_context": []
+  },
+  {
+    "id": "q-041",
+    "query": "confidence score saturation formula source count",
+    "description": "How confidence scoring works for knowledge entries",
+    "expected_ids": ["entry-041"],
+    "type_filter": "decision",
+    "file_context": ["src/store/confidence.ts"]
+  },
+  {
+    "id": "q-042",
+    "query": "postgres migration column already exists idempotent",
+    "description": "Migration running twice causing column already exists error",
+    "expected_ids": ["entry-015"],
+    "type_filter": "error_pattern",
+    "file_context": ["migrations/"]
+  },
+  {
+    "id": "q-043",
+    "query": "porter stemmer unexpected matches technical terms",
+    "description": "Stemmer reducing precision for code-specific terms",
+    "expected_ids": ["entry-051"],
+    "type_filter": "learning",
+    "file_context": ["src/store/search.ts"]
+  },
+  {
+    "id": "q-044",
+    "query": "jwt verification invalid signature multi service",
+    "description": "JWT signature failing across services",
+    "expected_ids": ["entry-017", "entry-035"],
+    "type_filter": null,
+    "file_context": ["src/auth/jwt.ts"]
+  },
+  {
+    "id": "q-045",
+    "query": "MCP why not rest api integration",
+    "description": "Asking why MCP was chosen for AI integration",
+    "expected_ids": ["entry-037"],
+    "type_filter": "decision",
+    "file_context": []
+  },
+  {
+    "id": "q-046",
+    "query": "req.body undefined express middleware",
+    "description": "Request body being undefined in Express routes",
+    "expected_ids": ["entry-053"],
+    "type_filter": "error_pattern",
+    "file_context": ["src/api/index.ts"]
+  },
+  {
+    "id": "q-047",
+    "query": "unique constraint failed database insert duplicate",
+    "description": "Database throwing constraint violation on duplicate insert",
+    "expected_ids": ["entry-004"],
+    "type_filter": "error_pattern",
+    "file_context": ["src/store/database.ts"]
+  },
+  {
+    "id": "q-048",
+    "query": "code review requirements before merge security",
+    "description": "What the code review checklist requires",
+    "expected_ids": ["entry-029"],
+    "type_filter": "convention",
+    "file_context": []
+  },
+  {
+    "id": "q-049",
+    "query": "why zod validation library chosen",
+    "description": "Decision rationale for using Zod",
+    "expected_ids": ["entry-039"],
+    "type_filter": "decision",
+    "file_context": []
+  },
+  {
+    "id": "q-050",
+    "query": "rate limiting authentication endpoints login",
+    "description": "How to rate limit auth endpoints",
+    "expected_ids": ["entry-055", "entry-029"],
+    "type_filter": "convention",
+    "file_context": ["src/api/auth.ts"]
+  }
+]

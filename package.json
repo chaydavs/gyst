@@ -1,0 +1,35 @@
+{
+  "name": "gyst",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --watch src/mcp/server.ts",
+    "build": "bun build src/mcp/server.ts --outdir dist --target node",
+    "test": "bun test",
+    "setup": "bun run src/cli/index.ts setup",
+    "install-hooks": "bash scripts/install-hooks.sh",
+    "lint": "tsc --noEmit",
+    "recall": "bun run src/cli/index.ts recall",
+    "eval": "bun run tests/eval/retrieval-eval.ts",
+    "eval:tune": "bun run tests/eval/tune-weights.ts"
+  },
+  "bin": {
+    "gyst": "./src/cli/index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^25.6.0"
+  },
+  "peerDependencies": {
+    "typescript": "^6.0.2"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "commander": "^14.0.3",
+    "gray-matter": "^4.0.3",
+    "parse-git-diff": "^0.0.20",
+    "simple-git": "^3.35.2",
+    "zod": "^4.3.6"
+  }
+}

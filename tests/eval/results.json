@@ -1,0 +1,845 @@
+{
+  "timestamp": "2026-04-12T03:27:28.725Z",
+  "totalQueries": 50,
+  "mrr": 0.7240000000000001,
+  "meanPrecision": 0.16800000000000004,
+  "meanRecall": 0.69,
+  "meanNdcg": 0.6816703704926659,
+  "hitRate": 0.76,
+  "results": [
+    {
+      "queryId": "q-001",
+      "query": "stripe webhook signature verification failing",
+      "description": "Developer encountering Stripe webhook signature errors",
+      "expectedIds": [
+        "entry-005",
+        "entry-042"
+      ],
+      "actualIds": [
+        "entry-005",
+        "entry-042"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.4,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-002",
+      "query": "postgres connection pool exhausted serverless",
+      "description": "PostgreSQL connection pool exhaustion in serverless environment",
+      "expectedIds": [
+        "entry-010"
+      ],
+      "actualIds": [
+        "entry-010"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-003",
+      "query": "typescript cannot find module import extension",
+      "description": "TypeScript module resolution error with ESM imports",
+      "expectedIds": [
+        "entry-007"
+      ],
+      "actualIds": [
+        "entry-007",
+        "entry-054",
+        "entry-013"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-004",
+      "query": "sqlite busy database locked",
+      "description": "SQLite SQLITE_BUSY error when multiple processes access the DB",
+      "expectedIds": [
+        "entry-003",
+        "entry-016"
+      ],
+      "actualIds": [
+        "entry-003",
+        "entry-049",
+        "entry-046",
+        "entry-040",
+        "entry-034"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 0.5,
+      "ndcg": 0.6131471927654584,
+      "hit": true
+    },
+    {
+      "queryId": "q-005",
+      "query": "how should we handle API errors response format",
+      "description": "Developer asking about the team's API error handling convention",
+      "expectedIds": [
+        "entry-023"
+      ],
+      "actualIds": [],
+      "reciprocalRank": 0,
+      "precision": 0,
+      "recall": 0,
+      "ndcg": 0,
+      "hit": false
+    },
+    {
+      "queryId": "q-006",
+      "query": "why did we choose bun over node",
+      "description": "Developer wanting to understand the Bun vs Node.js decision",
+      "expectedIds": [
+        "entry-033"
+      ],
+      "actualIds": [],
+      "reciprocalRank": 0,
+      "precision": 0,
+      "recall": 0,
+      "ndcg": 0,
+      "hit": false
+    },
+    {
+      "queryId": "q-007",
+      "query": "jwt sessions authentication why",
+      "description": "Developer asking why JWT was chosen over sessions",
+      "expectedIds": [
+        "entry-035",
+        "entry-017"
+      ],
+      "actualIds": [
+        "entry-035"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 0.5,
+      "ndcg": 0.6131471927654584,
+      "hit": true
+    },
+    {
+      "queryId": "q-008",
+      "query": "oauth token expired 401 refresh",
+      "description": "Developer hitting OAuth token expiry errors",
+      "expectedIds": [
+        "entry-006"
+      ],
+      "actualIds": [
+        "entry-006",
+        "entry-044"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-009",
+      "query": "getUserProfile throwing null error",
+      "description": "Specific function name causing null reference errors",
+      "expectedIds": [
+        "entry-020"
+      ],
+      "actualIds": [
+        "entry-020"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-010",
+      "query": "deployment environment variables not available build time",
+      "description": "Env vars missing during Vercel build step",
+      "expectedIds": [
+        "entry-048",
+        "entry-032"
+      ],
+      "actualIds": [
+        "entry-048"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 0.5,
+      "ndcg": 0.6131471927654584,
+      "hit": true
+    },
+    {
+      "queryId": "q-011",
+      "query": "naming convention for service files",
+      "description": "Developer asking how to name service layer files",
+      "expectedIds": [
+        "entry-024"
+      ],
+      "actualIds": [
+        "entry-024"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-012",
+      "query": "database connection refused localhost 5432",
+      "description": "Postgres ECONNREFUSED during local development",
+      "expectedIds": [
+        "entry-002"
+      ],
+      "actualIds": [
+        "entry-002"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-013",
+      "query": "sqlite versus postgres why local storage",
+      "description": "Developer asking about the database choice",
+      "expectedIds": [
+        "entry-034"
+      ],
+      "actualIds": [],
+      "reciprocalRank": 0,
+      "precision": 0,
+      "recall": 0,
+      "ndcg": 0,
+      "hit": false
+    },
+    {
+      "queryId": "q-014",
+      "query": "authentication issues middleware null user context",
+      "description": "Cross-type query about authentication problems",
+      "expectedIds": [
+        "entry-020",
+        "entry-006",
+        "entry-017"
+      ],
+      "actualIds": [
+        "entry-020",
+        "entry-017",
+        "entry-006"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.6,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-015",
+      "query": "tests failing open handles process not exit",
+      "description": "Test suite hanging after tests complete",
+      "expectedIds": [
+        "entry-021"
+      ],
+      "actualIds": [],
+      "reciprocalRank": 0,
+      "precision": 0,
+      "recall": 0,
+      "ndcg": 0,
+      "hit": false
+    },
+    {
+      "queryId": "q-016",
+      "query": "commit message format conventional commits",
+      "description": "Developer asking about commit message conventions",
+      "expectedIds": [
+        "entry-028"
+      ],
+      "actualIds": [
+        "entry-028"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-017",
+      "query": "redis connection per request exhaustion",
+      "description": "Redis connection pool exhaustion due to per-request client creation",
+      "expectedIds": [
+        "entry-043"
+      ],
+      "actualIds": [
+        "entry-043"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-018",
+      "query": "bm25 fts5 search rank negative values",
+      "description": "Developer confused by negative FTS5 BM25 rank values",
+      "expectedIds": [
+        "entry-045"
+      ],
+      "actualIds": [
+        "entry-051",
+        "entry-045",
+        "entry-038",
+        "entry-036",
+        "entry-031"
+      ],
+      "reciprocalRank": 0.5,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 0.6309297535714575,
+      "hit": true
+    },
+    {
+      "queryId": "q-019",
+      "query": "why use reciprocal rank fusion instead of reranker",
+      "description": "Developer asking about the search ranking decision",
+      "expectedIds": [
+        "entry-036"
+      ],
+      "actualIds": [],
+      "reciprocalRank": 0,
+      "precision": 0,
+      "recall": 0,
+      "ndcg": 0,
+      "hit": false
+    },
+    {
+      "queryId": "q-020",
+      "query": "database performance problems",
+      "description": "Vague query about database performance issues",
+      "expectedIds": [
+        "entry-010",
+        "entry-049",
+        "entry-016"
+      ],
+      "actualIds": [],
+      "reciprocalRank": 0,
+      "precision": 0,
+      "recall": 0,
+      "ndcg": 0,
+      "hit": false
+    },
+    {
+      "queryId": "q-021",
+      "query": "memory leak event listeners node",
+      "description": "Memory leak from event listener accumulation",
+      "expectedIds": [
+        "entry-009"
+      ],
+      "actualIds": [
+        "entry-009"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-022",
+      "query": "unhandled promise rejection fetch timeout",
+      "description": "Unhandled rejections crashing the process",
+      "expectedIds": [
+        "entry-008"
+      ],
+      "actualIds": [
+        "entry-008"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-023",
+      "query": "how to structure tests describe it nesting",
+      "description": "Developer asking about test organization conventions",
+      "expectedIds": [
+        "entry-025"
+      ],
+      "actualIds": [],
+      "reciprocalRank": 0,
+      "precision": 0,
+      "recall": 0,
+      "ndcg": 0,
+      "hit": false
+    },
+    {
+      "queryId": "q-024",
+      "query": "zod schema validation required optional fields",
+      "description": "Zod validation throwing Required on optional fields",
+      "expectedIds": [
+        "entry-022"
+      ],
+      "actualIds": [
+        "entry-022",
+        "entry-040",
+        "entry-039"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-025",
+      "query": "why fts5 bm25 instead of vector embeddings search",
+      "description": "Asking about search architecture decision",
+      "expectedIds": [
+        "entry-038",
+        "entry-036"
+      ],
+      "actualIds": [
+        "entry-038"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 0.5,
+      "ndcg": 0.6131471927654584,
+      "hit": true
+    },
+    {
+      "queryId": "q-026",
+      "query": "postgres deadlock transaction locking order",
+      "description": "Deadlock in concurrent database transactions",
+      "expectedIds": [
+        "entry-011"
+      ],
+      "actualIds": [],
+      "reciprocalRank": 0,
+      "precision": 0,
+      "recall": 0,
+      "ndcg": 0,
+      "hit": false
+    },
+    {
+      "queryId": "q-027",
+      "query": "import ordering convention typescript files",
+      "description": "Developer asking about import organization rules",
+      "expectedIds": [
+        "entry-026"
+      ],
+      "actualIds": [],
+      "reciprocalRank": 0,
+      "precision": 0,
+      "recall": 0,
+      "ndcg": 0,
+      "hit": false
+    },
+    {
+      "queryId": "q-028",
+      "query": "oauth pkce code verifier concurrent flows broken",
+      "description": "PKCE flow breaking with multiple concurrent auth flows",
+      "expectedIds": [
+        "entry-044"
+      ],
+      "actualIds": [
+        "entry-044",
+        "entry-006"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-029",
+      "query": "react hydration error className mismatch",
+      "description": "React SSR hydration mismatch for CSS class names",
+      "expectedIds": [
+        "entry-019"
+      ],
+      "actualIds": [
+        "entry-019"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-030",
+      "query": "stripe rate limit 429 bulk operations",
+      "description": "Getting rate limited when making bulk Stripe API calls",
+      "expectedIds": [
+        "entry-012"
+      ],
+      "actualIds": [
+        "entry-012"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-031",
+      "query": "logging standard structured logger console.log",
+      "description": "Developer asking about logging conventions",
+      "expectedIds": [
+        "entry-027"
+      ],
+      "actualIds": [
+        "entry-027"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-032",
+      "query": "sql injection parameterized queries database",
+      "description": "Asking how to prevent SQL injection",
+      "expectedIds": [
+        "entry-031"
+      ],
+      "actualIds": [
+        "entry-049",
+        "entry-046",
+        "entry-040",
+        "entry-034",
+        "entry-031"
+      ],
+      "reciprocalRank": 0.2,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 0.38685280723454163,
+      "hit": true
+    },
+    {
+      "queryId": "q-033",
+      "query": "mcp tool error debugging claude not seeing errors",
+      "description": "MCP tool errors not surfacing to Claude",
+      "expectedIds": [
+        "entry-050"
+      ],
+      "actualIds": [
+        "entry-050",
+        "entry-037",
+        "entry-022",
+        "entry-009",
+        "entry-004"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-034",
+      "query": "typescript object possibly undefined index access",
+      "description": "TS2532 strict mode errors on array indexing",
+      "expectedIds": [
+        "entry-013"
+      ],
+      "actualIds": [
+        "entry-013"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-035",
+      "query": "wal mode sqlite enable order initialization",
+      "description": "When to enable WAL mode relative to schema creation",
+      "expectedIds": [
+        "entry-046",
+        "entry-016"
+      ],
+      "actualIds": [
+        "entry-049",
+        "entry-046",
+        "entry-040",
+        "entry-034",
+        "entry-031"
+      ],
+      "reciprocalRank": 0.5,
+      "precision": 0.2,
+      "recall": 0.5,
+      "ndcg": 0.38685280723454163,
+      "hit": true
+    },
+    {
+      "queryId": "q-036",
+      "query": "why four knowledge types not free form taxonomy",
+      "description": "Asking about the decision to use fixed entry types",
+      "expectedIds": [
+        "entry-040"
+      ],
+      "actualIds": [],
+      "reciprocalRank": 0,
+      "precision": 0,
+      "recall": 0,
+      "ndcg": 0,
+      "hit": false
+    },
+    {
+      "queryId": "q-037",
+      "query": "test isolation in memory database flaky tests",
+      "description": "Tests sharing database state causing flakiness",
+      "expectedIds": [
+        "entry-052",
+        "entry-021"
+      ],
+      "actualIds": [
+        "entry-052"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 0.5,
+      "ndcg": 0.6131471927654584,
+      "hit": true
+    },
+    {
+      "queryId": "q-038",
+      "query": "bun build dynamic require node fs not supported",
+      "description": "Node built-in require failing in Bun bundler",
+      "expectedIds": [
+        "entry-014"
+      ],
+      "actualIds": [
+        "entry-014",
+        "entry-054",
+        "entry-039",
+        "entry-033"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-039",
+      "query": "environment variable validation startup config module",
+      "description": "How to validate env vars at startup",
+      "expectedIds": [
+        "entry-032"
+      ],
+      "actualIds": [
+        "entry-032",
+        "entry-048"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-040",
+      "query": "file organization structure feature domain",
+      "description": "How to organize files in the project",
+      "expectedIds": [
+        "entry-030"
+      ],
+      "actualIds": [
+        "entry-030"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-041",
+      "query": "confidence score saturation formula source count",
+      "description": "How confidence scoring works for knowledge entries",
+      "expectedIds": [
+        "entry-041"
+      ],
+      "actualIds": [
+        "entry-041"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-042",
+      "query": "postgres migration column already exists idempotent",
+      "description": "Migration running twice causing column already exists error",
+      "expectedIds": [
+        "entry-015"
+      ],
+      "actualIds": [
+        "entry-015"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-043",
+      "query": "porter stemmer unexpected matches technical terms",
+      "description": "Stemmer reducing precision for code-specific terms",
+      "expectedIds": [
+        "entry-051"
+      ],
+      "actualIds": [
+        "entry-051",
+        "entry-045",
+        "entry-038",
+        "entry-036",
+        "entry-031"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-044",
+      "query": "jwt verification invalid signature multi service",
+      "description": "JWT signature failing across services",
+      "expectedIds": [
+        "entry-017",
+        "entry-035"
+      ],
+      "actualIds": [
+        "entry-017",
+        "entry-035"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.4,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-045",
+      "query": "MCP why not rest api integration",
+      "description": "Asking why MCP was chosen for AI integration",
+      "expectedIds": [
+        "entry-037"
+      ],
+      "actualIds": [],
+      "reciprocalRank": 0,
+      "precision": 0,
+      "recall": 0,
+      "ndcg": 0,
+      "hit": false
+    },
+    {
+      "queryId": "q-046",
+      "query": "req.body undefined express middleware",
+      "description": "Request body being undefined in Express routes",
+      "expectedIds": [
+        "entry-053"
+      ],
+      "actualIds": [
+        "entry-053",
+        "entry-042"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-047",
+      "query": "unique constraint failed database insert duplicate",
+      "description": "Database throwing constraint violation on duplicate insert",
+      "expectedIds": [
+        "entry-004"
+      ],
+      "actualIds": [
+        "entry-049",
+        "entry-046",
+        "entry-040",
+        "entry-034",
+        "entry-031"
+      ],
+      "reciprocalRank": 0,
+      "precision": 0,
+      "recall": 0,
+      "ndcg": 0,
+      "hit": false
+    },
+    {
+      "queryId": "q-048",
+      "query": "code review requirements before merge security",
+      "description": "What the code review checklist requires",
+      "expectedIds": [
+        "entry-029"
+      ],
+      "actualIds": [
+        "entry-029"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-049",
+      "query": "why zod validation library chosen",
+      "description": "Decision rationale for using Zod",
+      "expectedIds": [
+        "entry-039"
+      ],
+      "actualIds": [
+        "entry-039"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
+    },
+    {
+      "queryId": "q-050",
+      "query": "rate limiting authentication endpoints login",
+      "description": "How to rate limit auth endpoints",
+      "expectedIds": [
+        "entry-055",
+        "entry-029"
+      ],
+      "actualIds": [
+        "entry-055"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 0.5,
+      "ndcg": 0.6131471927654584,
+      "hit": true
+    }
+  ]
+}
