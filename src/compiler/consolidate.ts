@@ -508,7 +508,7 @@ function stage4Archive(db: Database): number {
  * @param db - Open database connection.
  * @returns Total count of active entries after reindex.
  */
-function stage5Reindex(db: Database): number {
+function stage5Reindex(db: Database, wikiDirOverride?: string): number {
   logger.info("consolidate: stage 5 — reindex");
 
   // Count active entries
@@ -540,9 +540,9 @@ function stage5Reindex(db: Database): number {
     }
   }
 
-  // Regenerate gyst-wiki/index.md
-  const config = loadConfig();
-  const wikiDir = config.wikiDir;
+  // Regenerate <wikiDir>/index.md. Tests pass a temp dir to avoid
+  // writing to the real gyst-wiki/ checked-in location.
+  const wikiDir = wikiDirOverride ?? loadConfig().wikiDir;
 
   const indexRows = db
     .query<IndexRow, []>(
@@ -607,7 +607,10 @@ function stage5Reindex(db: Database): number {
  * @returns A {@link ConsolidationReport} summarising all changes made.
  * @throws {DatabaseError} If any stage encounters a database error.
  */
-export async function consolidate(db: Database): Promise<ConsolidationReport> {
+export async function consolidate(
+  db: Database,
+  options: { wikiDir?: string } = {},
+): Promise<ConsolidationReport> {
   const started = performance.now();
   logger.info("consolidate: starting pipeline");
 
@@ -615,7 +618,7 @@ export async function consolidate(db: Database): Promise<ConsolidationReport> {
   const duplicatesMerged = await stage2Dedupe(db);
   const clusters = stage3MergeClusters(db);
   const archived = stage4Archive(db);
-  const indexEntries = stage5Reindex(db);
+  const indexEntries = stage5Reindex(db, options.wikiDir);
 
   const durationMs = performance.now() - started;
 

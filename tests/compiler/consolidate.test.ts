@@ -17,8 +17,28 @@
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import type { Database } from "bun:sqlite";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { consolidate } from "../../src/compiler/consolidate.js";
+import type { ConsolidationReport } from "../../src/compiler/consolidate.js";
 import { initDatabase, insertEntry } from "../../src/store/database.js";
+
+/**
+ * Per-test temp wiki directory so the reindex stage never writes to the
+ * real gyst-wiki/ path in the working tree. Every consolidate() call in
+ * this file routes through this helper.
+ */
+function makeTempWikiDir(): string {
+  return mkdtempSync(join(tmpdir(), "gyst-consolidate-test-"));
+}
+
+async function runConsolidate(
+  db: Database,
+  wikiDir: string,
+): Promise<ConsolidationReport> {
+  return consolidate(db, { wikiDir });
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -73,13 +93,16 @@ function seedEntry(db: Database, opts: SeedOptions = {}): string {
 
 describe("consolidate — basic pipeline run", () => {
   let db: Database;
+  let tmpWikiDir: string;
 
   beforeEach(() => {
     db = initDatabase(":memory:");
+    tmpWikiDir = makeTempWikiDir();
   });
 
   afterEach(() => {
     db.close();
+    rmSync(tmpWikiDir, { recursive: true, force: true });
   });
 
   test("seed 50 entries including duplicates, low-confidence, and a file cluster", async () => {
@@ -146,7 +169,7 @@ describe("consolidate — basic pipeline run", () => {
       });
     }
 
-    const report = await consolidate(db);
+    const report = await runConsolidate(db, tmpWikiDir);
 
     // duplicatesMerged: 3 groups × 1 archived per group = 3
     expect(report.duplicatesMerged).toBeGreaterThanOrEqual(1);
@@ -171,13 +194,16 @@ describe("consolidate — basic pipeline run", () => {
 
 describe("consolidate — idempotency", () => {
   let db: Database;
+  let tmpWikiDir: string;
 
   beforeEach(() => {
     db = initDatabase(":memory:");
+    tmpWikiDir = makeTempWikiDir();
   });
 
   afterEach(() => {
     db.close();
+    rmSync(tmpWikiDir, { recursive: true, force: true });
   });
 
   test("second run produces zero changes after first run has stabilised", async () => {
@@ -191,8 +217,8 @@ describe("consolidate — idempotency", () => {
       });
     }
 
-    const first = await consolidate(db);
-    const second = await consolidate(db);
+    const first = await runConsolidate(db, tmpWikiDir);
+    const second = await runConsolidate(db, tmpWikiDir);
 
     // Second run should show no new merges or archives
     expect(second.duplicatesMerged).toBe(0);
@@ -220,8 +246,8 @@ describe("consolidate — idempotency", () => {
       confidence: 0.5,
     });
 
-    await consolidate(db); // first run — should merge the pair
-    const second = await consolidate(db); // second run — nothing left to merge
+    await runConsolidate(db, tmpWikiDir); // first run — should merge the pair
+    const second = await runConsolidate(db, tmpWikiDir); // second run — nothing left to merge
 
     expect(second.duplicatesMerged).toBe(0);
   });
@@ -233,13 +259,16 @@ describe("consolidate — idempotency", () => {
 
 describe("consolidate — ghost knowledge immunity", () => {
   let db: Database;
+  let tmpWikiDir: string;
 
   beforeEach(() => {
     db = initDatabase(":memory:");
+    tmpWikiDir = makeTempWikiDir();
   });
 
   afterEach(() => {
     db.close();
+    rmSync(tmpWikiDir, { recursive: true, force: true });
   });
 
   test("ghost knowledge entries survive all stages unchanged", async () => {
@@ -276,7 +305,7 @@ describe("consolidate — ghost knowledge immunity", () => {
       }),
     );
 
-    await consolidate(db);
+    await runConsolidate(db, tmpWikiDir);
 
     // Verify all ghosts are still active with confidence 1.0
     interface EntryStatusRow { id: string; status: string; confidence: number }
@@ -300,13 +329,16 @@ describe("consolidate — ghost knowledge immunity", () => {
 
 describe("consolidate — confidence threshold", () => {
   let db: Database;
+  let tmpWikiDir: string;
 
   beforeEach(() => {
     db = initDatabase(":memory:");
+    tmpWikiDir = makeTempWikiDir();
   });
 
   afterEach(() => {
     db.close();
+    rmSync(tmpWikiDir, { recursive: true, force: true });
   });
 
   test("entry with post-decay confidence above 0.15 is NOT archived", async () => {
@@ -330,7 +362,7 @@ describe("consolidate — confidence threshold", () => {
       lastConfirmed: makePastDate(360),
     });
 
-    await consolidate(db);
+    await runConsolidate(db, tmpWikiDir);
 
     interface StatusRow { status: string }
     const survivorRow = db
@@ -360,7 +392,7 @@ describe("consolidate — confidence threshold", () => {
       confidence: 0.5,
     });
 
-    await consolidate(db);
+    await runConsolidate(db, tmpWikiDir);
 
     interface StatusRow { status: string }
     const row = db
@@ -377,13 +409,16 @@ describe("consolidate — confidence threshold", () => {
 
 describe("consolidate — file cluster summary content", () => {
   let db: Database;
+  let tmpWikiDir: string;
 
   beforeEach(() => {
     db = initDatabase(":memory:");
+    tmpWikiDir = makeTempWikiDir();
   });
 
   afterEach(() => {
     db.close();
+    rmSync(tmpWikiDir, { recursive: true, force: true });
   });
 
   test("summary entry has title starting with 'Summary:' and contains bullets for each original", async () => {
@@ -401,7 +436,7 @@ describe("consolidate — file cluster summary content", () => {
       });
     }
 
-    await consolidate(db);
+    await runConsolidate(db, tmpWikiDir);
 
     interface SummaryRow { id: string; title: string; content: string }
     const summaryRow = db
@@ -448,7 +483,7 @@ describe("consolidate — file cluster summary content", () => {
       );
     }
 
-    await consolidate(db);
+    await runConsolidate(db, tmpWikiDir);
 
     // Original entries should no longer be active
     interface StatusRow { status: string }
@@ -476,13 +511,16 @@ describe("consolidate — file cluster summary content", () => {
 
 describe("consolidate — FTS5 consistency", () => {
   let db: Database;
+  let tmpWikiDir: string;
 
   beforeEach(() => {
     db = initDatabase(":memory:");
+    tmpWikiDir = makeTempWikiDir();
   });
 
   afterEach(() => {
     db.close();
+    rmSync(tmpWikiDir, { recursive: true, force: true });
   });
 
   test("FTS5 row count matches active entry count after consolidation", async () => {
@@ -496,7 +534,7 @@ describe("consolidate — FTS5 consistency", () => {
       });
     }
 
-    await consolidate(db);
+    await runConsolidate(db, tmpWikiDir);
 
     interface CountRow { cnt: number }
     const activeRow = db
@@ -521,13 +559,16 @@ describe("consolidate — FTS5 consistency", () => {
 
 describe("consolidate — protected entry types", () => {
   let db: Database;
+  let tmpWikiDir: string;
 
   beforeEach(() => {
     db = initDatabase(":memory:");
+    tmpWikiDir = makeTempWikiDir();
   });
 
   afterEach(() => {
     db.close();
+    rmSync(tmpWikiDir, { recursive: true, force: true });
   });
 
   test("convention entries sharing a file are never consolidated into a summary", async () => {
@@ -546,7 +587,7 @@ describe("consolidate — protected entry types", () => {
       );
     }
 
-    await consolidate(db);
+    await runConsolidate(db, tmpWikiDir);
 
     // All convention entries should still be active
     interface StatusRow { status: string }
@@ -587,7 +628,7 @@ describe("consolidate — protected entry types", () => {
       );
     }
 
-    await consolidate(db);
+    await runConsolidate(db, tmpWikiDir);
 
     interface StatusRow { status: string }
     for (const id of decisionIds) {
@@ -614,7 +655,7 @@ describe("consolidate — protected entry types", () => {
       );
     }
 
-    await consolidate(db);
+    await runConsolidate(db, tmpWikiDir);
 
     interface StatusRow { status: string; confidence: number }
     for (const id of ghostIds) {
@@ -633,13 +674,16 @@ describe("consolidate — protected entry types", () => {
 
 describe("consolidate — fingerprint dedup source count merge", () => {
   let db: Database;
+  let tmpWikiDir: string;
 
   beforeEach(() => {
     db = initDatabase(":memory:");
+    tmpWikiDir = makeTempWikiDir();
   });
 
   afterEach(() => {
     db.close();
+    rmSync(tmpWikiDir, { recursive: true, force: true });
   });
 
   test("kept entry accumulates source_count from all duplicates", async () => {
@@ -663,7 +707,7 @@ describe("consolidate — fingerprint dedup source count merge", () => {
       sourceCount: 2,
     });
 
-    await consolidate(db);
+    await runConsolidate(db, tmpWikiDir);
 
     interface SourceRow { source_count: number; status: string }
     const keptRow = db
@@ -691,13 +735,16 @@ describe("consolidate — fingerprint dedup source count merge", () => {
 
 describe("consolidate — decay stage", () => {
   let db: Database;
+  let tmpWikiDir: string;
 
   beforeEach(() => {
     db = initDatabase(":memory:");
+    tmpWikiDir = makeTempWikiDir();
   });
 
   afterEach(() => {
     db.close();
+    rmSync(tmpWikiDir, { recursive: true, force: true });
   });
 
   test("entry with old last_confirmed gets confidence recalculated", async () => {
@@ -711,7 +758,7 @@ describe("consolidate — decay stage", () => {
       lastConfirmed: makePastDate(90),
     });
 
-    await consolidate(db);
+    await runConsolidate(db, tmpWikiDir);
 
     interface ConfRow { confidence: number }
     const row = db
@@ -735,7 +782,7 @@ describe("consolidate — decay stage", () => {
       lastConfirmed: makePastDate(365),
     });
 
-    await consolidate(db);
+    await runConsolidate(db, tmpWikiDir);
 
     interface ConfRow { confidence: number; status: string }
     const row = db
@@ -753,13 +800,16 @@ describe("consolidate — decay stage", () => {
 
 describe("consolidate — report shape", () => {
   let db: Database;
+  let tmpWikiDir: string;
 
   beforeEach(() => {
     db = initDatabase(":memory:");
+    tmpWikiDir = makeTempWikiDir();
   });
 
   afterEach(() => {
     db.close();
+    rmSync(tmpWikiDir, { recursive: true, force: true });
   });
 
   test("report contains all required fields with correct types", async () => {
@@ -769,7 +819,7 @@ describe("consolidate — report shape", () => {
       content: "Simple content for testing report shape. Verifies all fields exist.",
     });
 
-    const report = await consolidate(db);
+    const report = await runConsolidate(db, tmpWikiDir);
 
     expect(typeof report.entriesDecayed).toBe("number");
     expect(typeof report.duplicatesMerged).toBe("number");
