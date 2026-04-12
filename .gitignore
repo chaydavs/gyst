@@ -38,6 +38,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 *.db-journal
 *.db-wal
 
+# LongMemEval dataset (277MB — re-downloaded by run.ts)
+tests/benchmark/longmemeval/data/
+
 # Claude memory (except template)
 .claude/memory/*.md
 !.claude/memory/MEMORY.md.template

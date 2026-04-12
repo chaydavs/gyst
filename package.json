@@ -14,7 +14,9 @@
     "eval": "bun run tests/eval/retrieval-eval.ts",
     "eval:tune": "bun run tests/eval/tune-weights.ts",
     "calibrate": "bun run scripts/calibrate-confidence.ts",
-    "seed-wiki": "bun run scripts/seed-wiki.ts"
+    "seed-wiki": "bun run scripts/seed-wiki.ts",
+    "benchmark:longmemeval": "bun run tests/benchmark/longmemeval/run.ts",
+    "benchmark:longmemeval:fast": "bun run tests/benchmark/longmemeval/run.ts --fast"
   },
   "bin": {
     "gyst": "./src/cli/index.ts"
