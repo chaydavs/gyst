@@ -160,9 +160,12 @@ export function searchByBM25(
     return [];
   }
 
-  const expanded = expandQuery(query);
-  const tokenised = escapeFts5(codeTokenize(expanded));
-  logger.debug("searchByBM25", { query, expanded, tokenised, type, developerId });
+  // Pipeline: tokenise the raw query first (camelCase split, lowercase),
+  // then escape FTS5 special characters from user input, then expand with
+  // synonym OR-groups. Expansion runs last so the parentheses it introduces
+  // are not stripped by escapeFts5.
+  const tokenised = expandQuery(escapeFts5(codeTokenize(query)));
+  logger.debug("searchByBM25", { query, tokenised, type, developerId });
 
   if (!tokenised.trim()) {
     return [];
