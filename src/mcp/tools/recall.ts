@@ -4,6 +4,15 @@
  * Runs three complementary search strategies (file-path, BM25, graph), fuses
  * the results with Reciprocal Rank Fusion, filters by confidence threshold,
  * and returns formatted results within a token budget.
+ *
+ * The optional `context_budget` parameter allows callers to specify a tighter
+ * token budget for self-hosted models (e.g. Ollama with 4096-token context).
+ * When omitted, the budget defaults to `config.maxRecallTokens` (5000).
+ * Four formatting tiers adapt automatically:
+ *   5000+  → full (title, body, files, tags)
+ *   2000–4999 → compact (top 3, first 2 sentences)
+ *   800–1999  → minimal (top 2, 80-char summary)
+ *   < 800     → ultra-minimal (top 1, first sentence)
  */
 
 import { z } from "zod";
@@ -16,7 +25,7 @@ import {
   reciprocalRankFusion,
 } from "../../store/search.js";
 import { loadConfig } from "../../utils/config.js";
-import { truncateToTokenBudget } from "../../utils/tokens.js";
+import { formatForContext } from "../../utils/format-recall.js";
 import { logger } from "../../utils/logger.js";
 
 // ---------------------------------------------------------------------------
@@ -33,6 +42,17 @@ const RecallInput = z.object({
   max_results: z.number().min(1).max(10).optional().default(5),
   scope: z.enum(["personal", "team", "project"]).optional(),
   developer_id: z.string().optional(),
+  /**
+   * Maximum tokens allowed in the formatted response.
+   *
+   * Use this to adapt recall output to the caller's available context window:
+   *   - Claude Code / Cursor: omit (defaults to config.maxRecallTokens = 5000)
+   *   - Ollama / small models: 2000
+   *   - Ultra-tight contexts:   800–1000
+   *
+   * Must be between 200 and 20000.
+   */
+  context_budget: z.number().int().min(200).max(20000).optional(),
 });
 
 type RecallInputType = z.infer<typeof RecallInput>;
@@ -48,6 +68,8 @@ interface EntryRow {
   content: string;
   confidence: number;
 }
+
+// FormattableEntry is imported from format-recall; EntryRow satisfies its shape.
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -112,31 +134,6 @@ function fetchEntries(
   });
 }
 
-/**
- * Formats a list of entry rows as a markdown string suitable for returning to
- * the agent, capped by a token budget.
- *
- * @param entries - Enriched entries to format.
- * @param maxTokens - Maximum token budget for the response.
- * @returns Formatted markdown string.
- */
-function formatResults(entries: EntryRow[], maxTokens: number): string {
-  if (entries.length === 0) {
-    return "No relevant knowledge found.";
-  }
-
-  const sections = entries.map((entry) =>
-    [
-      `## ${entry.title} (confidence: ${entry.confidence.toFixed(2)}, type: ${entry.type})`,
-      entry.content,
-      "---",
-    ].join("\n"),
-  );
-
-  const combined = sections.join("\n\n");
-  return truncateToTokenBudget(combined, maxTokens);
-}
-
 // ---------------------------------------------------------------------------
 // Public registration function
 // ---------------------------------------------------------------------------
@@ -146,6 +143,14 @@ function formatResults(entries: EntryRow[], maxTokens: number): string {
  *
  * Runs three search strategies in parallel, fuses results via RRF, filters by
  * confidence, and returns formatted knowledge within the configured token budget.
+ *
+ * The optional `context_budget` parameter overrides `config.maxRecallTokens` so
+ * self-hosted models with small context windows (e.g. Ollama @ 4096 tokens) can
+ * request a tighter output. Four formatting tiers are selected automatically:
+ *   >= 5000  → full (up to 5 entries, title + body + files + tags)
+ *   >= 2000  → compact (up to 3 entries, first 2 sentences)
+ *   >= 800   → minimal (up to 2 entries, 80-char summary)
+ *   < 800    → ultra-minimal (1 entry, first sentence only)
  *
  * @param server - The McpServer instance to register on.
  * @param db - Open bun:sqlite Database.
@@ -161,11 +166,17 @@ export function registerRecallTool(server: McpServer, db: Database): void {
         type: input.type,
         scope: input.scope,
         developer_id: input.developer_id,
+        context_budget: input.context_budget,
       });
 
       const config = loadConfig();
       const typeFilter = input.type === "all" ? undefined : input.type;
       const developerId = input.developer_id;
+
+      // Resolve the effective token budget: explicit parameter takes priority
+      // over the configured default so callers on small context windows can
+      // request a reduced output.
+      const budget = input.context_budget ?? config.maxRecallTokens;
 
       // Run all three search strategies in parallel
       const [fileResults, bm25Results, graphResults] = await Promise.all([
@@ -200,9 +211,10 @@ export function registerRecallTool(server: McpServer, db: Database): void {
         total: entries.length,
         afterFilter: filtered.length,
         confidenceThreshold: config.confidenceThreshold,
+        budget,
       });
 
-      const formatted = formatResults(filtered, config.maxRecallTokens);
+      const formatted = formatForContext(filtered, budget);
 
       return {
         content: [
