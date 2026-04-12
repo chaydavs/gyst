@@ -145,13 +145,71 @@ Most of the wall time is the per-question fresh in-memory DB + vector
 store reinit + 53 embedding inferences. Pure retrieval at 10ms per
 question is well under the 500ms target.
 
+## Integrity audit (2026-04-12, post-run)
+
+After the initial result landed I ran a 7-point integrity audit to
+confirm the 94.2% is not inflated by bugs, leakage, or apples-to-
+oranges comparisons. Full audit report saved in the session
+transcript. Summary:
+
+- **No answer leakage.** `question.answer` is never accessed in the
+  ingestion or retrieval code path. `question.answer_session_ids` is
+  only read in `scoreRetrieval` after retrieval completes.
+- **Scoring is exact string match on session IDs.** No fuzzy matching,
+  no substring tricks. `truthSet.has(retrievedId)`.
+- **No cross-contamination.** Each question gets a fresh tempfile DB,
+  closed and unlinked between questions.
+- **No hardcoded answers.** Grep across benchmark source files for
+  16 sample answers + 20 question IDs found zero hits.
+- **Deterministic.** 3 runs on a 100-question subset produced
+  identical numbers (87.0% / 0.784 / 0.847) to three decimal places.
+
+### Caveats the audit also surfaced (must be added to any external claim)
+
+1. **Retrieval-only, not QA.** The 94.2% measures Hit Rate @5 — was
+   the correct session in the top 5 retrieved results? Competitor
+   numbers (Emergence AI 86%, Hindsight 91.4%, etc.) measure
+   end-to-end question-answering accuracy: given the retrieved
+   context, does an LLM produce the correct text answer? These are
+   NOT the same thing. Retrieval accuracy is an **upper bound** on
+   QA accuracy. The real QA number for Gyst is likely 10–25 points
+   lower. Implementing Option A (LLM reader over top-K results) is
+   the only way to produce a directly-comparable number.
+
+2. **No abstention questions in this split.** `xiaowu0162/longmemeval-cleaned`
+   has only 6 of the 7 original LongMemEval categories. The missing
+   `abstention` category (~30 questions where the correct answer is
+   "I don't know because the info isn't in the haystack") is
+   typically the hardest. Gyst's 94.2% is measured on an easier
+   slice. Published competitor scores may or may not include
+   abstention.
+
+3. **Coarse ingestion granularity.** One entry per session (~53
+   entries per question). SOTA systems like Emergence AI do
+   fact-level extraction (~500 entries per question). Fact-level
+   retrieval is strictly harder because there are 10× more
+   candidates to rank. The session-level retrieval approach here
+   works for the benchmark but would NOT scale to a production
+   system where users ask about specific facts rather than
+   "which conversation mentioned X".
+
 ## Decision
 
-**Accepted as the first public-benchmark baseline.** This is the number
-that goes into the README, the launch posts, and any investor
-conversation. Every future retrieval or ranking change must be
-re-measured against this number and the per-category breakdown must
-not regress materially on any category.
+**Accepted as a valid measurement for internal regression testing
+and a starting point for further comparison work.**
+
+**NOT accepted** as a direct "beats Emergence AI" claim for the
+README or launch posts. External framing should use:
+
+  "On session-level retrieval against LongMemEval_s (cleaned,
+  6-category split), Gyst achieves 94.2% Hit Rate @5. This is an
+  upper bound on end-to-end QA accuracy — the directly-comparable
+  QA number is not yet measured. Follow-up work: implement the
+  LLM-reader QA mode (Option A) and evaluate against the full
+  7-category LongMemEval dataset including abstention."
+
+Every future retrieval or ranking change must be re-measured against
+this baseline. Per-category breakdown must not regress materially.
 
 ## Follow-ups
 
