@@ -65,7 +65,13 @@ jobs:
 
       - name: Check for hardcoded secrets
         run: |
-          ! grep -rn "AKIA\|sk-[a-zA-Z0-9]\|-----BEGIN.*KEY\|xoxb-\|xapp-\|gho_" src/ --include="*.ts"
+          # Exclude src/compiler/security.ts — it contains the regex patterns
+          # that define what secrets look like, which would otherwise self-match.
+          ! grep -rn \
+              "AKIA\|sk-[a-zA-Z0-9]\|-----BEGIN.*KEY\|xoxb-\|xapp-\|gho_" \
+              src/ \
+              --include="*.ts" \
+              --exclude="security.ts"
 
       - name: Check for console.log statements
         run: |
