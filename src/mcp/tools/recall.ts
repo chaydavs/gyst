@@ -38,7 +38,7 @@ import { logger } from "../../utils/logger.js";
 const RecallInput = z.object({
   query: z.string().min(2).max(500),
   type: z
-    .enum(["error_pattern", "convention", "decision", "learning", "all"])
+    .enum(["error_pattern", "convention", "decision", "learning", "ghost_knowledge", "all"])
     .optional()
     .default("all"),
   files: z.array(z.string()).optional().default([]),
@@ -70,6 +70,7 @@ interface EntryRow {
   title: string;
   content: string;
   confidence: number;
+  scope: string;
 }
 
 // FormattableEntry is imported from format-recall; EntryRow satisfies its shape.
@@ -108,7 +109,7 @@ function fetchEntries(
 
   if (developerId !== undefined) {
     sql = `
-      SELECT id, type, title, content, confidence
+      SELECT id, type, title, content, confidence, scope
       FROM   entries
       WHERE  id IN (${placeholders})
         AND  status = 'active'
@@ -118,7 +119,7 @@ function fetchEntries(
     params = [...ids, developerId];
   } else {
     sql = `
-      SELECT id, type, title, content, confidence
+      SELECT id, type, title, content, confidence, scope
       FROM   entries
       WHERE  id IN (${placeholders})
         AND  status = 'active'
@@ -214,7 +215,7 @@ export function registerRecallTool(server: McpServer, db: Database): void {
       });
 
       // Fuse with Reciprocal Rank Fusion (empty lists are ignored by RRF)
-      const fused = reciprocalRankFusion([
+      const rawFused = reciprocalRankFusion([
         fileResults,
         bm25Results,
         graphResults,
@@ -224,15 +225,42 @@ export function registerRecallTool(server: McpServer, db: Database): void {
 
       // Filter by minimum confidence (use RRF score as proxy pre-fetch,
       // then re-filter after hydrating with actual confidence values).
-      const topIds = fused
+      const topIds = rawFused
         .slice(0, input.max_results * 3) // over-fetch to account for confidence filtering
         .map((r) => r.id);
 
       const entries = fetchEntries(db, topIds, developerId);
 
-      // Apply confidence threshold and take top N
-      const filtered = entries
-        .filter((e) => e.confidence >= config.confidenceThreshold)
+      // Build a score map from the fused results so we can apply the ghost
+      // knowledge boost before re-sorting.
+      const scoreMap = new Map(rawFused.map((r) => [r.id, r.score]));
+
+      // Boost ghost_knowledge entries by 0.1, capped at 1.0, then re-sort.
+      const boostedScores = new Map(
+        entries.map((e) => {
+          const base = scoreMap.get(e.id) ?? 0;
+          const boosted =
+            e.type === "ghost_knowledge"
+              ? Math.min(1.0, base + 0.1)
+              : base;
+          return [e.id, boosted] as const;
+        }),
+      );
+
+      // Sort entries by boosted score descending (immutable — new array).
+      const sortedEntries = [...entries].sort(
+        (a, b) => (boostedScores.get(b.id) ?? 0) - (boostedScores.get(a.id) ?? 0),
+      );
+
+      // Apply confidence threshold — ghost_knowledge is always included
+      // regardless of threshold (confidence is 1.0 by spec, but be explicit
+      // here so a misconfigured threshold can never suppress them).
+      const filtered = sortedEntries
+        .filter(
+          (e) =>
+            e.type === "ghost_knowledge" ||
+            e.confidence >= config.confidenceThreshold,
+        )
         .slice(0, input.max_results);
 
       logger.info("recall results", {
@@ -242,7 +270,19 @@ export function registerRecallTool(server: McpServer, db: Database): void {
         budget,
       });
 
-      const formatted = formatForContext(filtered, budget);
+      // Prefix ghost_knowledge entry titles with the team-rule warning emoji
+      // so agents immediately recognise mandatory constraints.
+      const formattableEntries = filtered.map((e) => {
+        if (e.type !== "ghost_knowledge") {
+          return e;
+        }
+        return {
+          ...e,
+          title: `⚠️ Team Rule: ${e.title}`,
+        };
+      });
+
+      const formatted = formatForContext(formattableEntries, budget);
 
       return {
         content: [
