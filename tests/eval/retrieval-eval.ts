@@ -21,6 +21,7 @@ import {
   searchByFilePath,
   searchByBM25,
   searchByGraph,
+  searchByTemporal,
   reciprocalRankFusion,
 } from "../../src/store/search.js";
 
@@ -219,6 +220,12 @@ function runFusedSearch(
   const graphResults = searchByGraph(db, query.query);
   if (graphResults.length > 0) {
     rankedLists.push(graphResults);
+  }
+
+  // Strategy 4: Temporal search (no-op when query has no time signal)
+  const temporalResults = searchByTemporal(db, query.query);
+  if (temporalResults.length > 0) {
+    rankedLists.push(temporalResults);
   }
 
   // Fuse and return top-K IDs

@@ -1,7 +1,7 @@
 /**
  * Search implementation for Gyst.
  *
- * Three complementary strategies are provided and fused via Reciprocal Rank
+ * Four complementary strategies are provided and fused via Reciprocal Rank
  * Fusion (RRF):
  *
  *  1. **File-path search** — exact lookup against the `entry_files` table.
@@ -9,6 +9,10 @@
  *     virtual table with porter-stemmed, code-tokenised queries.
  *  3. **Graph walk** — find entries that match by tag or file path, then
  *     traverse one hop across the `relationships` table.
+ *  4. **Temporal search** — filter entries by `last_confirmed` when the
+ *     query contains natural-language time references ("recent", "yesterday",
+ *     "last week", etc.). Returns empty when no time signal is present,
+ *     making it zero-cost for non-temporal queries.
  *
  * All functions return `RankedResult[]` sorted by descending score.
  */
@@ -337,6 +341,16 @@ export function searchByGraph(
     throw new SearchError(`searchByGraph failed: ${msg}`);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Strategy 4: Temporal search
+// ---------------------------------------------------------------------------
+// The canonical implementation lives in ./temporal.ts as a standalone
+// module. We re-export the public symbols here so existing call sites
+// (retrieval-eval harness, future MCP tools) can import from a single
+// search entry point if they prefer.
+
+export { parseTimeReference, searchByTemporal } from "./temporal.js";
 
 // ---------------------------------------------------------------------------
 // Reciprocal Rank Fusion
