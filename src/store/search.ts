@@ -63,13 +63,31 @@ export function codeTokenize(text: string): string {
 }
 
 /**
- * Escapes FTS5 special characters so user-supplied queries don't break MATCH.
+ * Sanitises a query for FTS5 MATCH by keeping only alphanumerics,
+ * whitespace, and underscores. Every other character — including
+ * hyphens — is replaced with a space.
  *
- * Special characters in FTS5: `"`, `*`, `(`, `)`, `:`, `^`, `{`, `}`.
- * We replace them with spaces to preserve word boundaries.
+ * Why allowlist instead of blocklist:
+ * FTS5's query parser raises "syntax error near X" for a long list of
+ * characters beyond its documented operators — `?`, `!`, `$`, `~`, `@`,
+ * and others all fail depending on position in the query. Maintaining
+ * a blocklist of every problematic char is whack-a-mole, especially
+ * against user-supplied natural-language queries.
+ *
+ * Hyphens had to go too: FTS5's query parser interprets `5-day` and
+ * `gin-to-vermouth` in surprising ways (including "no such column:
+ * day" when a bare word near a hyphen gets mis-parsed as a column
+ * filter). Stripping them to whitespace gives the tokenizer a
+ * clean token stream and matches the same terms anyway.
+ *
+ * Underscores are kept because code identifiers like `get_user_name`
+ * are genuine tokens we want to match.
  */
 function escapeFts5(text: string): string {
-  return text.replace(/["*():^{}]/g, " ").replace(/\s+/g, " ").trim();
+  return text
+    .replace(/[^a-zA-Z0-9\s_]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // ---------------------------------------------------------------------------
