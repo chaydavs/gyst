@@ -15,6 +15,10 @@ import {
   generateFingerprint,
 } from "../../compiler/normalize.js";
 import { writeEntry } from "../../compiler/writer.js";
+import {
+  extractEntities,
+  extractEntitiesFromTitle,
+} from "../../compiler/entities.js";
 import { loadConfig } from "../../utils/config.js";
 import { logger } from "../../utils/logger.js";
 import { DatabaseError, ValidationError } from "../../utils/errors.js";
@@ -323,6 +327,16 @@ export function registerLearnTool(server: McpServer, db: Database): void {
       const resolvedScope: "personal" | "team" | "project" =
         valid.scope ?? defaultScope;
 
+      // Extract code entities from content and title, then attach as
+      // prefixed tags so graph search can match queries like "getToken function".
+      // Uses the existing tags column — no schema change required.
+      const contentEntities = extractEntities(safeContent);
+      const titleEntities = extractEntitiesFromTitle(valid.title);
+      const allEntities = [...contentEntities, ...titleEntities];
+      const entityTags = allEntities.map((e) => `entity:${e.name}`);
+      const dedupedEntityTags = [...new Set(entityTags)];
+      const mergedTags = [...valid.tags, ...dedupedEntityTags];
+
       persistEntry(
         db,
         {
@@ -335,7 +349,7 @@ export function registerLearnTool(server: McpServer, db: Database): void {
           confidence: 0.5,
           sourceCount: 1,
           files: valid.files,
-          tags: valid.tags,
+          tags: mergedTags,
           now,
           scope: resolvedScope,
         },
