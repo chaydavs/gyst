@@ -22,8 +22,11 @@ import {
   searchByFilePath,
   searchByBM25,
   searchByGraph,
+  searchByTemporal,
   reciprocalRankFusion,
 } from "../../store/search.js";
+import { canLoadExtensions } from "../../store/database.js";
+import { searchByVector } from "../../store/embeddings.js";
 import { loadConfig } from "../../utils/config.js";
 import { formatForContext } from "../../utils/format-recall.js";
 import { logger } from "../../utils/logger.js";
@@ -178,21 +181,46 @@ export function registerRecallTool(server: McpServer, db: Database): void {
       // request a reduced output.
       const budget = input.context_budget ?? config.maxRecallTokens;
 
-      // Run all three search strategies in parallel
-      const [fileResults, bm25Results, graphResults] = await Promise.all([
+      // Run all five search strategies in parallel. Semantic is skipped
+      // gracefully when the SQLite binary can't load extensions.
+      const semanticPromise = canLoadExtensions()
+        ? searchByVector(db, input.query, 20, developerId).catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            logger.warn("searchByVector failed — falling back", { error: msg });
+            return [];
+          })
+        : Promise.resolve([]);
+
+      const [
+        fileResults,
+        bm25Results,
+        graphResults,
+        temporalResults,
+        vectorResults,
+      ] = await Promise.all([
         Promise.resolve(searchByFilePath(db, input.files)),
         Promise.resolve(searchByBM25(db, input.query, typeFilter, developerId)),
         Promise.resolve(searchByGraph(db, input.query)),
+        Promise.resolve(searchByTemporal(db, input.query)),
+        semanticPromise,
       ]);
 
       logger.debug("Search strategy results", {
         fileResults: fileResults.length,
         bm25Results: bm25Results.length,
         graphResults: graphResults.length,
+        temporalResults: temporalResults.length,
+        vectorResults: vectorResults.length,
       });
 
-      // Fuse with Reciprocal Rank Fusion
-      const fused = reciprocalRankFusion([fileResults, bm25Results, graphResults]);
+      // Fuse with Reciprocal Rank Fusion (empty lists are ignored by RRF)
+      const fused = reciprocalRankFusion([
+        fileResults,
+        bm25Results,
+        graphResults,
+        temporalResults,
+        vectorResults,
+      ]);
 
       // Filter by minimum confidence (use RRF score as proxy pre-fetch,
       // then re-filter after hydrating with actual confidence values).

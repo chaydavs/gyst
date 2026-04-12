@@ -19,6 +19,8 @@ import {
   extractEntities,
   extractEntitiesFromTitle,
 } from "../../compiler/entities.js";
+import { canLoadExtensions } from "../../store/database.js";
+import { embedAndStore } from "../../store/embeddings.js";
 import { loadConfig } from "../../utils/config.js";
 import { logger } from "../../utils/logger.js";
 import { DatabaseError, ValidationError } from "../../utils/errors.js";
@@ -355,6 +357,18 @@ export function registerLearnTool(server: McpServer, db: Database): void {
         },
         config.wikiDir,
       );
+
+      // Strategy 5: Store a semantic embedding for this entry when the
+      // vector store is available. Fire-and-forget — a failed embedding
+      // must not block the learn call. The catch handler logs and
+      // swallows errors so the caller still sees a successful write.
+      if (canLoadExtensions()) {
+        const embeddingText = `${valid.title}\n\n${safeContent}`;
+        embedAndStore(db, id, embeddingText).catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.warn("embed on learn failed", { id, error: msg });
+        });
+      }
 
       logger.info("New entry created", { id, type: valid.type, title: valid.title });
 

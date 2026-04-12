@@ -10,7 +10,8 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { initDatabase } from "../store/database.js";
+import { canLoadExtensions, initDatabase } from "../store/database.js";
+import { backfillVectors, initVectorStore } from "../store/embeddings.js";
 import { loadConfig } from "../utils/config.js";
 import { logger } from "../utils/logger.js";
 import { registerLearnTool } from "./tools/learn.js";
@@ -45,6 +46,20 @@ async function main(): Promise<void> {
 
   // Initialise database (synchronous — bun:sqlite)
   const db = initDatabase(config.dbPath);
+
+  // Initialise semantic search (Strategy 5). Graceful if unavailable —
+  // the rest of the server keeps running with BM25 + graph + temporal.
+  if (canLoadExtensions()) {
+    const ok = initVectorStore(db);
+    if (ok) {
+      // Backfill any entries that predate the vector store in the background.
+      // Fire-and-forget so the server is ready for tool calls immediately.
+      backfillVectors(db).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.warn("Vector backfill failed", { error: msg });
+      });
+    }
+  }
 
   // Register tools
   registerLearnTool(server, db);
