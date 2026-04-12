@@ -13,7 +13,8 @@
     "recall": "bun run src/cli/index.ts recall",
     "eval": "bun run tests/eval/retrieval-eval.ts",
     "eval:tune": "bun run tests/eval/tune-weights.ts",
-    "calibrate": "bun run scripts/calibrate-confidence.ts"
+    "calibrate": "bun run scripts/calibrate-confidence.ts",
+    "seed-wiki": "bun run scripts/seed-wiki.ts"
   },
   "bin": {
     "gyst": "./src/cli/index.ts"
