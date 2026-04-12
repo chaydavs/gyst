@@ -9,7 +9,7 @@
  *   bun run scripts/compare-eval.ts
  *
  * Exit codes:
- *   0 — all metrics within tolerance and MRR@5 >= 0.5
+ *   0 — all metrics within tolerance and MRR@5 >= 0.90
  *   1 — regression detected
  */
 
@@ -35,7 +35,7 @@ const BASELINE_PATH = resolve(__dirname, "../tests/eval/baseline.json");
 const REGRESSION_TOLERANCE = 0.05;
 
 /** Absolute minimum acceptable MRR@5 regardless of baseline. */
-const MRR_FLOOR = 0.5;
+const MRR_FLOOR = 0.90;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -204,7 +204,7 @@ function main(): void {
   }
 
   if (!hasRegression) {
-    console.log(`  PASS: All metrics within tolerance (${REGRESSION_TOLERANCE}) and MRR@5 >= ${MRR_FLOOR}.\n`);
+    console.log(`  PASS: All metrics within tolerance (${REGRESSION_TOLERANCE}) and MRR@5 >= ${MRR_FLOOR} (floor).\n`);
     process.exit(0);
   } else {
     process.exit(1);

@@ -17,6 +17,14 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            node-modules-${{ runner.os }}-
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
@@ -33,6 +41,14 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            node-modules-${{ runner.os }}-
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -60,6 +76,14 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            node-modules-${{ runner.os }}-
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
@@ -69,7 +93,7 @@ jobs:
           # that define what secrets look like, which would otherwise self-match.
           ! grep -rn \
               "AKIA\|sk-[a-zA-Z0-9]\|-----BEGIN.*KEY\|xoxb-\|xapp-\|gho_" \
-              src/ \
+              src/ tests/ gyst-wiki/ \
               --include="*.ts" \
               --exclude="security.ts"
 
@@ -91,6 +115,20 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            node-modules-${{ runner.os }}-
+
+      - name: Cache Hugging Face models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: huggingface-${{ runner.os }}-minilm-v1
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
@@ -102,9 +140,34 @@ jobs:
           if [ -f tests/eval/results.json ]; then
             MRR=$(bun -e "import { readFileSync } from 'fs'; const r = JSON.parse(readFileSync('./tests/eval/results.json', 'utf8')); console.log(r.mrr || r.mrr5 || r.overall?.mrr5 || 0)")
             echo "MRR@5: $MRR"
-            awk "BEGIN { exit !($MRR >= 0.5) }" || (echo "MRR@5 below 0.5 threshold" && exit 1)
+            awk "BEGIN { exit !($MRR >= 0.90) }" || (echo "MRR@5 below 0.90 threshold" && exit 1)
           else
             echo "No results.json found — skipping threshold check"
+          fi
+
+      - name: Write eval metrics to job summary
+        if: always()
+        run: |
+          if [ -f tests/eval/results.json ]; then
+            bun -e "
+              import { readFileSync } from 'fs';
+              const r = JSON.parse(readFileSync('./tests/eval/results.json', 'utf8'));
+              const lines = [
+                '## Eval Results (MRR@5)',
+                '',
+                '| Metric | Value |',
+                '|--------|-------|',
+                \`| MRR@5 | \${(r.mrr ?? 0).toFixed(4)} |\`,
+                \`| Precision@5 | \${(r.meanPrecision ?? 0).toFixed(4)} |\`,
+                \`| Recall@5 | \${(r.meanRecall ?? 0).toFixed(4)} |\`,
+                \`| NDCG@5 | \${(r.meanNdcg ?? 0).toFixed(4)} |\`,
+                \`| Hit Rate | \${(r.hitRate ?? 0).toFixed(4)} |\`,
+                \`| Queries | \${r.totalQueries ?? 0} |\`,
+                '',
+                \`_Timestamp: \${r.timestamp}_\`,
+              ];
+              process.stdout.write(lines.join('\n') + '\n');
+            " >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Upload eval results
