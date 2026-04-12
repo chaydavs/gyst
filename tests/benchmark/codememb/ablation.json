@@ -1,0 +1,68 @@
+{
+  "benchmark": "CodeMemBench ablation",
+  "version": "1.0.0",
+  "timestamp": "2026-04-12T21:29:33.009Z",
+  "topK": 10,
+  "semanticAvailable": true,
+  "totalQueries": 200,
+  "configurations": [
+    {
+      "name": "baseline (all strategies)",
+      "disable": [],
+      "ndcg": 0.3511091562931825,
+      "hitRate": 0.78,
+      "deltaNdcg": 0,
+      "deltaHitRate": 0
+    },
+    {
+      "name": "no bm25",
+      "disable": [
+        "bm25"
+      ],
+      "ndcg": 0.3511091562931825,
+      "hitRate": 0.78,
+      "deltaNdcg": 0,
+      "deltaHitRate": 0
+    },
+    {
+      "name": "no graph",
+      "disable": [
+        "graph"
+      ],
+      "ndcg": 0.3511091562931825,
+      "hitRate": 0.78,
+      "deltaNdcg": 0,
+      "deltaHitRate": 0
+    },
+    {
+      "name": "no file_path",
+      "disable": [
+        "file_path"
+      ],
+      "ndcg": 0.3362577993665537,
+      "hitRate": 0.76,
+      "deltaNdcg": -0.014851356926628811,
+      "deltaHitRate": -0.020000000000000018
+    },
+    {
+      "name": "no temporal",
+      "disable": [
+        "temporal"
+      ],
+      "ndcg": 0.3511091562931825,
+      "hitRate": 0.78,
+      "deltaNdcg": 0,
+      "deltaHitRate": 0
+    },
+    {
+      "name": "no semantic",
+      "disable": [
+        "semantic"
+      ],
+      "ndcg": 0.04263801653256012,
+      "hitRate": 0.1,
+      "deltaNdcg": -0.3084711397606224,
+      "deltaHitRate": -0.68
+    }
+  ]
+}

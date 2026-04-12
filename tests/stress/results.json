@@ -1,0 +1,107 @@
+{
+  "timestamp": "2026-04-12T19:17:00.000Z",
+  "runner": "bun test",
+  "totalTests": 67,
+  "passed": 67,
+  "failed": 0,
+  "suites": 5,
+  "durationMs": 5020,
+  "files": {
+    "code-lifecycle.test.ts": {
+      "tests": 14,
+      "passed": 14,
+      "failed": 0,
+      "describes": [
+        "payments team — 30-day lifecycle",
+        "confidence decay over time",
+        "deduplication on identical error signatures",
+        "per-week MRR@5 trend"
+      ],
+      "highlights": [
+        "MRR@5 >= 0.70 on 5 payments-domain queries",
+        "Ghost knowledge confidence stays 1.0 after consolidation",
+        "Error_pattern decays to <0.5 after 30-day half-life",
+        "Convention has near-zero decay over 365 days",
+        "mergeEntries is immutable — original objects unchanged"
+      ]
+    },
+    "bloat.test.ts": {
+      "tests": 14,
+      "passed": 14,
+      "failed": 0,
+      "describes": [
+        "entry ramp: 500 → 1000 → 2000",
+        "consolidation cluster merge",
+        "rebuild from markdown parity",
+        "latency under load"
+      ],
+      "highlights": [
+        "2000-entry DB: BM25 search P95 < 150ms",
+        "Consolidation on 2000 entries < 5s",
+        "≥5 entries per file triggers cluster merge (clustersConsolidated ≥ 1)",
+        "Rebuild from markdown matches original active count ±2"
+      ]
+    },
+    "team-http.test.ts": {
+      "tests": 17,
+      "passed": 17,
+      "failed": 0,
+      "describes": [
+        "5 concurrent developers — knowledge sharing",
+        "auth edge cases",
+        "scope isolation",
+        "ghost knowledge propagation across 5 developers"
+      ],
+      "highlights": [
+        "50 concurrent writes (5 devs × 10 entries) all persisted",
+        "Cross-dev retrieval: Dev A's entry found in Dev B's search",
+        "Personal scope isolates correctly per developer_id",
+        "Ghost knowledge surfaces in all 5 developers' searches",
+        "Ghost confidence/status unchanged after 5 recalls"
+      ]
+    },
+    "format-compat.test.ts": {
+      "tests": 17,
+      "passed": 17,
+      "failed": 0,
+      "describes": [
+        "context budget tiers",
+        "ghost knowledge in formatted output",
+        "mixed-type ordering",
+        "budget edge cases",
+        "token counting accuracy"
+      ],
+      "highlights": [
+        "All 4 tiers respected: full/compact/minimal/ultraMinimal",
+        "Empty input → 'No matching entries found.'",
+        "countTokens uses Math.ceil(chars/4)",
+        "Token budget never exceeded at any tier"
+      ]
+    },
+    "code-retrieval.test.ts": {
+      "tests": 5,
+      "passed": 5,
+      "failed": 0,
+      "describes": [
+        "keyword retrieval MRR@5 >= 0.80",
+        "file-specific retrieval MRR@5 >= 0.85",
+        "ghost knowledge retrieval MRR@5 >= 0.90",
+        "cross-cutting retrieval MRR@5 >= 0.50",
+        "aggregate performance"
+      ],
+      "highlights": [
+        "100 seeded entries + 23 labeled queries",
+        "Keyword MRR@5 ≥ 0.80",
+        "File-specific MRR@5 ≥ 0.85",
+        "Ghost knowledge MRR@5 ≥ 0.90",
+        "Overall MRR@5 ≥ 0.70 across all categories"
+      ]
+    }
+  },
+  "systemInfo": {
+    "platform": "darwin",
+    "bun": "1.3.12",
+    "dbEngine": "SQLite (system libsqlite3 via /opt/homebrew/opt/sqlite/lib/libsqlite3.dylib)",
+    "searchStrategies": ["BM25/FTS5", "file_path", "graph", "RRF-fusion"]
+  }
+}

@@ -161,3 +161,9 @@ Check .claude/memory/ at the start of every session for:
 - MEMORY.md — current project state, blockers, what works, what doesn't
 - architecture.md — data flow, schema notes
 - debugging.md — known issues and fixes
+
+## Git Rules
+- NEVER run `git diff` without a specific file path. Use `git diff --stat` first.
+- NEVER run `git log` without `--oneline -10` limit.
+- ALWAYS run `git status --short` instead of `git status`.
+- Before any git operation that might produce large output, estimate the output size and ask me first.

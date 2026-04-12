@@ -1,0 +1,101 @@
+{
+  "generatedAt": "2026-04-12T22:24:16.921Z",
+  "longmemeval": {
+    "totalQuestions": 500,
+    "topK": 5,
+    "hitRate": 0.942,
+    "mrr": 0.8368666666666664,
+    "recall": 0.8676333333333337,
+    "timestamp": "2026-04-12T17:38:24.477Z"
+  },
+  "codememb": {
+    "totalQueries": 200,
+    "topK": 10,
+    "semanticAvailable": true,
+    "ndcg": 0.3511091562931825,
+    "recall": 0.6766666666666667,
+    "mrr": 0.2742519841269842,
+    "hitRate": 0.78,
+    "timestamp": "2026-04-12T21:28:06.812Z"
+  },
+  "codemembAblation": [
+    {
+      "name": "baseline (all strategies)",
+      "ndcg": 0.3511091562931825,
+      "hitRate": 0.78,
+      "deltaNdcg": 0,
+      "deltaHitRate": 0
+    },
+    {
+      "name": "no bm25",
+      "ndcg": 0.3511091562931825,
+      "hitRate": 0.78,
+      "deltaNdcg": 0,
+      "deltaHitRate": 0
+    },
+    {
+      "name": "no graph",
+      "ndcg": 0.3511091562931825,
+      "hitRate": 0.78,
+      "deltaNdcg": 0,
+      "deltaHitRate": 0
+    },
+    {
+      "name": "no file_path",
+      "ndcg": 0.3362577993665537,
+      "hitRate": 0.76,
+      "deltaNdcg": -0.014851356926628811,
+      "deltaHitRate": -0.020000000000000018
+    },
+    {
+      "name": "no temporal",
+      "ndcg": 0.3511091562931825,
+      "hitRate": 0.78,
+      "deltaNdcg": 0,
+      "deltaHitRate": 0
+    },
+    {
+      "name": "no semantic",
+      "ndcg": 0.04263801653256012,
+      "hitRate": 0.1,
+      "deltaNdcg": -0.3084711397606224,
+      "deltaHitRate": -0.68
+    }
+  ],
+  "coir": {
+    "mode": "embedding-only",
+    "model": "sentence-transformers/all-MiniLM-L6-v2",
+    "subtasksRun": [
+      "stackoverflow-qa",
+      "codefeedback-st",
+      "codefeedback-mt",
+      "cosqa"
+    ],
+    "subtasksTotal": 10,
+    "meanNdcgAt10": 0.5457511230317798,
+    "meanRecallAt10": 0.6937723277878495,
+    "meanMapAt10": 0.5064918437667156,
+    "perTask": {
+      "stackoverflow-qa": {
+        "ndcg_at_10": 0.8395843247900607,
+        "recall_at_10": 0.9262788365095286,
+        "map_at_10": 0.8138225745768922
+      },
+      "codefeedback-st": {
+        "ndcg_at_10": 0.6599198804223588,
+        "recall_at_10": 0.817159649907366,
+        "map_at_10": 0.6150217714595926
+      },
+      "codefeedback-mt": {
+        "ndcg_at_10": 0.35616893305491787,
+        "recall_at_10": 0.46765082473450326,
+        "map_at_10": 0.32873655409354385
+      },
+      "cosqa": {
+        "ndcg_at_10": 0.32733135385978196,
+        "recall_at_10": 0.564,
+        "map_at_10": 0.2683864749368338
+      }
+    }
+  }
+}

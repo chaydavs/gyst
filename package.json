@@ -16,7 +16,26 @@
     "calibrate": "bun run scripts/calibrate-confidence.ts",
     "seed-wiki": "bun run scripts/seed-wiki.ts",
     "benchmark:longmemeval": "bun run tests/benchmark/longmemeval/run.ts",
-    "benchmark:longmemeval:fast": "bun run tests/benchmark/longmemeval/run.ts --fast"
+    "benchmark:longmemeval:fast": "bun run tests/benchmark/longmemeval/run.ts --fast",
+    "benchmark:codememb": "bun run tests/benchmark/codememb/run.ts",
+    "benchmark:codememb:generate": "bun run tests/benchmark/codememb/generate-dataset.ts",
+    "benchmark:codememb:ablation": "bun run tests/benchmark/codememb/ablation.ts",
+    "benchmark:coir": "tests/benchmark/coir-env/bin/python3 tests/benchmark/coir/run-coir.py",
+    "benchmark:coir:pipeline": "tests/benchmark/coir-env/bin/python3 tests/benchmark/coir/run-coir.py --pipeline",
+    "benchmark:combined": "bun run tests/benchmark/combined-report.ts",
+    "benchmark:all": "bun run benchmark:codememb && bun run benchmark:codememb:ablation && bun run benchmark:coir && bun run benchmark:longmemeval && bun run benchmark:combined",
+    "stress": "bun test tests/stress/",
+    "stress:lifecycle": "bun test tests/stress/code-lifecycle.test.ts",
+    "stress:bloat": "bun test tests/stress/bloat.test.ts",
+    "stress:http": "bun test tests/stress/team-http.test.ts",
+    "stress:format": "bun test tests/stress/format-compat.test.ts",
+    "stress:retrieval": "bun test tests/stress/code-retrieval.test.ts",
+    "collab": "bun test tests/collaborative/",
+    "collab:retrieval": "bun test tests/collaborative/retrieval-quality.test.ts",
+    "collab:flow": "bun test tests/collaborative/knowledge-flow.test.ts",
+    "collab:cross": "bun test tests/collaborative/cross-tool.test.ts",
+    "collab:evolution": "bun test tests/collaborative/knowledge-evolution.test.ts",
+    "collab:concurrent": "bun test tests/collaborative/concurrent.test.ts"
   },
   "bin": {
     "gyst": "./src/cli/index.ts"

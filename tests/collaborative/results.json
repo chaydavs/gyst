@@ -1,0 +1,88 @@
+{
+  "timestamp": "2026-04-12T20:14:27.000Z",
+  "runner": "bun test",
+  "totalTests": 107,
+  "passed": 107,
+  "failed": 0,
+  "expectCalls": 201,
+  "suites": 5,
+  "durationMs": 7640,
+  "focus": "code-domain retrieval (real TypeScript/Bun/Prisma/Stripe error messages and file paths), not natural-language text",
+  "files": {
+    "retrieval-quality.test.ts": {
+      "tests": 7,
+      "passed": 7,
+      "failed": 0,
+      "seedEntries": 100,
+      "queries": 30,
+      "mrrAt5": {
+        "direct":       { "target": 0.90, "actual": 1.0000 },
+        "semantic":     { "target": 0.75, "actual": 1.0000 },
+        "file-specific":{ "target": 0.85, "actual": 1.0000 },
+        "team-context": { "target": 0.70, "actual": 0.8000 },
+        "cross-cutting":{ "target": 0.55, "actual": 1.0000 },
+        "ghost":        { "target": 0.90, "actual": 1.0000 },
+        "overall":      { "target": 0.75, "actual": 0.9667 }
+      },
+      "strategies": ["hybridSearch (BM25 + graph + RRF k=60)", "searchByFilePath"],
+      "notes": "100 realistic code entries: 30 error_pattern, 25 convention, 20 decision, 15 learning, 10 ghost. Real production errors (Prisma P2002, ECONNREFUSED 5432, Stripe webhook raw body, JWT expiry, Redis EHOSTUNREACH, ESM .js extension)."
+    },
+    "knowledge-flow.test.ts": {
+      "tests": 30,
+      "passed": 30,
+      "failed": 0,
+      "suites": [
+        "error propagation dev→dev (5 tests) — Dev A learns Stripe raw-body error, Dev B finds it in top-3 BM25 + file-path",
+        "convention sharing (6 tests) — Dev A writes zod validation convention, Devs B/C/D all find it via different phrasings",
+        "ghost knowledge propagation (8 tests) — 5 devs each find ghost entry above 20 noise, confidence stays 1.0, status stays active",
+        "personal scope privacy (11 tests) — 3 devs with personal+team entries, developerId-filtered BM25 proves strict isolation"
+      ]
+    },
+    "cross-tool.test.ts": {
+      "tests": 31,
+      "passed": 31,
+      "failed": 0,
+      "suites": [
+        "budget tier ranking consistency (8 tests) — top-1 at ultraMinimal matches top-1 at full, noise suppressed",
+        "transport-agnostic learn→recall (5 tests) — stdio and HTTP inserts both surface regardless of sourceTool",
+        "self-hosted LLM tight budget (4 tests) — 800-token budget returns ≤2 entries, token count respected",
+        "budget boundary edge cases (12 tests) — 4999/5000/2000/0 boundaries, empty-list sentinel"
+      ],
+      "notes": "fetchEntries helper bridges searchByBM25 (returns {id,score,source}) to formatForContext (needs FormattableEntry) via single SELECT IN query."
+    },
+    "knowledge-evolution.test.ts": {
+      "tests": 23,
+      "passed": 23,
+      "failed": 0,
+      "expectCalls": 57,
+      "suites": [
+        "supersession (4 tests) — newer JWT decision ranks above older via higher term frequency, older preserved",
+        "contradiction/duplicate detection (5 tests) — findDuplicate by fingerprint, mergeEntries sums sourceCount and unions tags/files immutably",
+        "decay + reinforcement (6 tests) — error_pattern 30d half-life, decision 365d, convention near-zero decay, ghost infinite decay, sourceCount saturation boost",
+        "new hire onboarding (7 tests) — 50 entries across 10 domains, 5 queries each return ≥3 hits, ≥15 unique entries surfaced aggregate"
+      ]
+    },
+    "concurrent.test.ts": {
+      "tests": 16,
+      "passed": 16,
+      "failed": 0,
+      "suites": [
+        "3 developers parallel feature development (60 ops) — Promise.all-driven devs own payments/auth/db-layer domains",
+        "simultaneous learn race dedup (4 tests) — normalized error signature catches line-number variants as duplicates",
+        "500 read query P50/P95 latency — P50 11.1ms, P95 16.6ms on 200-entry in-memory DB"
+      ],
+      "latency": {
+        "p50Ms": 11.1,
+        "p95Ms": 16.6,
+        "targetP50Ms": 20,
+        "targetP95Ms": 100
+      }
+    }
+  },
+  "systemInfo": {
+    "platform": "darwin",
+    "bun": "1.3.12",
+    "dbEngine": "SQLite (system libsqlite3 via /opt/homebrew/opt/sqlite/lib/libsqlite3.dylib)",
+    "searchStrategies": ["BM25/FTS5", "file_path", "graph", "RRF-fusion"]
+  }
+}

@@ -41,6 +41,11 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # LongMemEval dataset (277MB — re-downloaded by run.ts)
 tests/benchmark/longmemeval/data/
 
+# CoIR Python venv (re-created by pip install -r requirements.txt)
+tests/benchmark/coir-env/
+tests/benchmark/coir/run.log
+tests/benchmark/coir/results/
+
 # Claude memory (except template)
 .claude/memory/*.md
 !.claude/memory/MEMORY.md.template
