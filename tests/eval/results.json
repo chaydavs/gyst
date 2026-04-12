@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-04-12T04:15:42.880Z",
+  "timestamp": "2026-04-12T04:36:54.376Z",
   "totalQueries": 50,
-  "mrr": 0.7240000000000001,
-  "meanPrecision": 0.16800000000000004,
-  "meanRecall": 0.69,
-  "meanNdcg": 0.6816703704926659,
-  "hitRate": 0.76,
+  "mrr": 0.8440000000000001,
+  "meanPrecision": 0.192,
+  "meanRecall": 0.81,
+  "meanNdcg": 0.8016703704926659,
+  "hitRate": 0.88,
   "results": [
     {
       "queryId": "q-001",
@@ -16,8 +16,8 @@
         "entry-042"
       ],
       "actualIds": [
-        "entry-042",
-        "entry-005"
+        "entry-005",
+        "entry-042"
       ],
       "reciprocalRank": 1,
       "precision": 0.4,
@@ -101,12 +101,14 @@
       "expectedIds": [
         "entry-033"
       ],
-      "actualIds": [],
-      "reciprocalRank": 0,
-      "precision": 0,
-      "recall": 0,
-      "ndcg": 0,
-      "hit": false
+      "actualIds": [
+        "entry-033"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
     },
     {
       "queryId": "q-007",
@@ -248,12 +250,14 @@
       "expectedIds": [
         "entry-021"
       ],
-      "actualIds": [],
-      "reciprocalRank": 0,
-      "precision": 0,
-      "recall": 0,
-      "ndcg": 0,
-      "hit": false
+      "actualIds": [
+        "entry-021"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
     },
     {
       "queryId": "q-016",
@@ -314,12 +318,14 @@
       "expectedIds": [
         "entry-036"
       ],
-      "actualIds": [],
-      "reciprocalRank": 0,
-      "precision": 0,
-      "recall": 0,
-      "ndcg": 0,
-      "hit": false
+      "actualIds": [
+        "entry-036"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
     },
     {
       "queryId": "q-020",
@@ -425,12 +431,14 @@
       "expectedIds": [
         "entry-011"
       ],
-      "actualIds": [],
-      "reciprocalRank": 0,
-      "precision": 0,
-      "recall": 0,
-      "ndcg": 0,
-      "hit": false
+      "actualIds": [
+        "entry-011"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
     },
     {
       "queryId": "q-027",
@@ -595,12 +603,14 @@
       "expectedIds": [
         "entry-040"
       ],
-      "actualIds": [],
-      "reciprocalRank": 0,
-      "precision": 0,
-      "recall": 0,
-      "ndcg": 0,
-      "hit": false
+      "actualIds": [
+        "entry-040"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
     },
     {
       "queryId": "q-037",
@@ -748,12 +758,14 @@
       "expectedIds": [
         "entry-037"
       ],
-      "actualIds": [],
-      "reciprocalRank": 0,
-      "precision": 0,
-      "recall": 0,
-      "ndcg": 0,
-      "hit": false
+      "actualIds": [
+        "entry-037"
+      ],
+      "reciprocalRank": 1,
+      "precision": 0.2,
+      "recall": 1,
+      "ndcg": 1,
+      "hit": true
     },
     {
       "queryId": "q-046",
