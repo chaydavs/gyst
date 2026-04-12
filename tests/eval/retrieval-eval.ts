@@ -15,7 +15,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { initDatabase, insertEntry } from "../../src/store/database.js";
+import { initDatabase, insertEntry, canLoadExtensions } from "../../src/store/database.js";
 import type { EntryRow } from "../../src/store/database.js";
 import {
   searchByFilePath,
@@ -24,6 +24,11 @@ import {
   searchByTemporal,
   reciprocalRankFusion,
 } from "../../src/store/search.js";
+import {
+  initVectorStore,
+  backfillVectors,
+  searchByVector,
+} from "../../src/store/embeddings.js";
 
 // ---------------------------------------------------------------------------
 // Path resolution (works with bun when __dirname is unavailable in ESM)
@@ -192,10 +197,11 @@ function computeMeanNdcg(results: readonly EvalResult[]): number {
 // Search fusion helper
 // ---------------------------------------------------------------------------
 
-function runFusedSearch(
+async function runFusedSearch(
   db: Database,
   query: EvalQuery,
-): string[] {
+  semanticEnabled: boolean,
+): Promise<string[]> {
   const rankedLists = [];
 
   // Strategy 1: file-path lookup (only if file context is provided)
@@ -226,6 +232,14 @@ function runFusedSearch(
   const temporalResults = searchByTemporal(db, query.query);
   if (temporalResults.length > 0) {
     rankedLists.push(temporalResults);
+  }
+
+  // Strategy 5: Semantic search (no-op if vector store is unavailable)
+  if (semanticEnabled) {
+    const vectorResults = await searchByVector(db, query.query, 20);
+    if (vectorResults.length > 0) {
+      rankedLists.push(vectorResults);
+    }
   }
 
   // Fuse and return top-K IDs
@@ -407,13 +421,31 @@ async function main(): Promise<void> {
     });
   }
 
-  console.log(`  Seeded ${entries.length} entries.\n`);
+  console.log(`  Seeded ${entries.length} entries.`);
+
+  // ---- Initialise semantic search (graceful if unavailable) ----
+  let semanticEnabled = false;
+  if (canLoadExtensions()) {
+    console.log("  Initialising semantic search (sqlite-vec + MiniLM)...");
+    semanticEnabled = initVectorStore(evalDb);
+    if (semanticEnabled) {
+      const backfillStart = performance.now();
+      const n = await backfillVectors(evalDb);
+      const backfillMs = performance.now() - backfillStart;
+      console.log(
+        `  Embedded ${n} entries in ${backfillMs.toFixed(0)}ms (Xenova/all-MiniLM-L6-v2, 384-d).`,
+      );
+    }
+  } else {
+    console.log("  Semantic search disabled — no system SQLite with extension support.");
+  }
+  console.log("");
 
   // ---- Evaluate each query ----
   const results: EvalResult[] = [];
 
   for (const query of queries) {
-    const actualIds = runFusedSearch(evalDb, query);
+    const actualIds = await runFusedSearch(evalDb, query, semanticEnabled);
 
     const rr = computeReciprocalRank(actualIds, query.expected_ids);
     const precision = computePrecision(actualIds, query.expected_ids, TOP_K);
