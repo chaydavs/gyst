@@ -106,3 +106,57 @@ jobs:
           name: eval-results
           path: tests/eval/results.json
           retention-days: 90
+
+  longmemeval:
+    name: LongMemEval Benchmark (fast mode)
+    runs-on: ubuntu-latest
+    # Only runs on the scheduled weekly cron or manual dispatch.
+    # Never gates PRs — this is a measurement job, not a quality gate.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+
+      - name: Cache Hugging Face models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: huggingface-${{ runner.os }}-minilm-v1
+
+      - name: Cache LongMemEval dataset
+        uses: actions/cache@v4
+        with:
+          path: tests/benchmark/longmemeval/data
+          key: longmemeval-s-v1
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Download LongMemEval dataset (if not cached)
+        run: |
+          if [ ! -f tests/benchmark/longmemeval/data/longmemeval_s.json ]; then
+            mkdir -p tests/benchmark/longmemeval/data
+            curl -sL -o tests/benchmark/longmemeval/data/longmemeval_s.json \
+              https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/resolve/main/longmemeval_s_cleaned.json
+          fi
+
+      - name: Run LongMemEval fast benchmark
+        run: bun run benchmark:longmemeval:fast
+        timeout-minutes: 30
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: longmemeval-results
+          path: benchmark-longmemeval.json
+          retention-days: 180
