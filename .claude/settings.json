@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"additionalContext\": \"PROJECT: Gyst. PHASE: V1. FOCUS: MCP server + learn/recall + SQLite/FTS5 + git hook. DO NOT build V2 features (Slack, Turso, vector search). CHECK .claude/memory/MEMORY.md for current build state before doing anything. CHECK .claude/memory/what-failed.md to avoid repeating past mistakes.\"}'"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat .claude/memory/MEMORY.md .claude/memory/what-failed.md"
+          }
+        ]
+      }
+    ]
+  }
+}

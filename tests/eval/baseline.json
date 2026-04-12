@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-04-12T04:15:42.880Z",
+  "timestamp": "2026-04-12T04:08:19.127Z",
   "totalQueries": 50,
   "mrr": 0.7240000000000001,
   "meanPrecision": 0.16800000000000004,
@@ -16,8 +16,8 @@
         "entry-042"
       ],
       "actualIds": [
-        "entry-042",
-        "entry-005"
+        "entry-005",
+        "entry-042"
       ],
       "reciprocalRank": 1,
       "precision": 0.4,

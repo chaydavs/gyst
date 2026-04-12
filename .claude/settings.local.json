@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun --version)",
+      "Bash(curl -fsSL https://bun.sh/install)",
+      "Bash(bash)",
+      "Bash(export PATH=\"$HOME/.bun/bin:$PATH\")",
+      "Bash(bun init:*)",
+      "Bash(bun add:*)",
+      "Bash(python3 -c \"import sys, json; d=json.load\\(sys.stdin\\); [print\\(k\\) for k in d.get\\('exports', {}\\).keys\\(\\)]\")",
+      "Bash(npx tsc:*)",
+      "Bash(node:*)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d.get\\('version'\\)\\)\")",
+      "Bash(bun run:*)",
+      "Bash(/Users/chaitanyadavuluri/.bun/bin/bun run:*)",
+      "Bash(/Users/chaitanyadavuluri/.bun/bin/bunx tsc:*)",
+      "Bash(bun -e ':*)",
+      "Bash(bun -e \"import { initDatabase } from './src/store/database.js'; const db = initDatabase\\(':memory:'\\); const tables = db.query\\(\\\\\"SELECT name FROM sqlite_master WHERE type='table'\\\\\"\\).all\\(\\); for \\(const t of tables\\) { process.stdout.write\\(t.name + '\\\\n'\\); } db.close\\(\\); process.stdout.write\\('OK\\\\n'\\);\")",
+      "Bash(bun test:*)",
+      "Bash(export PATH=\"$PATH:/usr/local/bin:$HOME/.bun/bin\")",
+      "Bash(find /Users/chaitanyadavuluri/Desktop/SustainableMemory/src /Users/chaitanyadavuluri/Desktop/SustainableMemory/tests -name \"*.ts\" -exec cat {} +)",
+      "Bash(~/.bun/bin/bun --version)",
+      "Bash(~/.bun/bin/bun test:*)",
+      "Bash('~/.bun/bin/bun' -e ':*)",
+      "Bash(/Users/chaitanyadavuluri/.bun/bin/bun:*)",
+      "Bash(python3 -c \"import json, sys; json.load\\(open\\('tests/fixtures/real-entries.json'\\)\\)\")",
+      "Bash(python3 -c \"import json, sys; json.load\\(open\\('tests/fixtures/eval-queries.json'\\)\\)\")",
+      "Bash(python3:*)",
+      "Bash(gh auth:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(gh repo:*)",
+      "Bash(export PATH=\"$PATH:$HOME/.bun/bin\")"
+    ]
+  }
+}

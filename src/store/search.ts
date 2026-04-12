@@ -16,6 +16,7 @@
 import type { Database, SQLQueryBindings } from "bun:sqlite";
 import { logger } from "../utils/logger.js";
 import { SearchError } from "../utils/errors.js";
+import { expandQuery } from "./query-expansion.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -159,8 +160,9 @@ export function searchByBM25(
     return [];
   }
 
-  const tokenised = escapeFts5(codeTokenize(query));
-  logger.debug("searchByBM25", { query, tokenised, type, developerId });
+  const expanded = expandQuery(query);
+  const tokenised = escapeFts5(codeTokenize(expanded));
+  logger.debug("searchByBM25", { query, expanded, tokenised, type, developerId });
 
   if (!tokenised.trim()) {
     return [];

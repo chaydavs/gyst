@@ -116,6 +116,18 @@ const SCHEMA_STATEMENTS: readonly string[] = [
       VALUES (new.rowid, new.title, new.content, new.error_signature);
     END`,
 
+  `CREATE TABLE IF NOT EXISTS feedback (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id     TEXT    NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+    developer_id TEXT,
+    helpful      INTEGER NOT NULL CHECK(helpful IN (0, 1)),
+    note         TEXT,
+    timestamp    TEXT    NOT NULL DEFAULT (datetime('now'))
+  )`,
+
+  "CREATE INDEX IF NOT EXISTS idx_feedback_entry     ON feedback(entry_id)",
+  "CREATE INDEX IF NOT EXISTS idx_feedback_timestamp ON feedback(timestamp)",
+
   // ----- indexes -----
   "CREATE INDEX IF NOT EXISTS idx_entries_type        ON entries(type)",
   "CREATE INDEX IF NOT EXISTS idx_entries_status      ON entries(status)",

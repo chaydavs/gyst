@@ -19,6 +19,7 @@ import { registerConventionsTool } from "./tools/conventions.js";
 import { registerFailuresTool } from "./tools/failures.js";
 import { registerActivityTool } from "./tools/activity.js";
 import { registerStatusTool } from "./tools/status.js";
+import { registerFeedbackTool } from "./tools/feedback.js";
 
 // ---------------------------------------------------------------------------
 // Bootstrap
@@ -52,6 +53,7 @@ async function main(): Promise<void> {
   registerFailuresTool(server, db);
   registerActivityTool(server, db);
   registerStatusTool(server, db);
+  registerFeedbackTool(server, db);
 
   // Connect via stdio transport
   const transport = new StdioServerTransport();
