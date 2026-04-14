@@ -92,11 +92,17 @@ const CORS_HEADERS: Record<string, string> = {
 /**
  * Adds CORS and request-id headers to an existing Response, returning a new
  * Response object (immutable pattern).
+ *
+ * Also strips the internal `x-developer-id` header so it is never forwarded
+ * to HTTP clients.  The outer fetch handler reads this header before calling
+ * withMeta (or withMetaStrip) so that logAccess receives the resolved
+ * developerId.
  */
 function withMeta(res: Response, requestId: string): Response {
   const headers = new Headers(res.headers);
   headers.set("X-Request-Id", requestId);
   headers.set("Access-Control-Allow-Origin", CORS_ORIGIN);
+  headers.delete("x-developer-id");
   return new Response(res.body, {
     status: res.status,
     statusText: res.statusText,
@@ -150,6 +156,16 @@ function notFoundResponse(requestId: string): Response {
 /** 500 Internal Server Error */
 function internalErrorResponse(message: string, requestId: string): Response {
   return jsonResponse({ error: message }, 500, requestId);
+}
+
+/**
+ * Returns a Record containing the x-developer-id header when developerId is
+ * non-null, or an empty Record otherwise.  Used to thread the resolved
+ * developerId through handler responses to the outer fetch access log.
+ */
+function devIdHeaders(developerId: string | null): Record<string, string> {
+  if (developerId === null) return {};
+  return { "x-developer-id": developerId };
 }
 
 // ---------------------------------------------------------------------------
@@ -211,6 +227,7 @@ async function handleCreateTeam(
   requestId: string,
 ): Promise<Response> {
   const existing = teamsExist(db);
+  let resolvedDevId: string | null = null;
 
   if (existing) {
     let authCtx: AuthContext;
@@ -220,6 +237,7 @@ async function handleCreateTeam(
       const msg = err instanceof AuthError ? err.message : "Unauthorized";
       return unauthorizedResponse(msg, requestId);
     }
+    resolvedDevId = authCtx.developerId;
     if (authCtx.role !== "admin") {
       return forbiddenResponse("Admin role required to create additional teams", requestId);
     }
@@ -241,11 +259,11 @@ async function handleCreateTeam(
   try {
     const { teamId, adminKey } = createTeam(db, parsed.data.name);
     logger.info("Team created via HTTP", { teamId, requestId });
-    return jsonResponse({ teamId, adminKey }, 201, requestId);
+    return jsonResponse({ teamId, adminKey }, 201, requestId, devIdHeaders(resolvedDevId));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error("Failed to create team", { error: msg, requestId });
-    return internalErrorResponse("Failed to create team", requestId);
+    return jsonResponse({ error: "Failed to create team" }, 500, requestId, devIdHeaders(resolvedDevId));
   }
 }
 
@@ -273,11 +291,11 @@ async function handleCreateInvite(
   try {
     const inviteKey = createInviteKey(db, authCtx.teamId);
     logger.info("Invite key created via HTTP", { teamId: authCtx.teamId, requestId });
-    return jsonResponse({ inviteKey, expiresInHours: 24 }, 201, requestId);
+    return jsonResponse({ inviteKey, expiresInHours: 24 }, 201, requestId, devIdHeaders(authCtx.developerId));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error("Failed to create invite key", { error: msg, requestId });
-    return internalErrorResponse("Failed to create invite key", requestId);
+    return jsonResponse({ error: "Failed to create invite key" }, 500, requestId, devIdHeaders(authCtx.developerId));
   }
 }
 
@@ -322,14 +340,17 @@ async function handleJoinTeam(
   try {
     const { developerId, memberKey } = await joinTeam(db, rawKey, parsed.data.displayName);
     logger.info("Developer joined team via HTTP", { developerId, requestId });
-    return jsonResponse({ developerId, memberKey }, 201, requestId);
+    return jsonResponse({ developerId, memberKey }, 201, requestId, devIdHeaders(authCtx.developerId));
   } catch (err) {
     if (err instanceof AuthError) {
-      return unauthorizedResponse(err.message, requestId);
+      return jsonResponse({ error: err.message }, 401, requestId, {
+        "WWW-Authenticate": 'Bearer realm="gyst"',
+        ...devIdHeaders(authCtx.developerId),
+      });
     }
     const msg = err instanceof Error ? err.message : String(err);
     logger.error("Failed to join team", { error: msg, requestId });
-    return internalErrorResponse("Failed to join team", requestId);
+    return jsonResponse({ error: "Failed to join team" }, 500, requestId, devIdHeaders(authCtx.developerId));
   }
 }
 
@@ -352,11 +373,11 @@ async function handleListMembers(
 
   try {
     const members = getTeamMembers(db, authCtx.teamId);
-    return jsonResponse({ members }, 200, requestId);
+    return jsonResponse({ members }, 200, requestId, devIdHeaders(authCtx.developerId));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error("Failed to list members", { error: msg, requestId });
-    return internalErrorResponse("Failed to list team members", requestId);
+    return jsonResponse({ error: "Failed to list team members" }, 500, requestId, devIdHeaders(authCtx.developerId));
   }
 }
 
@@ -389,11 +410,11 @@ async function handleRemoveMember(
   try {
     removeMember(db, authCtx.teamId, targetDeveloperId);
     logger.info("Member removed via HTTP", { targetDeveloperId, teamId: authCtx.teamId, requestId });
-    return jsonResponse({ success: true }, 200, requestId);
+    return jsonResponse({ success: true }, 200, requestId, devIdHeaders(authCtx.developerId));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error("Failed to remove member", { error: msg, requestId });
-    return internalErrorResponse("Failed to remove member", requestId);
+    return jsonResponse({ error: "Failed to remove member" }, 500, requestId, devIdHeaders(authCtx.developerId));
   }
 }
 
@@ -437,8 +458,18 @@ async function handleMcpRequest(
 
   try {
     await mcpServer.connect(transport);
-    const response = await transport.handleRequest(req);
-    return withMeta(response, requestId);
+    const mcpResponse = await transport.handleRequest(req);
+    const metaResponse = withMeta(mcpResponse, requestId);
+    // Embed developerId for the outer fetch handler's access log (stripped there).
+    const headers = new Headers(metaResponse.headers);
+    if (authCtx.developerId !== null) {
+      headers.set("x-developer-id", authCtx.developerId);
+    }
+    return new Response(metaResponse.body, {
+      status: metaResponse.status,
+      statusText: metaResponse.statusText,
+      headers,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error("MCP request handling failed", {
@@ -546,7 +577,20 @@ export function startHttpServer(options: HttpServerOptions): HttpServerHandle {
         }
       }
 
-      logAccess(requestId, method, path, null, start, response.status);
+      // Read the internal developer-id header (set by auth-resolving handlers)
+      // before stripping it so it never reaches the HTTP client.
+      const developerId = response.headers.get("x-developer-id");
+      if (developerId !== null) {
+        const stripped = new Headers(response.headers);
+        stripped.delete("x-developer-id");
+        response = new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: stripped,
+        });
+      }
+
+      logAccess(requestId, method, path, developerId, start, response.status);
       return response;
     },
   });
