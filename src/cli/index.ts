@@ -17,8 +17,6 @@
 import { Command } from "commander";
 import { mkdirSync, existsSync } from "fs";
 import { join } from "path";
-import { execFile } from "child_process";
-import { promisify } from "util";
 import { initDatabase } from "../store/database.js";
 import { installForDetectedTools } from "../mcp/installer.js";
 import { logger } from "../utils/logger.js";
@@ -34,8 +32,6 @@ import {
 } from "../server/auth.js";
 import { initActivitySchema } from "../server/activity.js";
 import { getTeamMembers, removeMember } from "../server/team.js";
-
-const execFileAsync = promisify(execFile);
 
 // Matches the entry type enum in src/compiler/extract.ts + src/store/database.ts.
 // writeEntry() writes to `{wikiDir}/{entry.type}/{slug}.md`, so these directory
@@ -97,9 +93,16 @@ program
         }
       }
 
-      // 4. Install git hooks (no user input — static args only)
+      // 4. Install git hooks (inline — no external scripts needed)
       process.stdout.write("Installing git hooks...\n");
-      await execFileAsync("bash", ["scripts/install-hooks.sh"]);
+      const { installGitHooks } = await import("./install.js");
+      const gitResult = installGitHooks(process.cwd());
+      if (gitResult.noGit) {
+        process.stdout.write("  No .git/ found — skipping git hooks.\n");
+      } else {
+        const done = [...gitResult.installed, ...gitResult.skipped.map((f) => `${f} (already set)`)];
+        process.stdout.write(`  hooks: ${done.join(", ") || "none"}\n`);
+      }
 
       // Detect conventions and print count (silent, non-blocking).
       try {

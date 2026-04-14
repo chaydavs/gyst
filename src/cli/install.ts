@@ -12,7 +12,7 @@
  *   8. Print installation summary
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -432,6 +432,66 @@ async function quickGhostInit(db: Database): Promise<number> {
 }
 
 // ---------------------------------------------------------------------------
+// Step 6.5 — Git hooks (inline, no external scripts)
+// ---------------------------------------------------------------------------
+
+/** Lines we inject into git hooks. Idempotent — safe to call repeatedly. */
+const GIT_HOOKS: ReadonlyArray<{ file: string; line: string }> = [
+  { file: "post-commit", line: "gyst harvest-session 2>/dev/null || true" },
+  { file: "post-merge", line: "gyst rebuild 2>/dev/null || true" },
+];
+
+/**
+ * Installs git hooks inline without external scripts.
+ *
+ * For each hook: if the file exists, appends the gyst line only when not
+ * already present (preserves Husky/Lefthook hooks). If absent, creates a
+ * minimal hook file with the correct shebang and marks it executable.
+ *
+ * Silently skips when `.git/` is not found (e.g. monorepo sub-package).
+ *
+ * @param projectDir - Root directory of the project (default: cwd).
+ */
+export function installGitHooks(projectDir: string = process.cwd()): {
+  installed: string[];
+  skipped: string[];
+  noGit: boolean;
+} {
+  const gitDir = join(projectDir, ".git");
+  if (!existsSync(gitDir)) {
+    return { installed: [], skipped: [], noGit: true };
+  }
+
+  const hooksDir = join(gitDir, "hooks");
+  if (!existsSync(hooksDir)) {
+    mkdirSync(hooksDir, { recursive: true });
+  }
+
+  const installed: string[] = [];
+  const skipped: string[] = [];
+
+  for (const { file, line } of GIT_HOOKS) {
+    const hookPath = join(hooksDir, file);
+
+    if (existsSync(hookPath)) {
+      const existing = readFileSync(hookPath, "utf-8");
+      if (existing.includes("gyst")) {
+        skipped.push(file);
+        continue;
+      }
+      // Append without overwriting existing hooks (Husky, Lefthook, etc.)
+      writeFileSync(hookPath, `${existing.trimEnd()}\n${line}\n`);
+    } else {
+      writeFileSync(hookPath, `#!/bin/sh\n${line}\n`);
+      chmodSync(hookPath, 0o755);
+    }
+    installed.push(file);
+  }
+
+  return { installed, skipped, noGit: false };
+}
+
+// ---------------------------------------------------------------------------
 // Step 7 (interactive) — Hook registration
 // ---------------------------------------------------------------------------
 
@@ -531,10 +591,24 @@ export async function runInstall(): Promise<void> {
 
   db.close();
 
-  // Step 7: Claude Code hooks
+  // Step 7: Git hooks (inline, no external scripts)
+  process.stdout.write("\n  ✓ Installing git hooks...\n");
+  const gitResult = installGitHooks(process.cwd());
+  if (gitResult.noGit) {
+    process.stdout.write("    No .git/ found — skipping git hooks.\n");
+  } else {
+    for (const f of gitResult.installed) {
+      process.stdout.write(`    .git/hooks/${f} ✓\n`);
+    }
+    for (const f of gitResult.skipped) {
+      process.stdout.write(`    .git/hooks/${f} already has gyst — skipped\n`);
+    }
+  }
+
+  // Step 7b: Claude Code session hooks
   const claudeTool = tools.find((t) => t.name === "Claude Code");
   if (claudeTool?.detected) {
-    process.stdout.write("\n  ✓ Registering hooks...\n");
+    process.stdout.write("\n  ✓ Registering Claude Code session hooks...\n");
     await registerHooks(claudeTool);
   }
 

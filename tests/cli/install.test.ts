@@ -6,7 +6,7 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, writeFileSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir, homedir } from "node:os";
 import {
@@ -220,5 +220,79 @@ describe("CLI commands", () => {
     const output = new TextDecoder().decode(result.stdout);
     expect(output).toContain("install");
     expect(output).toContain("First-time setup");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 7 — installGitHooks
+// ---------------------------------------------------------------------------
+
+import { installGitHooks } from "../../src/cli/install.js";
+import { readFileSync, mkdirSync } from "node:fs";
+
+describe("installGitHooks", () => {
+  let gitTmp: string;
+
+  beforeAll(() => {
+    gitTmp = mkdtempSync(join(tmpdir(), "gyst-githooks-"));
+    // Simulate a git repo by creating a .git/hooks/ directory
+    mkdirSync(join(gitTmp, ".git", "hooks"), { recursive: true });
+  });
+
+  afterAll(() => {
+    rmSync(gitTmp, { recursive: true, force: true });
+  });
+
+  test("returns noGit=true when .git/ is absent", () => {
+    const noGitDir = mkdtempSync(join(tmpdir(), "gyst-nogit-"));
+    try {
+      const result = installGitHooks(noGitDir);
+      expect(result.noGit).toBe(true);
+      expect(result.installed).toHaveLength(0);
+    } finally {
+      rmSync(noGitDir, { recursive: true, force: true });
+    }
+  });
+
+  test("creates post-commit and post-merge hooks", () => {
+    const result = installGitHooks(gitTmp);
+    expect(result.noGit).toBe(false);
+    expect(result.installed).toContain("post-commit");
+    expect(result.installed).toContain("post-merge");
+    expect(result.skipped).toHaveLength(0);
+  });
+
+  test("post-commit hook contains harvest-session command", () => {
+    const content = readFileSync(join(gitTmp, ".git", "hooks", "post-commit"), "utf-8");
+    expect(content).toContain("gyst harvest-session");
+    expect(content).toContain("#!/bin/sh");
+  });
+
+  test("post-merge hook contains rebuild command", () => {
+    const content = readFileSync(join(gitTmp, ".git", "hooks", "post-merge"), "utf-8");
+    expect(content).toContain("gyst rebuild");
+  });
+
+  test("is idempotent — second call skips already-present gyst hooks", () => {
+    const result2 = installGitHooks(gitTmp);
+    expect(result2.installed).toHaveLength(0);
+    expect(result2.skipped).toContain("post-commit");
+    expect(result2.skipped).toContain("post-merge");
+  });
+
+  test("appends to existing hook without overwriting it", () => {
+    const appendDir = mkdtempSync(join(tmpdir(), "gyst-append-"));
+    mkdirSync(join(appendDir, ".git", "hooks"), { recursive: true });
+    // Write a pre-existing hook
+    const hookPath = join(appendDir, ".git", "hooks", "post-commit");
+    writeFileSync(hookPath, "#!/bin/sh\necho existing\n");
+    chmodSync(hookPath, 0o755);
+
+    installGitHooks(appendDir);
+
+    const content = readFileSync(hookPath, "utf-8");
+    expect(content).toContain("echo existing");
+    expect(content).toContain("gyst harvest-session");
+    rmSync(appendDir, { recursive: true, force: true });
   });
 });
