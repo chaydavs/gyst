@@ -67,22 +67,37 @@ gyst/
 └── tsconfig.json
 ```
 
-## Current Phase: V1
-Focus ONLY on:
-- MCP server with learn and recall tools
-- SQLite database with FTS5 index
-- Git post-commit hook
-- Auto-installer for Claude Code and Cursor
-- CLI with setup, recall, and add commands
-- Error normalization and deduplication
-- Basic confidence scoring
+## Current Phase: V1 (Complete)
+
+### MCP Tools (14 total — both stdio and HTTP transports)
+- `learn` — record team knowledge with entity extraction, style fingerprint, auto-linking
+- `recall` — ranked search with RRF fusion, intent boost, ghost_knowledge tier 0
+- `search` — compact index (id/type/confidence/title) for progressive disclosure
+- `get_entry` — full markdown for a single entry by ID
+- `conventions` — list coding standards by directory/tags
+- `check_conventions` — check a file against stored conventions
+- `failures` — match known error patterns by signature or BM25
+- `check` — run all violation detectors against a file
+- `score` — uniformity score for the codebase
+- `graph` — query the relationship graph (neighbors, path, similar)
+- `feedback` — rate an entry helpful/unhelpful (adjusts confidence ±0.02/0.05)
+- `harvest` — extract knowledge from a session transcript
+- `activity` — query team activity log
+- `status` — health check / stats
+
+### CLI Commands
+- `gyst setup` — detect conventions from a sample project
+- `gyst ghost-init` — create ghost knowledge entries interactively
+- `gyst onboard` — generate onboarding document for new developers
+- `gyst score` — print uniformity score
+- `gyst detect-conventions` — run convention detectors and print results
+- `gyst check <file>` — check a file for convention violations
+- `gyst dashboard` — start the dashboard HTTP server
 
 DO NOT build yet:
 - Slack bot (V2)
 - Turso team sync (V2)
-- Vector search / sqlite-vec (V2)
-- Tree-sitter code parsing (V2)
-- Dashboard (V3)
+- Dashboard enhancement (V3)
 - Docker deployment (V3)
 
 ## Code Rules
@@ -119,15 +134,26 @@ When normalizing error signatures for matching:
 Order matters. More specific patterns first, numbers last.
 
 ## Search Strategy
-Three strategies run in parallel, fused with Reciprocal Rank Fusion (k=60):
+Five strategies run in parallel, fused with Reciprocal Rank Fusion (k=60):
 1. File path lookup — exact match on affected files, fastest
-2. BM25 via FTS5 — keyword search with porter stemmer
+2. BM25 via FTS5 — keyword search with porter stemmer + query expansion
 3. Graph traversal — walk relationships from known entities
+4. Temporal — recency-weighted results for debugging/history intents
+5. Vector (semantic) — requires custom SQLite with sqlite-vec extension
 Pre-process all text with codeTokenize() before FTS5 insertion:
 - Split camelCase: getUserName → get user name
 - Split snake_case: get_user_name → get user name
 - Split dots: this.auth → this auth
 - Lowercase
+Ghost knowledge entries get a +0.15 RRF boost and always surface in tier 0.
+Co-retrieval is recorded after every search; 3+ co-retrievals auto-creates a
+relationship edge (processed during consolidation Stage 2.5).
+
+## Style Fingerprinting
+When learn() receives code content (contains `;` or `{`), a StyleFingerprint
+is computed (indentation, semicolons, quotes, trailing commas) and stored as
+JSON in the entries.metadata column. The uniformity score aggregates these
+over all entries to compute team-wide style dominance.
 
 ## Confidence Decay Half-Lives
 - error_pattern: 30 days
@@ -147,9 +173,15 @@ Run security.ts stripSensitiveData() on ALL content before storage.
 ## Build Commands
 - `bun run dev` — Start MCP server in dev mode
 - `bun run build` — Compile to dist/
-- `bun test` — Run all tests
+- `bun test` — Run all tests (842 tests, 41 files)
 - `bun run setup` — First-time setup
 - `bun run install-hooks` — Install git hooks
+- `bun run lint` — TypeScript type check (tsc --noEmit)
+- `bun run benchmark:codememb` — Run CodeMemBench (NDCG@10=0.351, Hit=78%)
+
+## Benchmarks (CodeMemBench, April 2026)
+NDCG@10: 0.3511 | Recall@10: 0.6767 | MRR@10: 0.2743 | Hit Rate: 78.0%
+ghost_knowledge hit: 76% | convention hit: 92% | onboarding hit: 84%
 
 ## Decision Log
 When making a significant technical choice, create a file in decisions/:

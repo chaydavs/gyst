@@ -100,33 +100,63 @@ MCP config for shared server:
 }
 ```
 
+## MCP Tools (14)
+
+| Tool | Purpose |
+|------|---------|
+| `learn` | Record knowledge with entity extraction, style fingerprint, auto-linking |
+| `recall` | Ranked search with RRF fusion, intent boost, ghost tier 0 |
+| `search` | Compact index (id/type/confidence/title) for progressive disclosure |
+| `get_entry` | Full markdown for a single entry |
+| `conventions` | List coding standards by directory/tags |
+| `check_conventions` | Check a file against stored conventions |
+| `failures` | Match known error patterns |
+| `check` | Run all violation detectors against a file |
+| `score` | Uniformity score for the codebase |
+| `graph` | Query the relationship graph |
+| `feedback` | Rate an entry helpful/unhelpful (adjusts confidence ±0.02/0.05) |
+| `harvest` | Extract knowledge from a session transcript |
+| `activity` | Query team activity log |
+| `status` | Health check / stats |
+
 ## CLI Commands
 
 ```
-gyst setup                    # First-time initialization
+gyst setup                    # Detect conventions from project
+gyst ghost-init               # Create ghost knowledge entries
+gyst onboard                  # Generate onboarding document
+gyst score                    # Print uniformity score
+gyst detect-conventions       # Run convention detectors
+gyst check <file>             # Check file for violations
+gyst dashboard                # Start dashboard server
 gyst recall "query"           # Search knowledge from terminal
-gyst add --type learning      # Manually add an entry
-gyst rebuild                  # Rebuild index from markdown files
-gyst team create "Name"       # Create a team
-gyst team invite              # Generate invite key
-gyst team members             # List team members
-gyst team revoke <id>         # Revoke a member
-gyst join <key> "Name"        # Join a team
 ```
+
+## Benchmarks (CodeMemBench, April 2026)
+
+| Metric | Score |
+|--------|-------|
+| NDCG@10 | 0.351 |
+| Recall@10 | 0.677 |
+| MRR@10 | 0.274 |
+| Hit Rate | 78% |
+| Convention hit | 92% |
+| Ghost knowledge hit | 76% |
+| Onboarding hit | 84% |
 
 ## Architecture
 
 ```
 gyst/
 ├── src/
-│   ├── mcp/           # MCP server + 6 tools (learn, recall, conventions, failures, activity, status)
-│   ├── compiler/      # Extract, normalize, deduplicate, link, write, security filter
-│   ├── store/         # SQLite + FTS5, search (BM25 + file path + graph + RRF), confidence
-│   ├── server/        # HTTP server, auth (API keys), team management, activity logging
+│   ├── mcp/           # MCP server + 14 tools (stdio + HTTP)
+│   ├── compiler/      # Extract, normalize, deduplicate, link, style-fingerprint, security
+│   ├── store/         # SQLite + FTS5, 5-strategy search, RRF fusion, confidence, graph
+│   ├── server/        # HTTP server, auth (API keys), activity logging, dashboard
 │   ├── capture/       # Git hooks (post-commit, post-merge), manual entry
-│   ├── cli/           # Commander-based CLI
+│   ├── cli/           # Commander-based CLI (7 commands)
 │   └── utils/         # Config, logger, errors, token counting
-├── tests/             # 306 tests across 10 files
+├── tests/             # 842 tests across 41 files
 ├── gyst-wiki/         # Compiled knowledge base (markdown files)
 └── decisions/         # Architecture Decision Records
 ```
@@ -136,19 +166,18 @@ gyst/
 - **Runtime**: Bun (built-in SQLite, native TypeScript)
 - **MCP**: @modelcontextprotocol/sdk
 - **Database**: SQLite via bun:sqlite with FTS5
-- **Search**: BM25 + Reciprocal Rank Fusion
+- **Search**: 5-strategy (BM25, file-path, graph, temporal, vector) + RRF
 - **Auth**: API keys with bcrypt hashing
 - **CLI**: Commander
 
 ## Development
 
 ```bash
-bun install             # Install dependencies
-bun test                # Run 306 tests
-bun run lint            # Type check
-bun run eval            # Run retrieval evaluation (MRR@5, Precision@5)
-bun run eval:tune       # Tune search weights
-bun run dev             # Start MCP server in dev mode
+bun install                   # Install dependencies
+bun test                      # Run 842 tests across 41 files
+bun run lint                  # Type check (tsc --noEmit)
+bun run benchmark:codememb    # CodeMemBench evaluation
+bun run dev                   # Start MCP server in dev mode
 ```
 
 ## Self-Hosted
