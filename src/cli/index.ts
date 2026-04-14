@@ -602,4 +602,125 @@ program
     }
   });
 
+// ---------------------------------------------------------------------------
+// gyst detect-conventions [dir] — scan a directory and store conventions
+// ---------------------------------------------------------------------------
+
+program
+  .command("detect-conventions [dir]")
+  .description("Scan a directory for coding conventions and store them in the knowledge base")
+  .action(async (dir: string | undefined) => {
+    try {
+      const targetDir = dir ?? process.cwd();
+
+      const config = loadConfig();
+      const db = initDatabase(config.dbPath);
+
+      const { detectConventions } = await import("../compiler/detect-conventions.js");
+      const { storeDetectedConventions } = await import("../compiler/store-conventions.js");
+
+      process.stdout.write(`Scanning for conventions in: ${targetDir}\n\n`);
+
+      const conventions = await detectConventions(targetDir);
+
+      if (conventions.length === 0) {
+        process.stdout.write("No conventions detected.\n");
+        db.close();
+        logger.info("detect-conventions: no conventions found", { targetDir });
+        return;
+      }
+
+      process.stdout.write(`Found ${conventions.length} convention(s):\n`);
+      for (const c of conventions) {
+        process.stdout.write(
+          `  ${c.category.padEnd(12)} ${c.directory.padEnd(24)} ${c.pattern.padEnd(32)} (${(c.confidence * 100).toFixed(0)}%)\n`,
+        );
+      }
+      process.stdout.write("\n");
+
+      const stored = await storeDetectedConventions(db, conventions);
+      db.close();
+
+      const skipped = conventions.length - stored;
+      process.stdout.write(`Stored ${stored} convention(s) to knowledge base.\n`);
+      if (skipped > 0) {
+        process.stdout.write(`(${skipped} skipped — confidence below 60%)\n`);
+      }
+
+      logger.info("detect-conventions complete", { targetDir, found: conventions.length, stored });
+    } catch (err) {
+      const message = err instanceof GystError
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : String(err);
+      logger.error("detect-conventions failed", { error: message });
+      process.stdout.write(`Error: ${message}\n`);
+      process.exit(1);
+    }
+  });
+
+// ---------------------------------------------------------------------------
+// gyst check [file] — show conventions that apply to a file or directory
+// ---------------------------------------------------------------------------
+
+program
+  .command("check [file]")
+  .description("Show coding conventions that apply to a file or directory")
+  .action(async (file: string | undefined) => {
+    try {
+      const targetPath = file ?? process.cwd();
+
+      const config = loadConfig();
+      const db = initDatabase(config.dbPath);
+
+      interface ConventionRow {
+        id: string;
+        title: string;
+        content: string;
+        confidence: number;
+      }
+
+      const rows = db
+        .query<ConventionRow, [string, string]>(
+          `SELECT DISTINCT e.id, e.title, e.content, e.confidence
+           FROM   entries e
+           JOIN   entry_files ef ON ef.entry_id = e.id
+           WHERE  e.type   = 'convention'
+             AND  e.status = 'active'
+             AND  ? LIKE ef.file_path || '%'
+           ORDER  BY e.confidence DESC
+           LIMIT  10`,
+        )
+        .all(targetPath, targetPath);
+
+      db.close();
+
+      process.stdout.write(`Conventions for ${targetPath}:\n\n`);
+
+      if (rows.length === 0) {
+        process.stdout.write("No conventions found for this path.\n");
+        logger.info("check: no conventions found", { targetPath });
+        return;
+      }
+
+      for (const row of rows) {
+        process.stdout.write(
+          `  ${row.title.padEnd(48)} (${(row.confidence * 100).toFixed(0)}%)\n`,
+        );
+      }
+
+      logger.info("check complete", { targetPath, count: rows.length });
+    } catch (err) {
+      const message = err instanceof GystError
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : String(err);
+      logger.error("check failed", { error: message });
+      process.stdout.write(`Error: ${message}\n`);
+      process.exit(1);
+    }
+  });
+
 program.parse();
