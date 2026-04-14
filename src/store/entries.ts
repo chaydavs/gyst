@@ -77,7 +77,10 @@ function mapRow(r: RawRow): EntryRow {
  * Team/project entries are visible to everyone.
  * Personal entries are only visible when developerId matches.
  */
-export function scopeVisibilityClause(developerId?: string): {
+export function scopeVisibilityClause(
+  developerId?: string,
+  includeAllPersonal = false,
+): {
   sql: string;
   params: readonly string[];
 } {
@@ -86,6 +89,10 @@ export function scopeVisibilityClause(developerId?: string): {
       sql: "AND (scope IN ('team', 'project') OR (scope = 'personal' AND developer_id = ?))",
       params: [developerId],
     };
+  }
+  if (includeAllPersonal) {
+    // Personal mode with no developer_id — single user, all entries visible.
+    return { sql: "", params: [] };
   }
   return {
     sql: "AND scope IN ('team', 'project')",
@@ -128,12 +135,13 @@ export function fetchEntriesByIds(
   db: Database,
   ids: readonly string[],
   developerId?: string,
+  includeAllPersonal = false,
 ): readonly EntryRow[] {
   if (ids.length === 0) return [];
 
   const placeholders = ids.map(() => "?").join(", ");
   const { sql: scopeSql, params: scopeParams } =
-    scopeVisibilityClause(developerId);
+    scopeVisibilityClause(developerId, includeAllPersonal);
 
   const sql = `
     SELECT ${SELECT_COLS}

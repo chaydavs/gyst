@@ -82,6 +82,9 @@ export function registerSearchTool(server: McpServer, ctx: ToolContext): void {
       const config = loadConfig();
       const typeFilter = input.type === "all" ? undefined : input.type;
       const developerId = input.developer_id;
+      // In personal mode with no developer_id, all stored entries belong to
+      // the single user — drop scope filtering entirely so they are visible.
+      const includeAllPersonal = ctx.mode === "personal" && developerId === undefined;
 
       // Run all five search strategies in parallel. Vector search is skipped
       // gracefully when the SQLite binary cannot load extensions.
@@ -100,7 +103,7 @@ export function registerSearchTool(server: McpServer, ctx: ToolContext): void {
       const [fileResults, bm25Results, graphResults, temporalResults, vectorResults] =
         await Promise.all([
           Promise.resolve(searchByFilePath(db, [])),
-          Promise.resolve(searchByBM25(db, input.query, typeFilter, developerId)),
+          Promise.resolve(searchByBM25(db, input.query, typeFilter, developerId, includeAllPersonal)),
           Promise.resolve(searchByGraph(db, input.query)),
           Promise.resolve(searchByTemporal(db, input.query)),
           semanticPromise,
@@ -136,7 +139,7 @@ export function registerSearchTool(server: McpServer, ctx: ToolContext): void {
         .slice(0, input.limit * 3)
         .map((r) => r.id);
 
-      const entries = fetchEntriesByIds(db, topIds, developerId);
+      const entries = fetchEntriesByIds(db, topIds, developerId, includeAllPersonal);
 
       // Build score map and apply ghost/convention boosts.
       const scoreMap = new Map(rawFused.map((r) => [r.id, r.score]));
