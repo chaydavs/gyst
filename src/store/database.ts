@@ -278,6 +278,13 @@ export function initDatabase(path: string = "gyst-wiki/.wiki.db"): Database {
     } catch {
       // Column already exists — safe to ignore.
     }
+
+    // Migration: add metadata column to entries for existing DBs.
+    try {
+      db.run("ALTER TABLE entries ADD COLUMN metadata TEXT");
+    } catch {
+      // Column already exists — safe to ignore.
+    }
   } catch (err) {
     db.close();
     const msg = err instanceof Error ? err.message : String(err);
@@ -309,6 +316,7 @@ export interface EntryRow {
   readonly status?: string;
   readonly scope?: "personal" | "team" | "project";
   readonly developerId?: string;
+  readonly metadata?: string;
 }
 
 /**
@@ -326,8 +334,8 @@ export function insertEntry(db: Database, entry: EntryRow): void {
       `INSERT INTO entries
         (id, type, title, content, file_path, error_signature,
          confidence, source_count, source_tool, created_at, last_confirmed, status,
-         scope, developer_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         scope, developer_id, metadata)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         entry.id,
         entry.type,
@@ -343,6 +351,7 @@ export function insertEntry(db: Database, entry: EntryRow): void {
         entry.status ?? "active",
         entry.scope ?? "team",
         entry.developerId ?? null,
+        entry.metadata ?? null,
       ],
     );
 

@@ -299,6 +299,21 @@ function runPatterns(text: string): ExtractedEntity[] {
     }
   }
 
+  // ------------------------------------------------------------------
+  // Pattern 9: File paths
+  //    Matches strings that look like relative or absolute paths with
+  //    common source extensions (.ts, .js, .py, .go, .rs, .md).
+  // ------------------------------------------------------------------
+  const pathPattern = /\b([\w\-/.]+\.(?:ts|js|tsx|jsx|py|go|rs|md|json|yml|yaml))\b/g;
+
+  pathPattern.lastIndex = 0;
+  while ((m = pathPattern.exec(text)) !== null) {
+    const name = m[1];
+    // File paths don't need isAllowed/hasCamelCase checks — the extension
+    // is a strong enough signal.
+    candidates.push({ name, kind: "constant" }); // Classifying as constant for now as kind is restricted
+  }
+
   return candidates;
 }
 
