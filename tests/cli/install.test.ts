@@ -198,10 +198,13 @@ describe("mergeClaudeHooks", () => {
 // Test 6 — serve command exists in CLI
 // ---------------------------------------------------------------------------
 
+// Resolve project root relative to this test file so the path works in CI.
+const projectRoot = new URL("../../", import.meta.url).pathname;
+
 describe("CLI commands", () => {
   test("serve command is registered", async () => {
-    const result = Bun.spawnSync(["bun", "src/cli/index.ts", "--help"], {
-      cwd: "/Users/chaitanyadavuluri/Desktop/SustainableMemory",
+    const result = Bun.spawnSync([process.execPath, "src/cli/index.ts", "--help"], {
+      cwd: projectRoot,
       stderr: "pipe",
     });
     const output = new TextDecoder().decode(result.stdout);
@@ -210,8 +213,8 @@ describe("CLI commands", () => {
   });
 
   test("install command is registered", async () => {
-    const result = Bun.spawnSync(["bun", "src/cli/index.ts", "--help"], {
-      cwd: "/Users/chaitanyadavuluri/Desktop/SustainableMemory",
+    const result = Bun.spawnSync([process.execPath, "src/cli/index.ts", "--help"], {
+      cwd: projectRoot,
       stderr: "pipe",
     });
     const output = new TextDecoder().decode(result.stdout);
