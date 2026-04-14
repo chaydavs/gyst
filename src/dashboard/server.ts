@@ -261,6 +261,13 @@ export async function startDashboardServer(
             logAccess(requestId, method, path, start, 200);
             return jsonResponse(data, 200, requestId);
           }
+
+          if (path === "/api/uniformity") {
+            const { computeUniformityScore } = await import("../store/uniformity.js");
+            const report = computeUniformityScore(db);
+            logAccess(requestId, method, path, start, 200);
+            return jsonResponse(report, 200, requestId);
+          }
         }
 
         // 404 fallthrough
