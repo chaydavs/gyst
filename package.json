@@ -1,11 +1,49 @@
 {
-  "name": "gyst",
-  "module": "index.ts",
+  "name": "gyst-mcp",
+  "version": "0.1.0",
+  "description": "Team knowledge compiler for AI coding agents. Shared memory across Claude Code, Cursor, Codex, and self-hosted LLMs via MCP.",
   "type": "module",
-  "private": true,
+  "main": "./dist/server.js",
+  "bin": {
+    "gyst": "./dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "ai",
+    "coding",
+    "agent",
+    "memory",
+    "mcp",
+    "team",
+    "knowledge",
+    "context",
+    "claude-code",
+    "cursor",
+    "codex",
+    "self-hosted",
+    "llm",
+    "conventions",
+    "ghost-knowledge",
+    "knowledge-graph"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chaydavs/gyst"
+  },
+  "homepage": "https://github.com/chaydavs/gyst",
+  "author": "Sai Chaitanya Davuluri",
+  "license": "MIT",
+  "engines": {
+    "bun": ">=1.1.0"
+  },
   "scripts": {
     "dev": "bun run --watch src/mcp/server.ts",
-    "build": "bun build src/mcp/server.ts --outdir dist --target node",
+    "build": "bun build src/cli/index.ts --outfile dist/cli.js --target bun && bun build src/mcp/server.ts --outfile dist/server.js --target bun && node -e \"const fs=require('fs'),f='dist/cli.js',c=fs.readFileSync(f,'utf8');if(!c.startsWith('#!'))fs.writeFileSync(f,'#!/usr/bin/env bun\\n'+c);\" && chmod +x dist/cli.js",
+    "prepublishOnly": "bun run build && bun test",
     "test": "bun test",
     "setup": "bun run src/cli/index.ts setup",
     "install-hooks": "bash scripts/install-hooks.sh",
@@ -37,9 +75,6 @@
     "collab:evolution": "bun test tests/collaborative/knowledge-evolution.test.ts",
     "collab:concurrent": "bun test tests/collaborative/concurrent.test.ts",
     "test:e2e:http": "bun test tests/e2e/http-e2e.test.ts"
-  },
-  "bin": {
-    "gyst": "./src/cli/index.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

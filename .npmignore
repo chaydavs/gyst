@@ -1,0 +1,15 @@
+tests/
+.claude/
+.github/
+benchmark-*.json
+eval-*.json
+decisions/
+gyst-wiki/
+*.test.ts
+tsconfig.json
+src/
+.gitignore
+.gyst/
+stress-test-results.json
+collaborative-test-results.json
+scripts/
