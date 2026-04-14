@@ -566,6 +566,7 @@ program
       process.stdout.write(`  Clusters consolidated  : ${report.clustersConsolidated}\n`);
       process.stdout.write(`  Entries archived       : ${report.entriesArchived}\n`);
       process.stdout.write(`  Active entries after   : ${report.indexEntries}\n`);
+      process.stdout.write(`  Links strengthened     : ${report.linksStrengthened}\n`);
       process.stdout.write(`  Duration               : ${report.durationMs.toFixed(0)}ms\n`);
 
       logger.info("consolidate complete", { ...report });

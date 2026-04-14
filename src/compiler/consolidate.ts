@@ -36,6 +36,7 @@ export interface ConsolidationReport {
   readonly clustersConsolidated: number;
   readonly entriesArchived: number;
   readonly indexEntries: number;
+  readonly linksStrengthened: number;
   readonly durationMs: number;
 }
 
@@ -593,6 +594,20 @@ function stage5Reindex(db: Database, wikiDirOverride?: string): number {
   return activeCount;
 }
 
+/**
+ * Stage 6 — strengthen co-retrieved links.
+ *
+ * Finds entry pairs that have been recalled together >= 3 times and
+ * creates explicit `related_to` edges between them if none exist yet.
+ *
+ * @param db - Open bun:sqlite database handle.
+ * @returns Number of co-retrieved pairs processed.
+ */
+async function stage6StrengthenLinks(db: Database): Promise<number> {
+  const { strengthenCoRetrievedLinks } = await import("../store/graph.js");
+  return strengthenCoRetrievedLinks(db, 3);
+}
+
 // ---------------------------------------------------------------------------
 // Main pipeline
 // ---------------------------------------------------------------------------
@@ -619,6 +634,7 @@ export async function consolidate(
   const clusters = stage3MergeClusters(db);
   const archived = stage4Archive(db);
   const indexEntries = stage5Reindex(db, options.wikiDir);
+  const linksStrengthened = await stage6StrengthenLinks(db);
 
   const durationMs = performance.now() - started;
 
@@ -628,6 +644,7 @@ export async function consolidate(
     clustersConsolidated: clusters,
     entriesArchived: archived,
     indexEntries,
+    linksStrengthened,
     durationMs,
   };
 

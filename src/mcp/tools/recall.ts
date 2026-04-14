@@ -282,6 +282,18 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
         )
         .slice(0, input.max_results);
 
+      // Record co-retrieval for strengthening over time — best-effort, never throws.
+      if (filtered.length >= 2) {
+        try {
+          const { recordCoRetrieval } = await import("../../store/graph.js");
+          recordCoRetrieval(db, filtered.slice(0, 5).map((e) => e.id));
+        } catch (err) {
+          logger.warn("recordCoRetrieval failed", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
       logger.info("recall results", {
         total: entries.length,
         afterFilter: filtered.length,
