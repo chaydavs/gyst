@@ -138,8 +138,21 @@ const SCHEMA_STATEMENTS: readonly string[] = [
     type       TEXT NOT NULL CHECK (type IN (
                  'related_to','supersedes','contradicts','depends_on','caused_by'
                )),
+    strength   REAL NOT NULL DEFAULT 1.0,
     UNIQUE (source_id, target_id, type)
   )`,
+
+  `CREATE TABLE IF NOT EXISTS co_retrievals (
+    entry_a      TEXT NOT NULL,
+    entry_b      TEXT NOT NULL,
+    count        INTEGER NOT NULL DEFAULT 1,
+    last_seen    INTEGER NOT NULL,
+    PRIMARY KEY (entry_a, entry_b),
+    CHECK (entry_a < entry_b),
+    FOREIGN KEY (entry_a) REFERENCES entries(id) ON DELETE CASCADE,
+    FOREIGN KEY (entry_b) REFERENCES entries(id) ON DELETE CASCADE
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_co_retrievals_count ON co_retrievals(count DESC)",
 
   `CREATE TABLE IF NOT EXISTS sources (
     id            INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -253,6 +266,17 @@ export function initDatabase(path: string = "gyst-wiki/.wiki.db"): Database {
     // Apply schema idempotently
     for (const statement of SCHEMA_STATEMENTS) {
       db.run(statement);
+    }
+
+    // Migration: add strength column to relationships for existing DBs.
+    // SQLite does not support ADD COLUMN IF NOT EXISTS — ignore the error
+    // if the column is already present.
+    try {
+      db.run(
+        "ALTER TABLE relationships ADD COLUMN strength REAL NOT NULL DEFAULT 1.0",
+      );
+    } catch {
+      // Column already exists — safe to ignore.
     }
   } catch (err) {
     db.close();

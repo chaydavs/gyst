@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gyst Knowledge Graph</title>
+  <style>
+    /* Dark theme */
+    :root {
+      --bg: #0d1117;
+      --panel: #161b22;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --border: #30363d;
+      --accent: #58a6ff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, system-ui, sans-serif; display: grid; grid-template-rows: 48px 1fr; grid-template-columns: 220px 1fr 280px; height: 100vh; overflow: hidden; }
+
+    /* Nav bar — spans full width */
+    nav { grid-column: 1 / -1; background: var(--panel); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; padding: 0 16px; }
+    nav h1 { font-size: 16px; font-weight: 700; color: var(--accent); margin-right: 8px; }
+    nav button { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: border-color 0.15s, color 0.15s; }
+    nav button.active, nav button:hover { border-color: var(--accent); color: var(--text); }
+    nav input#search { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 4px 10px; border-radius: 6px; font-size: 13px; width: 180px; margin-left: auto; }
+    nav input#search:focus { outline: none; border-color: var(--accent); }
+    nav #export-png, nav #export-json { margin-left: 4px; }
+
+    /* Stats sidebar */
+    #stats { background: var(--panel); border-right: 1px solid var(--border); padding: 16px; overflow-y: auto; font-size: 13px; }
+    #stats h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 12px; }
+    .stat-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+    .stat-val { color: var(--accent); font-weight: 600; }
+    .type-legend { margin-top: 16px; }
+    .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+
+    /* Main canvas */
+    #canvas { position: relative; overflow: hidden; }
+    #canvas svg { width: 100%; height: 100%; }
+
+    /* Details sidebar */
+    #details { background: var(--panel); border-left: 1px solid var(--border); padding: 16px; overflow-y: auto; font-size: 13px; }
+    #details h2 { font-size: 14px; font-weight: 600; margin-bottom: 8px; word-break: break-word; }
+    #details .detail-section { margin-top: 12px; }
+    #details .detail-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 4px; }
+    #details .detail-content { color: var(--muted); line-height: 1.5; word-break: break-word; }
+    #details .tag { display: inline-block; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-size: 11px; margin: 2px; }
+
+    /* Ghost knowledge pulse */
+    @keyframes ghost-pulse {
+      0%, 100% { filter: drop-shadow(0 0 4px #ff7b72); }
+      50%       { filter: drop-shadow(0 0 12px #ff7b72); }
+    }
+    .node-ghost circle { animation: ghost-pulse 2s ease-in-out infinite; }
+
+    /* Dimmed nodes during search */
+    .node-dimmed { opacity: 0.15; }
+
+    /* Tooltip */
+    #tooltip { position: fixed; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 12px; pointer-events: none; display: none; max-width: 240px; z-index: 100; }
+  </style>
+</head>
+<body>
+  <nav>
+    <h1>Gyst</h1>
+    <button class="view-btn active" data-view="graph">Graph</button>
+    <button class="view-btn" data-view="files">Files</button>
+    <button class="view-btn" data-view="timeline">Timeline</button>
+    <input id="search" type="text" placeholder="Search entries…" autocomplete="off" />
+    <button id="export-png">Export PNG</button>
+    <button id="export-json">Export JSON</button>
+  </nav>
+
+  <aside id="stats">
+    <h2>Knowledge Base</h2>
+    <div id="stats-content"><div style="color:var(--muted)">Loading…</div></div>
+  </aside>
+
+  <main id="canvas"></main>
+  <aside id="details"><div style="color:var(--muted); font-size:13px">Click a node to inspect it.</div></aside>
+
+  <div id="tooltip"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+  <script>
+    // ─── Constants ────────────────────────────────────────────────────────────
+    const NODE_COLORS = {
+      ghost_knowledge: '#ff7b72',
+      convention:      '#d2a8ff',
+      decision:        '#f0883e',
+      error_pattern:   '#ffa657',
+      learning:        '#7ee787',
+    };
+    const DEFAULT_COLOR = '#58a6ff';
+    const nodeColor = (type) => NODE_COLORS[type] ?? DEFAULT_COLOR;
+
+    // ─── State ────────────────────────────────────────────────────────────────
+    let currentView = 'graph';
+    let currentGraph = { nodes: [], edges: [] };
+    let simulation = null;
+
+    // ─── Utilities ────────────────────────────────────────────────────────────
+    const $ = (sel) => document.querySelector(sel);
+    const canvas = $('#canvas');
+    const details = $('#details');
+    const tooltip = $('#tooltip');
+
+    function showTooltip(event, text) {
+      tooltip.style.display = 'block';
+      tooltip.textContent = text;
+      tooltip.style.left = (event.clientX + 14) + 'px';
+      tooltip.style.top  = (event.clientY - 8) + 'px';
+    }
+    function hideTooltip() { tooltip.style.display = 'none'; }
+
+    // ─── Stats panel ─────────────────────────────────────────────────────────
+    async function loadStats() {
+      try {
+        const s = await fetch('/api/stats').then(r => r.json());
+        const typeLegend = Object.entries(s.byType || {})
+          .sort((a, b) => b[1] - a[1])
+          .map(([type, n]) =>
+            `<div class="stat-row">
+               <span><span class="legend-dot" style="background:${nodeColor(type)}"></span>${type}</span>
+               <span class="stat-val">${n}</span>
+             </div>`
+          ).join('');
+        $('#stats-content').innerHTML = `
+          <div class="stat-row"><span>Entries</span><span class="stat-val">${s.entries}</span></div>
+          <div class="stat-row"><span>Relationships</span><span class="stat-val">${s.relationships}</span></div>
+          <div class="stat-row"><span>Co-retrievals</span><span class="stat-val">${s.coRetrievals}</span></div>
+          <div class="type-legend"><h2 style="margin-top:16px">By Type</h2>${typeLegend}</div>
+        `;
+      } catch (e) {
+        $('#stats-content').innerHTML = '<div style="color:var(--muted)">Stats unavailable</div>';
+      }
+    }
+
+    // ─── Details panel ────────────────────────────────────────────────────────
+    function showDetails(node) {
+      details.innerHTML = `
+        <h2>${escHtml(node.title)}</h2>
+        <div class="detail-section">
+          <div class="detail-label">Type</div>
+          <div class="detail-content"><span class="tag" style="color:${nodeColor(node.type)}">${node.type}</span></div>
+        </div>
+        <div class="detail-section">
+          <div class="detail-label">Scope / Confidence</div>
+          <div class="detail-content">${node.scope} · ${(node.confidence * 100).toFixed(0)}%</div>
+        </div>
+        <div class="detail-section">
+          <div class="detail-label">Connections</div>
+          <div class="detail-content" id="neighbors-count">Loading…</div>
+        </div>
+        <div style="margin-top:16px">
+          <button onclick="drillInto('${escAttr(node.id)}')" style="background:var(--accent);border:none;color:#000;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px">Explore neighbors</button>
+        </div>
+      `;
+      // Show degree
+      const deg = (currentGraph.edges || []).filter(
+        e => (e.source === node.id || e.source?.id === node.id ||
+               e.target === node.id || e.target?.id === node.id)
+      ).length;
+      const nc = details.querySelector('#neighbors-count');
+      if (nc) nc.textContent = `${deg} edge(s) in current view`;
+    }
+
+    function escHtml(str) {
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function escAttr(str) {
+      return String(str).replace(/'/g, "\\'");
+    }
+
+    // ─── Graph view ───────────────────────────────────────────────────────────
+    function renderGraph(data) {
+      currentGraph = data;
+      canvas.innerHTML = '';
+      if (!data.nodes.length) {
+        canvas.innerHTML = '<div style="color:var(--muted);display:flex;align-items:center;justify-content:center;height:100%;font-size:14px">No entries yet. Use the <code>learn</code> tool to add knowledge.</div>';
+        return;
+      }
+
+      const w = canvas.clientWidth, h = canvas.clientHeight;
+      const svg = d3.select('#canvas').append('svg')
+        .attr('width', w).attr('height', h);
+
+      // Zoom + pan
+      const g = svg.append('g');
+      svg.call(d3.zoom().scaleExtent([0.1, 8]).on('zoom', (evt) => {
+        g.attr('transform', evt.transform);
+      }));
+
+      // Arrow marker
+      svg.append('defs').append('marker')
+        .attr('id', 'arrow')
+        .attr('viewBox', '0 -5 10 10')
+        .attr('refX', 18).attr('refY', 0)
+        .attr('markerWidth', 6).attr('markerHeight', 6)
+        .attr('orient', 'auto')
+        .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', '#30363d');
+
+      // Nodes/edges must be plain objects for D3
+      const nodes = data.nodes.map(n => ({ ...n }));
+      const nodeById = new Map(nodes.map(n => [n.id, n]));
+      const edges = (data.edges || []).map(e => ({
+        ...e,
+        source: typeof e.source === 'string' ? e.source : e.source.id,
+        target: typeof e.target === 'string' ? e.target : e.target.id,
+      })).filter(e => nodeById.has(e.source) && nodeById.has(e.target));
+
+      simulation = d3.forceSimulation(nodes)
+        .force('link',   d3.forceLink(edges).id(d => d.id).distance(80))
+        .force('charge', d3.forceManyBody().strength(-300))
+        .force('center', d3.forceCenter(w / 2, h / 2))
+        .force('collide',d3.forceCollide(20));
+
+      // Links
+      const link = g.append('g').selectAll('line').data(edges).join('line')
+        .attr('stroke', '#30363d')
+        .attr('stroke-width', d => Math.max(1, (d.strength || 1)))
+        .attr('marker-end', 'url(#arrow)');
+
+      // Node groups
+      const node = g.append('g').selectAll('g').data(nodes).join('g')
+        .attr('class', d => d.type === 'ghost_knowledge' ? 'node node-ghost' : 'node')
+        .attr('cursor', 'pointer')
+        .call(d3.drag()
+          .on('start', (evt, d) => { if (!evt.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+          .on('drag',  (evt, d) => { d.fx = evt.x; d.fy = evt.y; })
+          .on('end',   (evt, d) => { if (!evt.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
+        )
+        .on('click', (evt, d) => { evt.stopPropagation(); showDetails(d); })
+        .on('mouseover', (evt, d) => showTooltip(evt, d.title))
+        .on('mouseout', hideTooltip);
+
+      node.append('circle')
+        .attr('r', 10)
+        .attr('fill', d => nodeColor(d.type))
+        .attr('stroke', '#0d1117')
+        .attr('stroke-width', 1.5);
+
+      node.append('text')
+        .attr('dy', 22)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', 10)
+        .attr('fill', '#8b949e')
+        .text(d => d.title.length > 24 ? d.title.slice(0, 22) + '\u2026' : d.title);
+
+      simulation.on('tick', () => {
+        link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+            .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+        node.attr('transform', d => `translate(${d.x},${d.y})`);
+      });
+
+      // Search filtering
+      $('#search').addEventListener('input', function() {
+        const q = this.value.toLowerCase();
+        node.classed('node-dimmed', d => q && !d.title.toLowerCase().includes(q));
+      });
+    }
+
+    // ─── Files view (treemap) ─────────────────────────────────────────────────
+    async function renderFiles() {
+      canvas.innerHTML = '<div style="color:var(--muted);display:flex;align-items:center;justify-content:center;height:100%">Loading file map\u2026</div>';
+      let data;
+      try {
+        data = await fetch('/api/graph').then(r => r.json());
+      } catch (e) {
+        canvas.innerHTML = '<div style="color:var(--muted);padding:24px">Failed to load file data.</div>';
+        return;
+      }
+
+      // Build hierarchy: root → dir → file
+      const fileMap = new Map();
+      (data.nodes || []).forEach(node => {
+        const dir = node.type;
+        const existing = fileMap.get(dir) || { name: dir, children: [], value: 0 };
+        existing.children.push({ name: node.title, value: 1, nodeId: node.id, type: node.type });
+        fileMap.set(dir, existing);
+      });
+
+      const hierarchyData = { name: 'root', children: Array.from(fileMap.values()) };
+
+      canvas.innerHTML = '';
+      const w = canvas.clientWidth, h = canvas.clientHeight;
+      const svg = d3.select('#canvas').append('svg').attr('width', w).attr('height', h);
+
+      const root = d3.hierarchy(hierarchyData).sum(d => d.value || 0).sort((a, b) => b.value - a.value);
+      d3.treemap().size([w, h]).padding(2)(root);
+
+      svg.selectAll('rect')
+        .data(root.leaves())
+        .join('rect')
+        .attr('x', d => d.x0).attr('y', d => d.y0)
+        .attr('width', d => d.x1 - d.x0).attr('height', d => d.y1 - d.y0)
+        .attr('fill', d => nodeColor(d.data.type || 'learning'))
+        .attr('opacity', 0.75)
+        .attr('stroke', '#0d1117')
+        .attr('stroke-width', 1)
+        .attr('cursor', 'pointer')
+        .on('mouseover', (evt, d) => showTooltip(evt, d.data.name))
+        .on('mouseout', hideTooltip)
+        .on('click', async (evt, d) => {
+          if (d.data.nodeId) {
+            setView('graph');
+            const subgraph = await fetch('/api/graph/' + encodeURIComponent(d.data.nodeId)).then(r => r.json());
+            renderGraph(subgraph);
+          }
+        });
+
+      svg.selectAll('text')
+        .data(root.leaves())
+        .join('text')
+        .attr('x', d => d.x0 + 4).attr('y', d => d.y0 + 14)
+        .attr('font-size', 10)
+        .attr('fill', '#e6edf3')
+        .attr('pointer-events', 'none')
+        .text(d => {
+          const w2 = d.x1 - d.x0, h2 = d.y1 - d.y0;
+          if (w2 < 40 || h2 < 16) return '';
+          const max = Math.floor(w2 / 7);
+          return d.data.name.length > max ? d.data.name.slice(0, max - 1) + '\u2026' : d.data.name;
+        });
+    }
+
+    // ─── Timeline view ────────────────────────────────────────────────────────
+    async function renderTimeline() {
+      canvas.innerHTML = '<div style="color:var(--muted);display:flex;align-items:center;justify-content:center;height:100%">Loading activity\u2026</div>';
+      let activity;
+      try {
+        activity = await fetch('/api/activity?hours=168').then(r => r.json());
+      } catch (e) {
+        canvas.innerHTML = '<div style="color:var(--muted);padding:24px">Activity unavailable \u2014 team mode only.</div>';
+        return;
+      }
+      if (!activity.length) {
+        canvas.innerHTML = '<div style="color:var(--muted);display:flex;align-items:center;justify-content:center;height:100%">No activity in the last 7 days.</div>';
+        return;
+      }
+
+      canvas.innerHTML = '';
+      const margin = { top: 40, right: 24, bottom: 40, left: 100 };
+      const w = canvas.clientWidth - margin.left - margin.right;
+      const h = canvas.clientHeight - margin.top - margin.bottom;
+
+      const svg = d3.select('#canvas').append('svg')
+        .attr('width', canvas.clientWidth).attr('height', canvas.clientHeight)
+        .append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+      const actions = [...new Set(activity.map(a => a.action))];
+      const xScale = d3.scaleTime()
+        .domain(d3.extent(activity, a => new Date(a.timestamp)))
+        .range([0, w]);
+      const yScale = d3.scaleBand().domain(actions).range([0, h]).padding(0.3);
+
+      // Axes
+      svg.append('g').attr('transform', 'translate(0,' + h + ')').call(d3.axisBottom(xScale).ticks(6))
+        .selectAll('text').attr('fill', '#8b949e').attr('font-size', 11);
+      svg.append('g').call(d3.axisLeft(yScale))
+        .selectAll('text').attr('fill', '#8b949e').attr('font-size', 11);
+      svg.selectAll('.domain, .tick line').attr('stroke', '#30363d');
+
+      // Dots
+      svg.selectAll('circle')
+        .data(activity)
+        .join('circle')
+        .attr('cx', d => xScale(new Date(d.timestamp)))
+        .attr('cy', d => (yScale(d.action) || 0) + yScale.bandwidth() / 2)
+        .attr('r', 5)
+        .attr('fill', '#58a6ff')
+        .attr('opacity', 0.8)
+        .attr('cursor', d => d.entryId ? 'pointer' : 'default')
+        .on('mouseover', (evt, d) => showTooltip(evt, d.action + ' \u00b7 ' + new Date(d.timestamp).toLocaleString()))
+        .on('mouseout', hideTooltip)
+        .on('click', async (evt, d) => {
+          if (d.entryId) {
+            setView('graph');
+            const subgraph = await fetch('/api/graph/' + encodeURIComponent(d.entryId)).then(r => r.json());
+            renderGraph(subgraph);
+          }
+        });
+    }
+
+    // ─── View switching ───────────────────────────────────────────────────────
+    function setView(v) {
+      currentView = v;
+      document.querySelectorAll('.view-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === v);
+      });
+      if (simulation) { simulation.stop(); simulation = null; }
+    }
+
+    document.querySelectorAll('.view-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        setView(btn.dataset.view);
+        if (currentView === 'graph') {
+          const g = await fetch('/api/graph').then(r => r.json());
+          renderGraph(g);
+        } else if (currentView === 'files') {
+          await renderFiles();
+        } else if (currentView === 'timeline') {
+          await renderTimeline();
+        }
+      });
+    });
+
+    // ─── Drill into a node ────────────────────────────────────────────────────
+    async function drillInto(nodeId) {
+      setView('graph');
+      const subgraph = await fetch('/api/graph/' + encodeURIComponent(nodeId)).then(r => r.json());
+      renderGraph(subgraph);
+    }
+
+    // ─── Export ───────────────────────────────────────────────────────────────
+    $('#export-json').addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify(currentGraph, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'gyst-graph-' + Date.now() + '.json';
+      a.click();
+    });
+
+    $('#export-png').addEventListener('click', () => {
+      const svgEl = document.querySelector('#canvas svg');
+      if (!svgEl) return;
+      const xml = new XMLSerializer().serializeToString(svgEl);
+      const canvas2 = document.createElement('canvas');
+      canvas2.width = svgEl.clientWidth;
+      canvas2.height = svgEl.clientHeight;
+      const ctx = canvas2.getContext('2d');
+      const img = new Image();
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0);
+        canvas2.toBlob(blob => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'gyst-graph-' + Date.now() + '.png';
+          a.click();
+        });
+      };
+      img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)));
+    });
+
+    // ─── Boot ─────────────────────────────────────────────────────────────────
+    (async () => {
+      await loadStats();
+      const graphData = await fetch('/api/graph').then(r => r.json());
+      renderGraph(graphData);
+    })();
+  </script>
+</body>
+</html>

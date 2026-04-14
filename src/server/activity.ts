@@ -40,7 +40,7 @@ const ACTIVITY_SCHEMA_STATEMENTS: readonly string[] = [
 // ---------------------------------------------------------------------------
 
 /** The six MCP tool names that can be logged. */
-export type ActivityAction = "learn" | "recall" | "conventions" | "failures" | "harvest" | "feedback";
+export type ActivityAction = "learn" | "recall" | "conventions" | "check_conventions" | "failures" | "harvest" | "feedback";
 
 /** A single row from `activity_log` with deserialized fields. */
 export interface ActivityEntry {

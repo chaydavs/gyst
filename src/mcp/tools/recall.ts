@@ -237,16 +237,6 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
       // knowledge boost before re-sorting.
       const scoreMap = new Map(rawFused.map((r) => [r.id, r.score]));
 
-      // Pre-compute directory prefixes from the input file paths for convention
-      // boosting. Convention entries whose associated files are a prefix of any
-      // requested file path get a +0.05 score bonus.
-      const inputDirs = new Set(
-        input.files.map((f) => {
-          const lastSlash = f.lastIndexOf("/");
-          return lastSlash >= 0 ? f.slice(0, lastSlash) : "";
-        }),
-      );
-
       const boostedScores = new Map(
         entries.map((e) => {
           const base = scoreMap.get(e.id) ?? 0;
