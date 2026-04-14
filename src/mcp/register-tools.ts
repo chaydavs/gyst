@@ -19,6 +19,7 @@ import { registerActivityTool } from "./tools/activity.js";
 import { registerStatusTool } from "./tools/status.js";
 import { registerFeedbackTool } from "./tools/feedback.js";
 import { registerHarvestTool } from "./tools/harvest.js";
+import { registerCheckConventionsTool } from "./tools/check-conventions.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,7 +49,7 @@ export interface ToolContext {
 // ---------------------------------------------------------------------------
 
 /**
- * Registers all 8 Gyst MCP tools on the given server.
+ * Registers all 9 Gyst MCP tools on the given server.
  *
  * This is the single call site used by both transports — stdio passes
  * `{ mode: "personal", db }` and HTTP passes `{ mode: "team", db, teamId, developerId }`.
@@ -70,4 +71,5 @@ export function registerAllTools(server: McpServer, ctx: ToolContext): void {
   registerStatusTool(server, ctx);
   registerFeedbackTool(server, ctx);
   registerHarvestTool(server, ctx);
+  registerCheckConventionsTool(server, ctx);
 }

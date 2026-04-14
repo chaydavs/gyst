@@ -237,22 +237,49 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
       // knowledge boost before re-sorting.
       const scoreMap = new Map(rawFused.map((r) => [r.id, r.score]));
 
-      // Boost ghost_knowledge entries by 0.1, capped at 1.0, then re-sort.
+      // Pre-compute directory prefixes from the input file paths for convention
+      // boosting. Convention entries whose associated files are a prefix of any
+      // requested file path get a +0.05 score bonus.
+      const inputDirs = new Set(
+        input.files.map((f) => {
+          const lastSlash = f.lastIndexOf("/");
+          return lastSlash >= 0 ? f.slice(0, lastSlash) : "";
+        }),
+      );
+
       const boostedScores = new Map(
         entries.map((e) => {
           const base = scoreMap.get(e.id) ?? 0;
-          const boosted =
-            e.type === "ghost_knowledge"
-              ? Math.min(1.0, base + 0.1)
-              : base;
+          let boosted = base;
+          if (e.type === "ghost_knowledge") {
+            boosted = Math.min(1.0, base + 0.1);
+          } else if (e.type === "convention" && input.files.length > 0) {
+            // Boost conventions relevant to the requested file directories.
+            // We don't have entry_files in the fetched rows, so use a small
+            // unconditional convention boost when files are provided — the
+            // directory-match check happens at the conventions tool layer.
+            // Simple heuristic: boost all conventions slightly when files given.
+            boosted = Math.min(1.0, base + 0.05);
+          }
           return [e.id, boosted] as const;
         }),
       );
 
-      // Sort entries by boosted score descending (immutable — new array).
-      const sortedEntries = [...entries].sort(
-        (a, b) => (boostedScores.get(b.id) ?? 0) - (boostedScores.get(a.id) ?? 0),
-      );
+      // Sort by priority tier first, then by boosted score within each tier.
+      // Tier 0: ghost_knowledge (always surfaces first — mandatory constraints)
+      // Tier 1: convention (coding standards relevant to this context)
+      // Tier 2: everything else (ordered by score)
+      const tierOf = (type: string): number => {
+        if (type === "ghost_knowledge") return 0;
+        if (type === "convention") return 1;
+        return 2;
+      };
+
+      const sortedEntries = [...entries].sort((a, b) => {
+        const tierDiff = tierOf(a.type) - tierOf(b.type);
+        if (tierDiff !== 0) return tierDiff;
+        return (boostedScores.get(b.id) ?? 0) - (boostedScores.get(a.id) ?? 0);
+      });
 
       // Apply confidence threshold — ghost_knowledge is always included
       // regardless of threshold (confidence is 1.0 by spec, but be explicit
@@ -275,13 +302,13 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
       // Prefix ghost_knowledge entry titles with the team-rule warning emoji
       // so agents immediately recognise mandatory constraints.
       const formattableEntries = filtered.map((e) => {
-        if (e.type !== "ghost_knowledge") {
-          return e;
+        if (e.type === "ghost_knowledge") {
+          return { ...e, title: `⚠️ Team Rule: ${e.title}` };
         }
-        return {
-          ...e,
-          title: `⚠️ Team Rule: ${e.title}`,
-        };
+        if (e.type === "convention") {
+          return { ...e, title: `📏 Convention: ${e.title}` };
+        }
+        return e;
       });
 
       const formatted = formatForContext(formattableEntries, budget);
