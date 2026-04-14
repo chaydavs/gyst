@@ -910,4 +910,27 @@ program
     }
   });
 
+// ---------------------------------------------------------------------------
+// gyst install — first-time setup: detect tools, register MCP, init project
+// ---------------------------------------------------------------------------
+
+program
+  .command("install")
+  .description("First-time setup: detect AI tools, register MCP server, initialize project")
+  .action(async () => {
+    const { runInstall } = await import("./install.js");
+    await runInstall();
+  });
+
+// ---------------------------------------------------------------------------
+// gyst serve — start the stdio MCP server (used by MCP tool configs)
+// ---------------------------------------------------------------------------
+
+program
+  .command("serve")
+  .description("Start Gyst MCP server (stdio transport) — used by AI coding tool MCP configs")
+  .action(async () => {
+    await import("../mcp/server.js");
+  });
+
 program.parse();
