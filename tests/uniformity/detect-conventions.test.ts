@@ -12,6 +12,9 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { detectConventions } from "../../src/compiler/detect-conventions.js";
 
+/** Maximum conventions the function must not exceed. */
+const MAX_CONVENTIONS = 30;
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -113,6 +116,34 @@ describe("detectConventions", () => {
     // node_modules PascalCase files.
     for (const conv of conventions) {
       expect(conv.pattern).not.toBe("PascalCase functions");
+    }
+  });
+
+  test("result is capped at 30 conventions even when many directories qualify", async () => {
+    // Create 10 sub-directories each with 6 camelCase files.
+    // Each directory can emit up to ~7 convention types → potential 70+ raw results.
+    // The cap must keep the total at or below MAX_CONVENTIONS (30).
+    const camelContent = (n: number) =>
+      `import { helper } from './utils.js';\n` +
+      `export function getUserData${n}() { return null; }\n` +
+      `export const fetchItems${n} = async () => [];\n`;
+
+    for (let dir = 0; dir < 10; dir++) {
+      const subDir = join(tempDir, `pkg${dir}`);
+      await mkdir(subDir, { recursive: true });
+      for (let i = 1; i <= 6; i++) {
+        await writeFile(join(subDir, `module${i}.ts`), camelContent(i), "utf-8");
+      }
+    }
+
+    const conventions = await detectConventions(tempDir);
+
+    expect(conventions.length).toBeLessThanOrEqual(MAX_CONVENTIONS);
+    // Must still surface at least one convention from the real data.
+    expect(conventions.length).toBeGreaterThan(0);
+    // Results are sorted by confidence descending.
+    for (let i = 1; i < conventions.length; i++) {
+      expect(conventions[i]!.confidence).toBeLessThanOrEqual(conventions[i - 1]!.confidence);
     }
   });
 

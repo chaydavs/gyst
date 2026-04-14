@@ -55,7 +55,7 @@ export function registerCheckTool(server: McpServer, ctx: ToolContext): void {
 
   server.tool(
     "check",
-    "Check a file against active team conventions and report violations. Returns a list of rule violations with line numbers and suggestions. Use before committing code that touches areas with detected conventions.",
+    "Check if code follows team conventions. Use before committing new code. Returns violations with line numbers and specific convention references.",
     CheckInput.shape,
     async (input: CheckInputType) => {
       logger.info("check tool called", { file_path: input.file_path });

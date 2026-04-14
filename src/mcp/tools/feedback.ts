@@ -40,7 +40,7 @@ export function registerFeedbackTool(server: McpServer, ctx: ToolContext): void 
   const { db } = ctx;
   server.tool(
     "feedback",
-    "Record feedback on whether a recalled knowledge entry was helpful. This signal is used to calibrate confidence scores over time.",
+    "Rate a knowledge entry as helpful or unhelpful after recall or get_entry. Adjusts confidence ±0.02 (helpful) or ±0.05 (unhelpful) over time.",
     FeedbackInput.shape,
     async (input) => {
       try {

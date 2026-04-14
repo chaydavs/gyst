@@ -184,7 +184,7 @@ export function registerGraphTool(server: McpServer, ctx: ToolContext): void {
 
   server.tool(
     "graph",
-    "Inspect the knowledge graph. Actions: neighbors (expand an entry's connections), subgraph (entries related to a file path), clusters (find connected components), hubs (most-connected entries), path (shortest path between two entries).",
+    "Explore how knowledge entries are connected. Find related entries, map what's known about a file path, or discover clusters of related decisions. Actions: neighbors, subgraph, clusters, hubs, path.",
     GraphInput.shape,
     async (input: GraphInputType) => {
       logger.info("graph tool called", { action: input.action });

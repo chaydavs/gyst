@@ -141,7 +141,7 @@ export function registerConventionsTool(server: McpServer, ctx: ToolContext): vo
   const { db } = ctx;
   server.tool(
     "conventions",
-    "Get team coding standards and conventions relevant to the current context. Optionally filter by directory or tags.",
+    "Get team coding standards for a directory or file. Use when writing code in an unfamiliar area to know what patterns the team follows.",
     ConventionsInput.shape,
     async (input: ConventionsInputType) => {
       logger.info("conventions tool called", {

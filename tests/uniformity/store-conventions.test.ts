@@ -140,4 +140,44 @@ describe("storeDetectedConventions", () => {
     const count = await storeDetectedConventions(db, conventions);
     expect(count).toBe(2);
   });
+
+  test("deduplication: calling storeDetectedConventions twice does not create duplicate entries", async () => {
+    const convention = makeConvention({ confidence: 0.85 });
+
+    // First call stores it.
+    const firstCount = await storeDetectedConventions(db, [convention]);
+    expect(firstCount).toBe(1);
+
+    // Second call with the identical convention must be skipped — already in DB.
+    const secondCount = await storeDetectedConventions(db, [convention]);
+    expect(secondCount).toBe(0);
+
+    // Only one row in the database.
+    const row = db
+      .query<{ cnt: number }, []>(
+        "SELECT count(*) AS cnt FROM entries WHERE type = 'convention'",
+      )
+      .get();
+    expect(row?.cnt).toBe(1);
+  });
+
+  test("deduplication: only the new convention is stored when one already exists", async () => {
+    const existing = makeConvention({ category: "naming", pattern: "camelCase functions" });
+    const fresh = makeConvention({ category: "imports", pattern: "relative imports" });
+
+    // Store the first one.
+    await storeDetectedConventions(db, [existing]);
+
+    // Now submit both; only the fresh one should be written.
+    const count = await storeDetectedConventions(db, [existing, fresh]);
+    expect(count).toBe(1);
+
+    // Total in DB is 2 (one from first call, one from second).
+    const row = db
+      .query<{ cnt: number }, []>(
+        "SELECT count(*) AS cnt FROM entries WHERE type = 'convention'",
+      )
+      .get();
+    expect(row?.cnt).toBe(2);
+  });
 });

@@ -617,23 +617,24 @@ program
 program
   .command("detect-conventions [dir]")
   .description("Scan a directory for coding conventions and store them in the knowledge base")
-  .action(async (dir: string | undefined) => {
+  .option("--dry-run", "Show what would be saved without writing to the database")
+  .action(async (dir: string | undefined, options: { dryRun?: boolean }) => {
     try {
       const targetDir = dir ?? process.cwd();
-
-      const config = loadConfig();
-      const db = initDatabase(config.dbPath);
+      const isDryRun = options.dryRun === true;
 
       const { detectConventions } = await import("../compiler/detect-conventions.js");
-      const { storeDetectedConventions } = await import("../compiler/store-conventions.js");
 
-      process.stdout.write(`Scanning for conventions in: ${targetDir}\n\n`);
+      process.stdout.write(`Scanning for conventions in: ${targetDir}\n`);
+      if (isDryRun) {
+        process.stdout.write("(dry-run mode — nothing will be saved)\n");
+      }
+      process.stdout.write("\n");
 
       const conventions = await detectConventions(targetDir);
 
       if (conventions.length === 0) {
         process.stdout.write("No conventions detected.\n");
-        db.close();
         logger.info("detect-conventions: no conventions found", { targetDir });
         return;
       }
@@ -641,10 +642,25 @@ program
       process.stdout.write(`Found ${conventions.length} convention(s):\n`);
       for (const c of conventions) {
         process.stdout.write(
-          `  ${c.category.padEnd(12)} ${c.directory.padEnd(24)} ${c.pattern.padEnd(32)} (${(c.confidence * 100).toFixed(0)}%)\n`,
+          `  ${c.category.padEnd(14)} ${c.directory.padEnd(24)} ${c.pattern.padEnd(36)} (${(c.confidence * 100).toFixed(0)}%)\n`,
         );
       }
       process.stdout.write("\n");
+
+      if (isDryRun) {
+        process.stdout.write(
+          `Dry-run: ${conventions.length} convention(s) would be saved (pending confidence filter and deduplication).\n`,
+        );
+        logger.info("detect-conventions dry-run complete", {
+          targetDir,
+          found: conventions.length,
+        });
+        return;
+      }
+
+      const config = loadConfig();
+      const db = initDatabase(config.dbPath);
+      const { storeDetectedConventions } = await import("../compiler/store-conventions.js");
 
       const stored = await storeDetectedConventions(db, conventions);
       db.close();
@@ -652,7 +668,7 @@ program
       const skipped = conventions.length - stored;
       process.stdout.write(`Stored ${stored} convention(s) to knowledge base.\n`);
       if (skipped > 0) {
-        process.stdout.write(`(${skipped} skipped — confidence below 60%)\n`);
+        process.stdout.write(`(${skipped} skipped — below 60% confidence or already exists)\n`);
       }
 
       logger.info("detect-conventions complete", { targetDir, found: conventions.length, stored });

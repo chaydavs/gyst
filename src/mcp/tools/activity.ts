@@ -192,7 +192,7 @@ export function registerActivityTool(server: McpServer, ctx: ToolContext): void 
   const { db } = ctx;
   server.tool(
     "activity",
-    "Get recent team activity — what other developers' agents have learned and discovered",
+    "Show recent team knowledge activity — what other developers have been learning, what errors were fixed, and what decisions were recorded.",
     ActivityInput.shape,
     async (input: ActivityInputType) => {
       logger.info("activity tool called", {

@@ -158,7 +158,7 @@ export function registerGetEntryTool(
 
   server.tool(
     "get_entry",
-    "Fetch the full detail of a knowledge entry by id. Returns markdown with content, files, entities, relationships, and evidence. Use after search() to read entries you want in full.",
+    "Get full details of a knowledge entry by ID. Use after search returns relevant results. Returns content, affected files, related entries, and a gyst://entry/{id} citation URI you can include in responses.",
     GetEntryInput.shape,
     async (input: GetEntryInputType) => {
       logger.info("get_entry tool called", { id: input.id, developer_id: input.developer_id });

@@ -12,6 +12,30 @@ import type { DetectedConvention } from "./detect-conventions.js";
 import { logger } from "../utils/logger.js";
 
 // ---------------------------------------------------------------------------
+// Deduplication helpers
+// ---------------------------------------------------------------------------
+
+interface ExistingConventionRow {
+  title: string;
+}
+
+/**
+ * Returns a Set of normalised title keys for every active convention already
+ * stored in the database.  Used to prevent inserting duplicate entries when
+ * `storeDetectedConventions` is called multiple times on the same codebase.
+ *
+ * The key format matches `buildTitle()` so a direct equality check is enough.
+ */
+function loadExistingConventionTitles(db: Database): Set<string> {
+  const rows = db
+    .query<ExistingConventionRow, []>(
+      `SELECT title FROM entries WHERE type = 'convention' AND status = 'active'`,
+    )
+    .all();
+  return new Set(rows.map((r) => r.title));
+}
+
+// ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
@@ -93,15 +117,25 @@ export async function storeDetectedConventions(
 ): Promise<number> {
   const eligible = conventions.filter((c) => c.confidence >= MIN_CONFIDENCE);
 
+  // Load titles already in the database so we can skip exact duplicates.
+  const existingTitles = loadExistingConventionTitles(db);
+
+  const toStore = eligible.filter(
+    (c) => !existingTitles.has(buildTitle(c)),
+  );
+  const skippedDuplicates = eligible.length - toStore.length;
+
   logger.info("store-conventions: storing detected conventions", {
     total: conventions.length,
     eligible: eligible.length,
     skippedLowConfidence: conventions.length - eligible.length,
+    skippedDuplicates,
+    toStore: toStore.length,
   });
 
   let stored = 0;
 
-  for (const convention of eligible) {
+  for (const convention of toStore) {
     try {
       await addManualEntry(db, {
         type: "convention",
@@ -121,7 +155,11 @@ export async function storeDetectedConventions(
     }
   }
 
-  logger.info("store-conventions: done", { stored, eligible: eligible.length });
+  logger.info("store-conventions: done", {
+    stored,
+    eligible: eligible.length,
+    skippedDuplicates,
+  });
 
   return stored;
 }

@@ -129,6 +129,7 @@ export function formatFull(
       lines.push(`Tags: ${tags.join(", ")}`);
     }
 
+    lines.push(`ref: gyst://entry/${entry.id}`);
     lines.push("---");
     return lines.join("\n");
   });
@@ -170,6 +171,7 @@ export function formatCompact(
       }
     }
 
+    lines.push(`ref: gyst://entry/${entry.id}`);
     lines.push("---");
     return lines.join("\n");
   });

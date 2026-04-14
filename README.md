@@ -95,6 +95,23 @@ gyst dashboard   # D3 visualization of your knowledge graph at localhost:4242
 
 ---
 
+## Natural Language Queries
+
+Agents ask Gyst questions in plain English. The right tool fires automatically based on the description it reads.
+
+| Agent question | Tool called |
+|----------------|-------------|
+| "What did we decide about error handling?" | `search` → `get_entry` |
+| "What conventions does src/api/ follow?" | `conventions` |
+| "Has anyone seen this Postgres error before?" | `failures` |
+| "What should a new developer know?" | `onboard` |
+| "What changed this week?" | `search` (temporal intent) |
+| "Is this code following our conventions?" | `check` |
+
+Each result includes a `ref: gyst://entry/{id}` citation URI agents can include in their responses.
+
+---
+
 ## How it works
 
 Five search strategies run in parallel on every query, fused with Reciprocal Rank Fusion:

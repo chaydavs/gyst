@@ -358,11 +358,24 @@ async function scanAndSaveConventions(db: Database, projectDir: string): Promise
     return 0;
   }
 
+  // Show a preview of up to 8 conventions.
   for (const c of conventions.slice(0, 8)) {
     const pct = `${(c.confidence * 100).toFixed(0)}%`;
     process.stdout.write(
       `    ${c.directory.padEnd(24)} ${c.pattern.padEnd(32)} (${pct})\n`,
     );
+  }
+  if (conventions.length > 8) {
+    process.stdout.write(`    … and ${conventions.length - 8} more\n`);
+  }
+
+  // Confirm before writing — prevents silently saving hundreds of entries.
+  const save = await askYesNo(
+    `Found ${conventions.length} coding convention(s). Save to knowledge base?`,
+  );
+  if (!save) {
+    process.stdout.write("    Skipped — conventions not saved.\n");
+    return 0;
   }
 
   const stored = await storeDetectedConventions(db, conventions);

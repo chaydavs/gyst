@@ -153,7 +153,7 @@ export function registerCheckConventionsTool(server: McpServer, ctx: ToolContext
   const { db } = ctx;
   server.tool(
     "check_conventions",
-    "Check which team coding conventions apply to a specific file or directory. Use before writing code in a new area.",
+    "List which team conventions apply to a file or directory. Use before editing code in a new area to know the rules upfront.",
     CheckConventionsInput.shape,
     async (input: CheckConventionsInputType) => {
       logger.info("check_conventions tool called", { file_path: input.file_path });

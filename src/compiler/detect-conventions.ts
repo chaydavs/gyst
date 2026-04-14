@@ -82,7 +82,7 @@ const bunTestRegex = /\btest\s*\(/g;
 // ---------------------------------------------------------------------------
 
 const SUPPORTED_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx"]);
-const SKIP_DIRS = new Set(["node_modules", "dist", ".git"]);
+const SKIP_DIRS = new Set(["node_modules", "dist", ".git", ".claude"]);
 const MIN_FILES_PER_DIR = 5;
 
 /** Count all non-overlapping matches of a regex in a string. */
@@ -447,17 +447,22 @@ async function collectFilesByDirectory(
 // Public API
 // ---------------------------------------------------------------------------
 
+/** Maximum number of conventions returned by detectConventions(). */
+const MAX_CONVENTIONS = 30;
+
 /**
  * Detect coding conventions in `rootDir` by analysing TypeScript/JavaScript
  * source files.
  *
  * Only directories with at least 5 matching files are considered.  Results are
  * sorted by confidence descending so the most reliable signals appear first.
+ * At most MAX_CONVENTIONS (30) conventions are returned — if more are detected,
+ * only the highest-confidence ones are kept.
  *
  * This is a pure read-only operation — no database writes are performed.
  *
  * @param rootDir - Absolute path to the project root to scan.
- * @returns Array of detected conventions, sorted by confidence descending.
+ * @returns Array of at most 30 detected conventions, sorted by confidence descending.
  */
 export async function detectConventions(
   rootDir: string,
@@ -494,12 +499,18 @@ export async function detectConventions(
     allConventions.push(...dirConventions);
   }
 
-  const sorted = [...allConventions].sort((a, b) => b.confidence - a.confidence);
+  // Sort by confidence descending, then cap at MAX_CONVENTIONS so we never
+  // produce hundreds of per-directory entries for large monorepos.
+  const sorted = [...allConventions]
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, MAX_CONVENTIONS);
 
   logger.info("detect-conventions: scan complete", {
     rootDir,
     directoriesScanned: byDir.size,
-    conventionsFound: sorted.length,
+    conventionsFound: allConventions.length,
+    conventionsReturned: sorted.length,
+    cappedAt: MAX_CONVENTIONS,
   });
 
   return sorted;

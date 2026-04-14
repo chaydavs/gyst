@@ -236,6 +236,7 @@ async function stage2Dedupe(db: Database): Promise<number> {
       .get("entry_vectors") !== null;
 
   if (vectorTableExists) {
+    try {
     interface ActiveVecRow { id: string; type: string; title: string; content: string }
     const activeEntries = db
       .query<ActiveVecRow, []>(
@@ -329,6 +330,17 @@ async function stage2Dedupe(db: Database): Promise<number> {
           const msg = err instanceof Error ? err.message : String(err);
           throw new DatabaseError(`Stage 2B semantic merge failed: ${msg}`);
         }
+      }
+    }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("no such module") || msg.includes("vec0")) {
+        logger.info(
+          "Skipping semantic dedup (vec0 not available), using fingerprint dedup only",
+          { error: msg },
+        );
+      } else {
+        throw new DatabaseError(`Stage 2B semantic dedup failed: ${msg}`);
       }
     }
   }

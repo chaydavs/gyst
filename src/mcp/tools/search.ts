@@ -68,7 +68,7 @@ export function registerSearchTool(server: McpServer, ctx: ToolContext): void {
 
   server.tool(
     "search",
-    "Find team knowledge entries by query. Returns a compact index (~50 tokens) showing id, type, confidence, age, and title. Call get_entry(id) to read the full content of any result. 7× more token-efficient than recall for browsing multiple entries.",
+    "Search team knowledge base. Use for any question about past decisions, errors, conventions, or project history. Returns compact results (id, type, confidence, title) — call get_entry(id) for full content. 7× more token-efficient than recall for browsing multiple results.",
     SearchInput.shape,
     async (input: SearchInputType) => {
       logger.info("search tool called", {
@@ -210,7 +210,7 @@ export function registerSearchTool(server: McpServer, ctx: ToolContext): void {
         };
       }
 
-      // Build compact index: two lines per entry, separated by blank lines.
+      // Build compact index: three lines per entry, separated by blank lines.
       const lines: string[] = [
         `Found ${filtered.length} results. Call get_entry({id}) for full detail.`,
         "",
@@ -221,6 +221,7 @@ export function registerSearchTool(server: McpServer, ctx: ToolContext): void {
         const age = formatAge(entry.createdAt);
         lines.push(`${entry.id} · ${entry.type} · ${confidence} · ${age}`);
         lines.push(entry.title);
+        lines.push(`ref: gyst://entry/${entry.id}`);
         lines.push("");
       }
 

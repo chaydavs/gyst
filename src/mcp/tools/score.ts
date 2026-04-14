@@ -41,7 +41,7 @@ export function registerScoreTool(server: McpServer, ctx: ToolContext): void {
 
   server.tool(
     "score",
-    "Return the team knowledge uniformity score (0–100) with four subscores: coverage, ghost rules, freshness, and style. Use this to assess how comprehensively team conventions, rules, and decisions are documented.",
+    "Check how comprehensively team conventions and rules are documented (0–100 score with subscores for coverage, ghost rules, freshness, and style). Use to identify knowledge gaps.",
     ScoreInput.shape,
     async (_input) => {
       logger.info("score tool called");

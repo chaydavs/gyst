@@ -61,7 +61,7 @@ export function registerHarvestTool(server: McpServer, ctx: ToolContext): void {
   const { db } = ctx;
   server.tool(
     "harvest",
-    "Extract knowledge entries from a coding session transcript. Filters noise, pattern-matches decisions/errors/conventions/learnings, and stores them via the normal learn pipeline with automatic deduplication.",
+    "Extract knowledge from a coding session transcript. Use at session end to capture decisions, errors fixed, and conventions discovered. Automatically deduplicates against existing entries.",
     HarvestInputSchema.shape,
     async (input: HarvestInputType) => {
       logger.info("harvest tool called", { session_id: input.session_id });

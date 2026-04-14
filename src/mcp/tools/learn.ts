@@ -255,7 +255,7 @@ export function registerLearnTool(server: McpServer, ctx: ToolContext): void {
   const { db } = ctx;
   server.tool(
     "learn",
-    "Record team knowledge: error patterns, conventions, decisions, or learnings. Use this whenever you discover something worth remembering for the team.",
+    "Record team knowledge: errors fixed, decisions made, conventions discovered. Use after solving a problem or making a significant architectural choice that the team should know about.",
     LearnInput.shape,
     async (input: LearnInputType) => {
       logger.info("learn tool called", { type: input.type, title: input.title });

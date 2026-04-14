@@ -142,7 +142,7 @@ export function registerFailuresTool(server: McpServer, ctx: ToolContext): void 
   const { db } = ctx;
   server.tool(
     "failures",
-    "Check if an error has been seen before and retrieve known fixes. Call this immediately when encountering an unfamiliar error.",
+    "Check if an error has been seen before and get the known fix. Call immediately when you encounter an unfamiliar error message.",
     FailuresInput.shape,
     async (input: FailuresInputType) => {
       logger.info("failures tool called", {
