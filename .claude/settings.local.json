@@ -86,7 +86,30 @@
       "Bash(git -C /Users/chaitanyadavuluri/Desktop/SustainableMemory diff --stat HEAD)",
       "Bash(git merge:*)",
       "Bash(tsc --noEmit)",
-      "Bash(ls -la /Users/chaitanyadavuluri/Desktop/SustainableMemory/benchmark-codememb*.json)"
+      "Bash(ls -la /Users/chaitanyadavuluri/Desktop/SustainableMemory/benchmark-codememb*.json)",
+      "mcp__plugin_claude-mem_mcp-search__get_observations",
+      "mcp__plugin_claude-mem_mcp-search__smart_outline",
+      "Bash(sed -n '215,220p' /Users/chaitanyadavuluri/Desktop/SustainableMemory/src/mcp/tools/recall.ts)",
+      "Bash(sed -n '265,270p' /Users/chaitanyadavuluri/Desktop/SustainableMemory/src/mcp/tools/recall.ts)",
+      "Bash(sed -n '305,310p' /Users/chaitanyadavuluri/Desktop/SustainableMemory/src/mcp/tools/recall.ts)",
+      "Bash(ls /Users/chaitanyadavuluri/Desktop/SustainableMemory/src/compiler/detect*.ts bun test --listTests)",
+      "Bash(ls -la /Users/chaitanyadavuluri/Desktop/SustainableMemory/*.js)",
+      "Bash(chmod +x dist/cli.js)",
+      "Bash(npm pack:*)",
+      "Bash(ls -la /Users/chaitanyadavuluri/Desktop/SustainableMemory/*.map)",
+      "Bash(npm install:*)",
+      "Bash(gyst --help)",
+      "Bash(gyst --version)",
+      "Bash(npm uninstall:*)",
+      "Bash(ls src/cli/*.js src/mcp/*.js)",
+      "Bash(ls:*)",
+      "Bash(git tag:*)",
+      "Bash(gh issue:*)",
+      "Bash(sed -n '128,136p' src/utils/format-recall.ts)",
+      "Bash(sed -n '169,177p' src/utils/format-recall.ts)",
+      "Bash(git -C /Users/chaitanyadavuluri/Desktop/SustainableMemory/.claude/worktrees/agent-a4ff5b72 diff --name-only HEAD)",
+      "Bash(git:*)",
+      "Bash(npm version:*)"
     ]
   }
 }

@@ -1,7 +1,7 @@
 ---
 type: error_pattern
 confidence: 0.5
-last_confirmed: '2026-04-14T14:18:49.032Z'
+last_confirmed: '2026-04-14T23:12:30.350Z'
 sources: 1
 affects:
   - src/auth/auth-service.ts

@@ -1,6 +1,6 @@
 # Gyst Knowledge Base Index
 
-> Generated: 2026-04-14T08:48:21.018Z  
+> Generated: 2026-04-14T23:12:50.111Z  
 > Active entries: 13
 
 ## Convention
@@ -13,13 +13,13 @@
 - Stripe webhook signature validation failure *(confidence: 0.66)*
 - Stripe API timeout causes checkout failure *(confidence: 0.66)*
 - Refund race condition with webhook *(confidence: 0.66)*
-- Stripe Connect platform fees calculation *(confidence: 0.28)*
 - Currency mismatch in payment amounts *(confidence: 0.28)*
 - 3D Secure authentication timeout *(confidence: 0.28)*
 - Webhook endpoint must return 2xx within 30 seconds *(confidence: 0.28)*
 - Payment idempotency key prevents double charges *(confidence: 0.28)*
 - Webhook delivery order not guaranteed *(confidence: 0.28)*
 - PaymentIntent requires_action state handling *(confidence: 0.28)*
+- Stripe Connect platform fees calculation *(confidence: 0.28)*
 
 ## Ghost Knowledge
 

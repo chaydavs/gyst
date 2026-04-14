@@ -22,6 +22,109 @@ After install, every `gyst` command is available and your AI agents have 14 new 
 
 ---
 
+## Getting Started
+
+Dropping Gyst into an existing project takes about 5 minutes.
+
+### Step 1 — Install
+
+```bash
+npx gyst-mcp install
+```
+
+This detects your AI tools, writes the MCP config, initializes the database, scans for conventions, and installs git hooks. Restart your AI tool when it finishes.
+
+### Step 2 — Let your agent populate the knowledge base
+
+On your next session, paste this into your AI tool:
+
+```
+Scan this project with Gyst. Read the README, package.json, recent git
+history, and key source files. Use the learn tool to record important
+conventions, decisions, error patterns, and anything a new developer
+should know.
+```
+
+The agent calls `learn()` for each piece of knowledge it finds. It understands context — commit messages, error patterns, architectural decisions — better than any script can. A typical codebase produces 20–60 entries in one pass.
+
+### Step 3 — Check what was captured
+
+```bash
+gyst recall "what should I know about this codebase"
+```
+
+Or open the visual knowledge graph:
+
+```bash
+gyst dashboard
+```
+
+This starts a local HTTP server at **[localhost:4242](http://localhost:4242)**. You'll see:
+
+- A D3 force-directed graph of every knowledge entry and how they're connected
+- Filter by type: `convention`, `error_pattern`, `decision`, `learning`, `ghost_knowledge`
+- Click any node to read the full entry
+- Uniformity score and entry counts at the top
+
+### Step 4 — Add team members (optional)
+
+> Skip this if you're working solo. The git-sync mode (wiki files in repo) works out of the box with no server.
+
+**On the admin machine — create the team and generate an invite:**
+
+```bash
+gyst team create "Acme Engineering"
+gyst team invite
+# Prints: gyst_invite_abc123...
+```
+
+**Each developer joins with the invite key:**
+
+```bash
+gyst join gyst_invite_abc123 "Alice"
+```
+
+This registers their developer ID and links their agent sessions to the shared team log.
+
+### Step 5 — Start the shared HTTP server (team mode)
+
+```bash
+GYST_PORT=3000 bun run src/server/http.ts
+```
+
+Then update each developer's MCP config to point at the server instead of the local stdio server:
+
+```json
+{
+  "mcpServers": {
+    "gyst": {
+      "type": "streamable-http",
+      "url": "http://your-server:3000/mcp",
+      "headers": { "Authorization": "Bearer gyst_member_..." }
+    }
+  }
+}
+```
+
+The bearer token is printed when you run `gyst join`. All 14 tools work identically over HTTP.
+
+### Step 6 — Keep the knowledge base growing
+
+From this point, knowledge grows automatically:
+
+- **Git hooks** — `post-commit` triggers `gyst harvest-session` after every commit
+- **Session hooks** — Claude Code runs `gyst inject-context` at session start (injects ghost rules + conventions automatically)
+- **Manual entries** — `gyst ghost-init` for unwritten team rules
+- **Agent calls** — any agent with the MCP config can call `learn()` at any time
+
+```bash
+gyst score          # uniformity score — how consistent is your codebase? (0–100)
+gyst onboard        # generate a markdown onboarding doc from everything Gyst knows
+gyst check src/api/auth.ts  # check a file against stored conventions
+```
+
+---
+
 ## What it does
 
 Every time a developer learns something — a bug fix, a deploy rule, a decision — their AI agent calls `learn()`. The knowledge is indexed into a shared SQLite database with full-text search, a relationship graph, and semantic embeddings. The next developer who hits the same situation — in any AI tool — calls `recall()` and gets it back.

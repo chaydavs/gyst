@@ -1,7 +1,7 @@
 ---
 type: error_pattern
 confidence: 0.5
-last_confirmed: '2026-04-14T08:48:14.583Z'
+last_confirmed: '2026-04-14T23:12:43.815Z'
 sources: 1
 ---
 # Postgres pool exhausted

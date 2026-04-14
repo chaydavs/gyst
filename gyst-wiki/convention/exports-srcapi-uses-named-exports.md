@@ -1,13 +1,14 @@
 ---
 type: convention
 confidence: 0.5
-last_confirmed: '2026-04-14T08:48:09.070Z'
+last_confirmed: '2026-04-14T23:12:38.433Z'
 sources: 1
 affects:
   - src/api/
 tags:
   - src/api
   - exports
+  - 'entity:src/api/users.ts'
 ---
 # Exports: src/api uses named exports
 
