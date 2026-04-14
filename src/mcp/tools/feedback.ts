@@ -65,27 +65,48 @@ export function registerFeedbackTool(server: McpServer, ctx: ToolContext): void 
           };
         }
 
-        // Insert feedback row
-        db.run(
-          `INSERT INTO feedback (entry_id, developer_id, helpful, note, timestamp)
-           VALUES (?, ?, ?, ?, datetime('now'))`,
-          [
-            parsed.entry_id,
-            resolvedDeveloperId ?? null,
-            parsed.helpful ? 1 : 0,
-            parsed.note ?? null,
-          ],
-        );
+        // Insert feedback row and update entry confidence atomically
+        let before: { confidence: number } | null = null;
+        let after: { confidence: number } | null = null;
 
-        logger.info("Feedback recorded", {
-          entryId: parsed.entry_id,
-          helpful: parsed.helpful,
-        });
+        db.transaction(() => {
+          db.run(
+            `INSERT INTO feedback (entry_id, developer_id, helpful, note, timestamp)
+             VALUES (?, ?, ?, ?, datetime('now'))`,
+            [
+              parsed.entry_id,
+              resolvedDeveloperId ?? null,
+              parsed.helpful ? 1 : 0,
+              parsed.note ?? null,
+            ],
+          );
+
+          // Read current confidence before update for logging
+          before = db.query<{ confidence: number }, [string]>(
+            "SELECT confidence FROM entries WHERE id = ?"
+          ).get(parsed.entry_id);
+
+          db.run(
+            "UPDATE entries SET confidence = MAX(0.0, MIN(1.0, confidence + ?)) WHERE id = ?",
+            [parsed.helpful ? 0.02 : -0.05, parsed.entry_id]
+          );
+
+          after = db.query<{ confidence: number }, [string]>(
+            "SELECT confidence FROM entries WHERE id = ?"
+          ).get(parsed.entry_id);
+
+          logger.info("Feedback applied", {
+            entryId: parsed.entry_id,
+            helpful: parsed.helpful,
+            confidenceBefore: before?.confidence,
+            confidenceAfter: after?.confidence,
+          });
+        })();
 
         return {
           content: [{
             type: "text" as const,
-            text: `Feedback recorded for entry ${parsed.entry_id}: ${parsed.helpful ? "helpful" : "not helpful"}`,
+            text: `Feedback recorded for entry ${parsed.entry_id}: ${parsed.helpful ? "helpful" : "not helpful"} (confidence ${(before as { confidence: number } | null)?.confidence?.toFixed(3)} → ${(after as { confidence: number } | null)?.confidence?.toFixed(3)})`,
           }],
         };
       } catch (err) {

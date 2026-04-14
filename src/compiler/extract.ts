@@ -9,6 +9,7 @@
 import { z } from "zod";
 import { stripSensitiveData } from "./security.js";
 import { normalizeErrorSignature, generateFingerprint } from "./normalize.js";
+import { extractEntities, extractEntitiesFromTitle } from "./entities.js";
 import { logger } from "../utils/logger.js";
 import { ValidationError } from "../utils/errors.js";
 
@@ -138,6 +139,18 @@ export function extractEntry(input: LearnInput): KnowledgeEntry {
     });
   }
 
+  // 3b. Extract named entities for graph linking — applies to all entry types
+  const contentEntities = extractEntities(safeContent);
+  const titleEntities = extractEntitiesFromTitle(valid.title ?? "");
+  const allExtractedEntities = [...new Set([
+    ...contentEntities.map((e) => `entity:${e.name}`),
+    ...titleEntities.map((e) => `entity:${e.name}`),
+  ])];
+  const mergedTags = [
+    ...valid.tags,
+    ...allExtractedEntities.filter((t) => !valid.tags.includes(t)),
+  ];
+
   // 4. Build the entry (immutable — construct a new object, never mutate)
   const now = new Date().toISOString();
 
@@ -162,7 +175,7 @@ export function extractEntry(input: LearnInput): KnowledgeEntry {
     title: valid.title,
     content: safeContent,
     files: [...valid.files],
-    tags: [...valid.tags],
+    tags: mergedTags,
     errorType: valid.errorType,
     errorMessage: safeErrorMessage,
     errorSignature,

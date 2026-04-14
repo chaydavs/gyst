@@ -180,6 +180,12 @@ export function registerSearchTool(server: McpServer, ctx: ToolContext): void {
         confidenceThreshold: config.confidenceThreshold,
       });
 
+      // Record co-retrieval for connection strengthening
+      if (filtered.length >= 2) {
+        const { recordCoRetrieval } = await import("../../store/graph.js");
+        recordCoRetrieval(db, filtered.slice(0, 5).map((e) => e.id));
+      }
+
       // Log activity when running in team mode with a known developer.
       if (
         ctx.mode === "team" &&

@@ -190,6 +190,19 @@ export async function runGhostInit(db?: Database): Promise<number> {
 
       const entry = extractEntry(learnInput);
       insertEntry(database, entry);
+
+      // Embed ghost knowledge entries for semantic search
+      if (typeof process !== "undefined") {
+        const { canLoadExtensions } = await import("../store/database.js");
+        if (canLoadExtensions()) {
+          const { embedAndStore } = await import("../store/embeddings.js");
+          const embeddingText = `${entry.title}\n\n${entry.content}`;
+          embedAndStore(database, entry.id, embeddingText).catch((err: unknown) => {
+            logger.warn("Failed to embed ghost entry", { id: entry.id, error: String(err) });
+          });
+        }
+      }
+
       created += 1;
 
       process.stdout.write(`  [+] Captured: ${title}\n`);

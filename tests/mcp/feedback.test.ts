@@ -345,6 +345,159 @@ describe("feedback tool — querying by entry_id", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Confidence update tests (feedback loop)
+// ---------------------------------------------------------------------------
+
+/**
+ * Simulates the full feedback tool handler, including the confidence update,
+ * mirroring the transaction logic in src/mcp/tools/feedback.ts.
+ */
+function simulateFeedbackWithConfidence(
+  db: Database,
+  input: {
+    entry_id: string;
+    helpful: boolean;
+    note?: string;
+    developer_id?: string;
+  },
+): { success: boolean; text: string } {
+  const existing = db
+    .query<{ id: string }, [string]>("SELECT id FROM entries WHERE id = ?")
+    .get(input.entry_id);
+
+  if (existing === null) {
+    return { success: false, text: `Entry ${input.entry_id} not found.` };
+  }
+
+  let before: { confidence: number } | null = null;
+  let after: { confidence: number } | null = null;
+
+  db.transaction(() => {
+    db.run(
+      `INSERT INTO feedback (entry_id, developer_id, helpful, note, timestamp)
+       VALUES (?, ?, ?, ?, datetime('now'))`,
+      [
+        input.entry_id,
+        input.developer_id ?? null,
+        input.helpful ? 1 : 0,
+        input.note ?? null,
+      ],
+    );
+
+    before = db
+      .query<{ confidence: number }, [string]>(
+        "SELECT confidence FROM entries WHERE id = ?",
+      )
+      .get(input.entry_id);
+
+    db.run(
+      "UPDATE entries SET confidence = MAX(0.0, MIN(1.0, confidence + ?)) WHERE id = ?",
+      [input.helpful ? 0.02 : -0.05, input.entry_id],
+    );
+
+    after = db
+      .query<{ confidence: number }, [string]>(
+        "SELECT confidence FROM entries WHERE id = ?",
+      )
+      .get(input.entry_id);
+  })();
+
+  const beforeConf = (before as { confidence: number } | null)?.confidence;
+  const afterConf = (after as { confidence: number } | null)?.confidence;
+
+  return {
+    success: true,
+    text: `Feedback recorded for entry ${input.entry_id}: ${input.helpful ? "helpful" : "not helpful"} (confidence ${beforeConf?.toFixed(3)} → ${afterConf?.toFixed(3)})`,
+  };
+}
+
+describe("feedback tool — confidence updates", () => {
+  test("helpful=true increases confidence by 0.02", () => {
+    const entryId = seedEntry(db);
+    // seedEntry sets confidence to 0.5
+
+    simulateFeedbackWithConfidence(db, { entry_id: entryId, helpful: true });
+
+    const row = db
+      .query<{ confidence: number }, [string]>(
+        "SELECT confidence FROM entries WHERE id = ?",
+      )
+      .get(entryId);
+
+    expect(row?.confidence).toBeCloseTo(0.52, 3);
+  });
+
+  test("helpful=false decreases confidence by 0.05", () => {
+    const entryId = seedEntry(db);
+    // seedEntry sets confidence to 0.5
+
+    simulateFeedbackWithConfidence(db, { entry_id: entryId, helpful: false });
+
+    const row = db
+      .query<{ confidence: number }, [string]>(
+        "SELECT confidence FROM entries WHERE id = ?",
+      )
+      .get(entryId);
+
+    expect(row?.confidence).toBeCloseTo(0.45, 3);
+  });
+
+  test("confidence is capped at 1.0 when helpful on near-max entry", () => {
+    const entryId = seedEntry(db, { id: "cap-test" });
+    // Override confidence to 0.99
+    db.run("UPDATE entries SET confidence = 0.99 WHERE id = ?", [entryId]);
+
+    simulateFeedbackWithConfidence(db, { entry_id: entryId, helpful: true });
+
+    const row = db
+      .query<{ confidence: number }, [string]>(
+        "SELECT confidence FROM entries WHERE id = ?",
+      )
+      .get(entryId);
+
+    expect(row?.confidence).toBe(1.0);
+  });
+
+  test("confidence is floored at 0.0 when unhelpful on near-zero entry", () => {
+    const entryId = seedEntry(db, { id: "floor-test" });
+    // Override confidence to 0.03
+    db.run("UPDATE entries SET confidence = 0.03 WHERE id = ?", [entryId]);
+
+    simulateFeedbackWithConfidence(db, { entry_id: entryId, helpful: false });
+
+    const row = db
+      .query<{ confidence: number }, [string]>(
+        "SELECT confidence FROM entries WHERE id = ?",
+      )
+      .get(entryId);
+
+    expect(row?.confidence).toBe(0.0);
+  });
+
+  test("feedback for unknown entry returns not-found message", () => {
+    const result = simulateFeedbackWithConfidence(db, {
+      entry_id: "nonexistent-id",
+      helpful: true,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.text).toContain("not found");
+  });
+
+  test("return text includes old and new confidence separated by →", () => {
+    const entryId = seedEntry(db);
+
+    const result = simulateFeedbackWithConfidence(db, {
+      entry_id: entryId,
+      helpful: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.text).toContain("→");
+  });
+});
+
 describe("feedback tool — aggregation queries (used by calibration script)", () => {
   test("positive rate is computed correctly across multiple feedback rows", () => {
     const entryId = seedEntry(db);

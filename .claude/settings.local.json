@@ -83,7 +83,10 @@
       "Bash(wc -l /Users/chaitanyadavuluri/Desktop/SustainableMemory/src/server/*.ts)",
       "Bash(grep -l \"Http\\\\b\" /Users/chaitanyadavuluri/Desktop/SustainableMemory/src/server/tools/*.ts)",
       "Bash(wc:*)",
-      "Bash(git -C /Users/chaitanyadavuluri/Desktop/SustainableMemory diff --stat HEAD)"
+      "Bash(git -C /Users/chaitanyadavuluri/Desktop/SustainableMemory diff --stat HEAD)",
+      "Bash(git merge:*)",
+      "Bash(tsc --noEmit)",
+      "Bash(ls -la /Users/chaitanyadavuluri/Desktop/SustainableMemory/benchmark-codememb*.json)"
     ]
   }
 }

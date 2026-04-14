@@ -22,7 +22,7 @@ const ACTIVITY_SCHEMA_STATEMENTS: readonly string[] = [
     id           INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     team_id      TEXT    NOT NULL REFERENCES teams(id),
     developer_id TEXT    NOT NULL,
-    action       TEXT    NOT NULL CHECK (action IN ('learn', 'recall', 'conventions', 'check_conventions', 'check', 'score', 'failures', 'harvest', 'feedback', 'search', 'get_entry')),
+    action       TEXT    NOT NULL CHECK (action IN ('learn', 'recall', 'conventions', 'check_conventions', 'check', 'score', 'failures', 'harvest', 'feedback', 'search', 'get_entry', 'graph')),
     entry_id     TEXT,
     files        TEXT,
     timestamp    TEXT    NOT NULL DEFAULT (datetime('now'))
@@ -40,7 +40,7 @@ const ACTIVITY_SCHEMA_STATEMENTS: readonly string[] = [
 // ---------------------------------------------------------------------------
 
 /** The MCP tool names that can be logged. */
-export type ActivityAction = "learn" | "recall" | "conventions" | "check_conventions" | "check" | "score" | "failures" | "harvest" | "feedback" | "search" | "get_entry";
+export type ActivityAction = "learn" | "recall" | "conventions" | "check_conventions" | "check" | "score" | "failures" | "harvest" | "feedback" | "search" | "get_entry" | "graph";
 
 /** A single row from `activity_log` with deserialized fields. */
 export interface ActivityEntry {
@@ -162,6 +162,40 @@ export function initActivitySchema(db: Database): void {
       })();
       db.run(`CREATE INDEX IF NOT EXISTS idx_activity_team_time ON activity_log(team_id, timestamp)`);
       db.run(`CREATE INDEX IF NOT EXISTS idx_activity_developer ON activity_log(developer_id, timestamp)`);
+    }
+  }
+
+  // Migration: expand CHECK constraint to include graph action.
+  const ddlAfterSecondMigration = db
+    .query<SqlRow, [string]>(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+    )
+    .get("activity_log");
+
+  if (ddlAfterSecondMigration?.sql !== null && ddlAfterSecondMigration?.sql !== undefined) {
+    const needsThirdMigration = !ddlAfterSecondMigration.sql.includes("'graph'");
+    if (needsThirdMigration) {
+      logger.info("activity_log: migrating CHECK constraint to include graph");
+      db.transaction(() => {
+        db.run(`CREATE TABLE IF NOT EXISTS activity_log_new3 (
+          id           INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          team_id      TEXT    NOT NULL REFERENCES teams(id),
+          developer_id TEXT    NOT NULL,
+          action       TEXT    NOT NULL CHECK (action IN ('learn', 'recall', 'conventions', 'check_conventions', 'check', 'score', 'failures', 'harvest', 'feedback', 'search', 'get_entry', 'graph')),
+          entry_id     TEXT,
+          files        TEXT,
+          timestamp    TEXT    NOT NULL DEFAULT (datetime('now'))
+        )`);
+        db.run(`INSERT INTO activity_log_new3
+                  (id, team_id, developer_id, action, entry_id, files, timestamp)
+                SELECT id, team_id, developer_id, action, entry_id, files, timestamp
+                FROM   activity_log`);
+        db.run("DROP TABLE activity_log");
+        db.run("ALTER TABLE activity_log_new3 RENAME TO activity_log");
+      })();
+      db.run(`CREATE INDEX IF NOT EXISTS idx_activity_team_time ON activity_log(team_id, timestamp)`);
+      db.run(`CREATE INDEX IF NOT EXISTS idx_activity_developer ON activity_log(developer_id, timestamp)`);
+      logger.info("activity_log: third migration complete");
     }
   }
 

@@ -595,7 +595,10 @@ function stage5Reindex(db: Database, wikiDirOverride?: string): number {
 }
 
 /**
- * Stage 6 — strengthen co-retrieved links.
+ * Stage 2.5 — strengthen co-retrieved links.
+ *
+ * Runs after dedupe, before merge, so fresh co-retrieval edges inform
+ * cluster formation.
  *
  * Finds entry pairs that have been recalled together >= 3 times and
  * creates explicit `related_to` edges between them if none exist yet.
@@ -603,7 +606,7 @@ function stage5Reindex(db: Database, wikiDirOverride?: string): number {
  * @param db - Open bun:sqlite database handle.
  * @returns Number of co-retrieved pairs processed.
  */
-async function stage6StrengthenLinks(db: Database): Promise<number> {
+async function stage2_5StrengthenLinks(db: Database): Promise<number> {
   const { strengthenCoRetrievedLinks } = await import("../store/graph.js");
   return strengthenCoRetrievedLinks(db, 3);
 }
@@ -631,10 +634,10 @@ export async function consolidate(
 
   const decayed = stage1Decay(db);
   const duplicatesMerged = await stage2Dedupe(db);
+  const linksStrengthened = await stage2_5StrengthenLinks(db);
   const clusters = stage3MergeClusters(db);
   const archived = stage4Archive(db);
   const indexEntries = stage5Reindex(db, options.wikiDir);
-  const linksStrengthened = await stage6StrengthenLinks(db);
 
   const durationMs = performance.now() - started;
 

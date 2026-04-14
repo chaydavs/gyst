@@ -383,6 +383,32 @@ export function registerLearnTool(server: McpServer, ctx: ToolContext): void {
         });
       }
 
+      // Auto-link new entry to existing entries sharing entities
+      const linkingEntities = [
+        ...extractEntities(safeContent),
+        ...extractEntitiesFromTitle(valid.title),
+      ];
+      if (linkingEntities.length > 0) {
+        const { createRelationship } = await import("../../compiler/linker.js");
+        const seenTargets = new Set<string>();
+        for (const entity of linkingEntities) {
+          const rows = db
+            .query<{ entry_id: string }, [string, string]>(
+              "SELECT DISTINCT entry_id FROM entry_tags WHERE tag = ? AND entry_id != ?",
+            )
+            .all(`entity:${entity.name}`, id);
+          for (const row of rows) {
+            if (!seenTargets.has(row.entry_id) && seenTargets.size < 20) {
+              seenTargets.add(row.entry_id);
+              createRelationship(db, id, row.entry_id, "related_to");
+            }
+          }
+        }
+        if (seenTargets.size > 0) {
+          logger.info("Entity-linked new entry", { id, entityLinks: seenTargets.size });
+        }
+      }
+
       logger.info("New entry created", { id, type: valid.type, title: valid.title });
 
       // Log activity when running in team mode with a known developer

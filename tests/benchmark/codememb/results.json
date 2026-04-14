@@ -1,13 +1,13 @@
 {
   "benchmark": "CodeMemBench",
   "version": "1.0.0",
-  "timestamp": "2026-04-12T21:28:06.812Z",
+  "timestamp": "2026-04-14T08:33:37.446Z",
   "datasetPath": "tests/benchmark/codememb/dataset.json",
   "totalQueries": 200,
   "topK": 10,
   "semanticAvailable": true,
-  "ingestMs": 141,
-  "retrieveMs": 6933,
+  "ingestMs": 132,
+  "retrieveMs": 7031,
   "overall": {
     "ndcg": 0.3511091562931825,
     "recall": 0.6766666666666667,
