@@ -388,4 +388,88 @@ describe("Gyst HTTP E2E", () => {
     const listBody = (await listRes.json()) as { members: unknown[] };
     expect(listBody.members.length).toBe(1);
   }, 30_000);
+
+  // -------------------------------------------------------------------------
+  // New tests — search, ghost_knowledge recall, validation
+  // -------------------------------------------------------------------------
+
+  test("13. search returns compact index for known entries", async () => {
+    // Dev A learns an error_pattern (memberKeyA is still valid after test 12
+    // removes devB — devA is not removed)
+    const learnText = await mcpCall(memberKeyA, "learn", {
+      content: "Postgres pool exhausted: too many clients connecting simultaneously to the database server",
+      type: "error_pattern",
+      title: "Postgres pool exhausted",
+    });
+    // learn should succeed — response starts with "Learned:" or "Updated"
+    expect(learnText).not.toMatch(/^Error/i);
+
+    // Dev A searches using terms present in the title/content
+    const searchText = await mcpCall(memberKeyA, "search", {
+      query: "Postgres pool exhausted clients",
+    });
+
+    expect(searchText).toContain("Postgres pool exhausted");
+    // The search header always contains "get_entry" usage hint
+    expect(searchText).toContain("get_entry");
+
+    // Parse an entry id from the first result line (format: "id · type · …")
+    const idMatch = searchText.match(/^([a-z0-9-]{36}) ·/m);
+    if (idMatch !== null && idMatch[1] !== undefined) {
+      const entryId = idMatch[1];
+      const detailText = await mcpCall(memberKeyA, "get_entry", { id: entryId });
+      expect(detailText).toContain("Postgres");
+    }
+  }, 30_000);
+
+  // -------------------------------------------------------------------------
+
+  test("14. convention entries appear with Convention prefix in recall", async () => {
+    // Dev A learns a convention entry
+    await mcpCall(memberKeyA, "learn", {
+      content: "Never deploy to production on Fridays — too risky to debug over the weekend",
+      type: "convention",
+      title: "No Friday production deploys",
+    });
+
+    // Recall using terms present in the title and content
+    const recallText = await mcpCall(memberKeyA, "recall", {
+      query: "No Friday production deploys",
+    });
+    // recall prefixes convention entries with "📏 Convention:"
+    expect(recallText).toContain("📏 Convention:");
+  }, 30_000);
+
+  // -------------------------------------------------------------------------
+
+  test("15. search rejects query shorter than 2 characters", async () => {
+    let errorSeen = false;
+    try {
+      const text = await mcpCall(memberKeyA, "search", { query: "x" });
+      // If mcpCall returns text instead of throwing, check for error indicators
+      const lower = text.toLowerCase();
+      errorSeen =
+        lower.includes("error") ||
+        lower.includes("invalid") ||
+        lower.includes("too_small") ||
+        lower.includes("string must contain");
+    } catch {
+      // MCP SDK may surface validation errors as thrown exceptions
+      errorSeen = true;
+    }
+    expect(errorSeen).toBe(true);
+  }, 10_000);
+
+  // -------------------------------------------------------------------------
+
+  test("16. mcpLatencies includes entries from search and get_entry calls", () => {
+    // mcpCall() appends to the module-level mcpLatencies array on every call.
+    // Tests 13–15 each make at least one mcpCall, so by the time this test
+    // runs the array must have grown beyond the 8 calls made in tests 3–8.
+    // We simply verify that the reporter will have data to work with.
+    expect(mcpLatencies.length).toBeGreaterThan(8);
+    // All recorded latencies must be non-negative finite numbers.
+    const invalid = mcpLatencies.filter((ms) => !isFinite(ms) || ms < 0);
+    expect(invalid).toHaveLength(0);
+  });
 });

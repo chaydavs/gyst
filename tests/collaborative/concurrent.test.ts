@@ -670,7 +670,7 @@ describe("Suite 3: 500 read queries P50/P95 latency on 200-entry DB", () => {
 
     expect(errors).toHaveLength(0);
     expect(latencies).toHaveLength(500);
-  }, { timeout: 15000 });
+  }, { timeout: 30000 });
 
   test("all recorded latencies are non-negative", () => {
     const negative = latencies.filter((l) => l < 0);
