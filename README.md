@@ -12,6 +12,11 @@ what your teammate's Cursor learned yesterday. Gyst fixes that.
 
 One command. Detects Claude Code, Cursor, Codex CLI, Gemini CLI, Windsurf, OpenCode, and Continue automatically.
 
+**Requires Bun.** Install it first if you haven't:
+```bash
+curl -fsSL https://bun.sh/install | bash
+```
+
 ```bash
 npx gyst-mcp install
 ```

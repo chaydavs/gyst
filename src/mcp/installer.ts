@@ -146,16 +146,12 @@ function writeJsonConfig(filePath: string, config: McpConfig): void {
  */
 export function installForDetectedTools(projectDir: string): string[] {
   const absoluteProjectDir = resolve(projectDir);
-  const serverTsPath = resolve(
-    absoluteProjectDir,
-    "src",
-    "mcp",
-    "server.ts",
-  );
 
+  // Use the published npm package entry point — works in any consumer project.
+  // Both `setup` and `install` produce the identical config via this constant.
   const gystConfig: GystServerConfig = {
-    command: "bun",
-    args: ["run", serverTsPath],
+    command: "bunx",
+    args: ["gyst-mcp", "serve"],
   };
 
   const configured: string[] = [];

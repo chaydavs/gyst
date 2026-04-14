@@ -88,8 +88,8 @@ describe("initProject", () => {
     expect(existsSync(join(tmpDir, "gyst-wiki"))).toBe(true);
   });
 
-  test("creates the SQLite database at .gyst/wiki.db", () => {
-    expect(existsSync(join(tmpDir, ".gyst", "wiki.db"))).toBe(true);
+  test("does NOT create a database at .gyst/wiki.db (canonical path is gyst-wiki/.wiki.db)", () => {
+    expect(existsSync(join(tmpDir, ".gyst", "wiki.db"))).toBe(false);
   });
 
   test("is idempotent — calling twice does not throw", () => {
@@ -268,9 +268,9 @@ describe("installGitHooks", () => {
     expect(content).toContain("#!/bin/sh");
   });
 
-  test("post-merge hook contains rebuild command", () => {
+  test("post-merge hook contains consolidate command", () => {
     const content = readFileSync(join(gitTmp, ".git", "hooks", "post-merge"), "utf-8");
-    expect(content).toContain("gyst rebuild");
+    expect(content).toContain("gyst consolidate");
   });
 
   test("is idempotent — second call skips already-present gyst hooks", () => {

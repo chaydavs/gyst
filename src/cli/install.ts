@@ -249,8 +249,8 @@ export function mergeClaudeHooks(config: McpConfig): McpConfig {
 export function initProject(dir: string = process.cwd()): void {
   mkdirSync(join(dir, ".gyst"), { recursive: true });
   mkdirSync(join(dir, "gyst-wiki"), { recursive: true });
-  const db = initDatabase(join(dir, ".gyst", "wiki.db"));
-  db.close();
+  // Database is created by the caller via initDatabase(loadConfig(dir).dbPath)
+  // at gyst-wiki/.wiki.db — NOT here — to keep one canonical DB location.
 }
 
 // ---------------------------------------------------------------------------
@@ -354,7 +354,7 @@ async function scanAndSaveConventions(db: Database, projectDir: string): Promise
 /** Lines we inject into git hooks. Idempotent — safe to call repeatedly. */
 const GIT_HOOKS: ReadonlyArray<{ file: string; line: string }> = [
   { file: "post-commit", line: "gyst harvest-session 2>/dev/null || true" },
-  { file: "post-merge", line: "gyst rebuild 2>/dev/null || true" },
+  { file: "post-merge", line: "gyst consolidate 2>/dev/null || true" },
 ];
 
 /**
@@ -483,7 +483,6 @@ export async function runInstall(): Promise<void> {
     initProject();
     process.stdout.write("    Created .gyst/\n");
     process.stdout.write("    Created gyst-wiki/\n");
-    process.stdout.write("    Database initialized at .gyst/wiki.db\n");
   }
 
   // Step 5: Convention scanning (automated, capped at 30)

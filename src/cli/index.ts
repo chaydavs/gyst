@@ -1,5 +1,14 @@
 #!/usr/bin/env bun
 
+// Fail fast when run under Node.js (e.g. npx without Bun on PATH).
+if (!(process.versions as Record<string, string>)["bun"]) {
+  process.stderr.write(
+    "Gyst requires the Bun runtime — it uses bun:sqlite and Bun APIs.\n" +
+      "Install Bun: curl -fsSL https://bun.sh/install | bash\n",
+  );
+  process.exit(1);
+}
+
 /**
  * Gyst CLI entry point.
  *
@@ -17,6 +26,11 @@
 import { Command } from "commander";
 import { mkdirSync, existsSync } from "fs";
 import { join } from "path";
+// @ts-ignore — JSON import resolved by Bun bundler; string fallback for dev mode
+import _pkg from "../../package.json" with { type: "json" };
+const _pkgVersion: string = (typeof _pkg === "object" && _pkg !== null && "version" in _pkg)
+  ? String((_pkg as { version: string }).version)
+  : "0.0.0";
 import { initDatabase } from "../store/database.js";
 import { installForDetectedTools } from "../mcp/installer.js";
 import { logger } from "../utils/logger.js";
@@ -49,7 +63,7 @@ const program = new Command();
 program
   .name("gyst")
   .description("Team knowledge compiler for AI coding agents")
-  .version("0.1.0");
+  .version(_pkgVersion);
 
 // ---------------------------------------------------------------------------
 // gyst setup — first-time initialization
@@ -712,7 +726,7 @@ program
       }
 
       const rows = db
-        .query<ConventionRow, [string, string]>(
+        .query<ConventionRow, [string]>(
           `SELECT DISTINCT e.id, e.title, e.content, e.confidence
            FROM   entries e
            JOIN   entry_files ef ON ef.entry_id = e.id
@@ -722,7 +736,7 @@ program
            ORDER  BY e.confidence DESC
            LIMIT  10`,
         )
-        .all(targetPath, targetPath);
+        .all(targetPath);
 
       db.close();
 
@@ -854,8 +868,10 @@ program
   .option("--write", "Also write to .gyst-context.md for tools that read project files")
   .option("--dir <path>", "Project directory", process.cwd())
   .action(async (opts: { write: boolean; dir: string }) => {
+    const { resolve } = await import("node:path");
     const config = loadConfig(opts.dir);
-    const db = initDatabase(config.dbPath);
+    // Resolve dbPath relative to opts.dir so --dir truly isolates the project.
+    const db = initDatabase(resolve(opts.dir, config.dbPath));
     const { generateSessionContext } = await import("../capture/session-inject.js");
     const text = generateSessionContext({ db, projectDir: opts.dir });
     db.close();
