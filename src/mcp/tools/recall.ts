@@ -250,7 +250,7 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
           const base = scoreMap.get(e.id) ?? 0;
           let boosted = base;
           if (e.type === "ghost_knowledge") {
-            boosted = Math.min(1.0, base + 0.1);
+            boosted = Math.min(1.0, base + 0.15);
           } else if (e.type === "convention" && input.files.length > 0) {
             // Boost conventions relevant to the requested file directories.
             // We don't have entry_files in the fetched rows, so use a small
