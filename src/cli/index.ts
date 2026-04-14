@@ -724,4 +724,55 @@ program
     }
   });
 
+// ---------------------------------------------------------------------------
+// dashboard
+// ---------------------------------------------------------------------------
+
+program
+  .command("dashboard")
+  .description("Start the local Gyst knowledge graph dashboard")
+  .option("-p, --port <number>", "Port to listen on", "37778")
+  .option("--no-open", "Do not auto-open the browser")
+  .action(async (opts: { port: string; open: boolean }) => {
+    try {
+      const config = loadConfig();
+      const db = initDatabase(config.dbPath);
+      const port = Number(opts.port);
+      if (isNaN(port) || port < 1 || port > 65535) {
+        process.stdout.write("Error: --port must be a number between 1 and 65535\n");
+        process.exit(1);
+      }
+
+      const { startDashboardServer } = await import("../dashboard/server.js");
+      const { url, stop } = await startDashboardServer({
+        db,
+        port,
+        openBrowser: opts.open,
+      });
+
+      process.stdout.write(`Gyst dashboard running at ${url}\n`);
+      process.stdout.write("  Press Ctrl-C to stop.\n");
+      logger.info("dashboard started", { url, port });
+
+      const shutdown = async (): Promise<void> => {
+        process.stdout.write("\nStopping dashboard…\n");
+        stop();
+        db.close();
+        process.exit(0);
+      };
+
+      process.on("SIGINT", shutdown);
+      process.on("SIGTERM", shutdown);
+
+      // Keep the process alive (Bun.serve already does this, but belt-and-suspenders)
+      await new Promise<never>(() => { /* intentionally never resolves */ });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : String(err);
+      logger.error("dashboard failed", { error: message });
+      process.stdout.write(`Error: ${message}\n`);
+      process.exit(1);
+    }
+  });
+
 program.parse();
