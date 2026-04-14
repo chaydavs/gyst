@@ -22,7 +22,7 @@ const ACTIVITY_SCHEMA_STATEMENTS: readonly string[] = [
     id           INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     team_id      TEXT    NOT NULL REFERENCES teams(id),
     developer_id TEXT    NOT NULL,
-    action       TEXT    NOT NULL CHECK (action IN ('learn', 'recall', 'conventions', 'failures')),
+    action       TEXT    NOT NULL CHECK (action IN ('learn', 'recall', 'conventions', 'failures', 'harvest', 'feedback')),
     entry_id     TEXT,
     files        TEXT,
     timestamp    TEXT    NOT NULL DEFAULT (datetime('now'))
@@ -39,8 +39,8 @@ const ACTIVITY_SCHEMA_STATEMENTS: readonly string[] = [
 // Public types
 // ---------------------------------------------------------------------------
 
-/** The four MCP tool names that can be logged. */
-export type ActivityAction = "learn" | "recall" | "conventions" | "failures";
+/** The six MCP tool names that can be logged. */
+export type ActivityAction = "learn" | "recall" | "conventions" | "failures" | "harvest" | "feedback";
 
 /** A single row from `activity_log` with deserialized fields. */
 export interface ActivityEntry {
@@ -65,9 +65,18 @@ export interface ActiveDeveloper {
 // Schema bootstrap
 // ---------------------------------------------------------------------------
 
+/** Result of the sqlite_master check for the action column constraint. */
+interface SqlRow {
+  readonly sql: string | null;
+}
+
 /**
  * Applies the activity_log table and indexes to an existing database.
  * Safe to call multiple times — all statements use `IF NOT EXISTS`.
+ *
+ * Also runs an idempotent migration: if activity_log already exists but
+ * its CHECK constraint does not allow 'harvest', the table is rebuilt using
+ * the SQLite rename-recreate pattern so that existing rows are preserved.
  *
  * NOTE: Assumes the `teams` table already exists (created by initTeamSchema).
  *
@@ -77,6 +86,52 @@ export function initActivitySchema(db: Database): void {
   for (const stmt of ACTIVITY_SCHEMA_STATEMENTS) {
     db.run(stmt);
   }
+
+  // Migration: expand the CHECK constraint to include 'harvest' and 'feedback'.
+  // We detect the old constraint by looking for the absence of 'harvest' in the
+  // stored DDL, then perform the rename-recreate pattern inside a transaction.
+  const existingDdl = db
+    .query<SqlRow, [string]>(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+    )
+    .get("activity_log");
+
+  if (existingDdl?.sql !== null && existingDdl?.sql !== undefined) {
+    const needsMigration = !existingDdl.sql.includes("harvest");
+
+    if (needsMigration) {
+      logger.info("activity_log: migrating CHECK constraint to include harvest/feedback");
+
+      db.transaction(() => {
+        db.run(`CREATE TABLE IF NOT EXISTS activity_log_new (
+          id           INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          team_id      TEXT    NOT NULL REFERENCES teams(id),
+          developer_id TEXT    NOT NULL,
+          action       TEXT    NOT NULL CHECK (action IN ('learn', 'recall', 'conventions', 'failures', 'harvest', 'feedback')),
+          entry_id     TEXT,
+          files        TEXT,
+          timestamp    TEXT    NOT NULL DEFAULT (datetime('now'))
+        )`);
+
+        db.run(`INSERT INTO activity_log_new
+                  (id, team_id, developer_id, action, entry_id, files, timestamp)
+                SELECT id, team_id, developer_id, action, entry_id, files, timestamp
+                FROM   activity_log`);
+
+        db.run("DROP TABLE activity_log");
+        db.run("ALTER TABLE activity_log_new RENAME TO activity_log");
+      })();
+
+      // Re-create indexes (they were dropped with the old table)
+      db.run(`CREATE INDEX IF NOT EXISTS idx_activity_team_time
+                ON activity_log(team_id, timestamp)`);
+      db.run(`CREATE INDEX IF NOT EXISTS idx_activity_developer
+                ON activity_log(developer_id, timestamp)`);
+
+      logger.info("activity_log: migration complete");
+    }
+  }
+
   logger.debug("Activity schema applied");
 }
 

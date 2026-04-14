@@ -79,7 +79,11 @@
       "Bash(tests/benchmark/coir-env/bin/python3 -c \"import coir; import inspect; print\\(dir\\(coir\\)\\)\")",
       "Bash(tests/benchmark/coir-env/bin/python3 -c ':*)",
       "Bash(tests/benchmark/coir-env/bin/python3 tests/benchmark/coir/run-coir.py)",
-      "Bash(tee tests/benchmark/coir/run.log)"
+      "Bash(tee tests/benchmark/coir/run.log)",
+      "Bash(wc -l /Users/chaitanyadavuluri/Desktop/SustainableMemory/src/server/*.ts)",
+      "Bash(grep -l \"Http\\\\b\" /Users/chaitanyadavuluri/Desktop/SustainableMemory/src/server/tools/*.ts)",
+      "Bash(wc:*)",
+      "Bash(git -C /Users/chaitanyadavuluri/Desktop/SustainableMemory diff --stat HEAD)"
     ]
   }
 }

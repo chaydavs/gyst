@@ -13,6 +13,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Database } from "bun:sqlite";
 import { truncateToTokenBudget } from "../../utils/tokens.js";
 import { logger } from "../../utils/logger.js";
+import type { ToolContext } from "../register-tools.js";
 
 // ---------------------------------------------------------------------------
 // Input schema
@@ -185,9 +186,10 @@ function formatActivityRows(rows: ActivityRow[], hours: number): string {
  * are not configured (table absent) a guidance message is returned.
  *
  * @param server - The McpServer instance to register on.
- * @param db - Open bun:sqlite Database.
+ * @param ctx - Tool context containing db, mode, and optional team identifiers.
  */
-export function registerActivityTool(server: McpServer, db: Database): void {
+export function registerActivityTool(server: McpServer, ctx: ToolContext): void {
+  const { db } = ctx;
   server.tool(
     "activity",
     "Get recent team activity — what other developers' agents have learned and discovered",

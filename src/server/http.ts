@@ -5,10 +5,15 @@
  * AI clients can connect over HTTP instead of stdio.
  *
  * Routes:
- *   GET  /health  — health check (no auth required)
- *   POST /mcp     — MCP Streamable HTTP endpoint (Bearer auth required)
- *   GET  /mcp     — SSE stream for server-initiated messages (Bearer auth required)
- *   *             — 404
+ *   GET    /health               — health check (no auth required)
+ *   POST   /mcp                  — MCP Streamable HTTP endpoint (Bearer auth required)
+ *   GET    /mcp                  — SSE stream for server-initiated messages (Bearer auth required)
+ *   POST   /team                 — create team (bootstrap or admin)
+ *   POST   /team/invite          — generate invite key (admin only)
+ *   POST   /team/join            — exchange invite key for member key
+ *   GET    /team/members         — list team members (any authenticated member)
+ *   DELETE /team/members/:id     — remove member + revoke all their keys (admin only)
+ *   *                            — 404
  *
  * Auth:
  *   Every /mcp request must carry `Authorization: Bearer gyst_<prefix>_<...>`.
@@ -19,19 +24,33 @@
  *   Stateless — each request gets its own transport instance.  This keeps the
  *   server horizontally scalable and avoids in-memory session state.  Clients
  *   that need to resume long-running operations should reconnect.
+ *
+ * CORS:
+ *   Origin controlled by GYST_CORS_ORIGIN env var (default: "*").
+ *   OPTIONS preflight requests are handled automatically.
+ *
+ * Observability:
+ *   Every response carries an X-Request-Id header.
+ *   A structured access log entry is emitted via logger.info after each response.
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { z } from "zod";
 import { initDatabase } from "../store/database.js";
 import { loadConfig } from "../utils/config.js";
 import { logger } from "../utils/logger.js";
-import { AuthError, authenticateRequest, initTeamSchema } from "./auth.js";
+import {
+  AuthError,
+  authenticateRequest,
+  createInviteKey,
+  createTeam,
+  initTeamSchema,
+  joinTeam,
+} from "./auth.js";
 import { initActivitySchema } from "./activity.js";
-import { registerHttpLearnTool } from "./tools/learnHttp.js";
-import { registerHttpRecallTool } from "./tools/recallHttp.js";
-import { registerHttpConventionsTool } from "./tools/conventionsHttp.js";
-import { registerHttpFailuresTool } from "./tools/failuresHttp.js";
+import { getTeamMembers, removeMember } from "./team.js";
+import { registerAllTools } from "../mcp/register-tools.js";
 import type { Database } from "bun:sqlite";
 import type { AuthContext } from "./auth.js";
 
@@ -47,47 +66,90 @@ export interface HttpServerOptions {
   readonly dbPath: string;
 }
 
-// ---------------------------------------------------------------------------
-// Health check response
-// ---------------------------------------------------------------------------
-
-const HEALTH_RESPONSE = new Response(
-  JSON.stringify({ status: "ok", service: "gyst", version: "0.1.0" }),
-  {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  },
-);
+/** Handle returned by startHttpServer — call stop() to shut the server down. */
+export interface HttpServerHandle {
+  /** Stops the HTTP server and closes all connections. */
+  readonly stop: () => void;
+}
 
 // ---------------------------------------------------------------------------
-// Error responses
+// CORS configuration
 // ---------------------------------------------------------------------------
 
-function unauthorizedResponse(message: string): Response {
-  return new Response(
-    JSON.stringify({ error: message }),
-    {
-      status: 401,
-      headers: {
-        "Content-Type": "application/json",
-        "WWW-Authenticate": 'Bearer realm="gyst"',
-      },
-    },
+const CORS_ORIGIN = process.env["GYST_CORS_ORIGIN"] ?? "*";
+
+const CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Origin": CORS_ORIGIN,
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type",
+  "Access-Control-Max-Age": "86400",
+};
+
+// ---------------------------------------------------------------------------
+// Response helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Adds CORS and request-id headers to an existing Response, returning a new
+ * Response object (immutable pattern).
+ */
+function withMeta(res: Response, requestId: string): Response {
+  const headers = new Headers(res.headers);
+  headers.set("X-Request-Id", requestId);
+  headers.set("Access-Control-Allow-Origin", CORS_ORIGIN);
+  return new Response(res.body, {
+    status: res.status,
+    statusText: res.statusText,
+    headers,
+  });
+}
+
+/**
+ * Builds a JSON response with the given status, body, and standard headers.
+ */
+function jsonResponse(
+  body: unknown,
+  status: number,
+  requestId: string,
+  extraHeaders?: Record<string, string>,
+): Response {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "X-Request-Id": requestId,
+    "Access-Control-Allow-Origin": CORS_ORIGIN,
+    ...extraHeaders,
+  };
+  return new Response(JSON.stringify(body), { status, headers });
+}
+
+/** 401 Unauthorized */
+function unauthorizedResponse(message: string, requestId: string): Response {
+  return jsonResponse(
+    { error: message },
+    401,
+    requestId,
+    { "WWW-Authenticate": 'Bearer realm="gyst"' },
   );
 }
 
-function notFoundResponse(): Response {
-  return new Response(
-    JSON.stringify({ error: "Not found" }),
-    { status: 404, headers: { "Content-Type": "application/json" } },
-  );
+/** 403 Forbidden */
+function forbiddenResponse(message: string, requestId: string): Response {
+  return jsonResponse({ error: message }, 403, requestId);
 }
 
-function internalErrorResponse(message: string): Response {
-  return new Response(
-    JSON.stringify({ error: message }),
-    { status: 500, headers: { "Content-Type": "application/json" } },
-  );
+/** 400 Bad Request */
+function badRequestResponse(message: string, requestId: string): Response {
+  return jsonResponse({ error: message }, 400, requestId);
+}
+
+/** 404 Not Found */
+function notFoundResponse(requestId: string): Response {
+  return jsonResponse({ error: "Not found" }, 404, requestId);
+}
+
+/** 500 Internal Server Error */
+function internalErrorResponse(message: string, requestId: string): Response {
+  return jsonResponse({ error: message }, 500, requestId);
 }
 
 // ---------------------------------------------------------------------------
@@ -95,9 +157,9 @@ function internalErrorResponse(message: string): Response {
 // ---------------------------------------------------------------------------
 
 /**
- * Creates a fresh McpServer with all tools registered for a specific auth
+ * Creates a fresh McpServer with all 8 tools registered for a specific auth
  * context.  Tools receive `authCtx` in their closure so they can log activity
- * and (in future) scope queries to the caller's team.
+ * and scope queries to the caller's team.
  *
  * @param db      - Open database connection (shared across requests).
  * @param authCtx - Resolved auth context for this request.
@@ -105,16 +167,238 @@ function internalErrorResponse(message: string): Response {
 function createMcpServer(db: Database, authCtx: AuthContext): McpServer {
   const server = new McpServer({ name: "gyst", version: "0.1.0" });
 
-  registerHttpLearnTool(server, db, authCtx);
-  registerHttpRecallTool(server, db, authCtx);
-  registerHttpConventionsTool(server, db, authCtx);
-  registerHttpFailuresTool(server, db, authCtx);
+  registerAllTools(server, {
+    mode: "team",
+    db,
+    teamId: authCtx.teamId,
+    developerId: authCtx.developerId ?? undefined,
+  });
 
   return server;
 }
 
 // ---------------------------------------------------------------------------
-// Request handler
+// Zod schemas for team management routes
+// ---------------------------------------------------------------------------
+
+const CreateTeamBody = z.object({
+  name: z.string().min(1).max(200),
+});
+
+const JoinTeamBody = z.object({
+  displayName: z.string().min(1).max(200),
+});
+
+// ---------------------------------------------------------------------------
+// Team management route handlers
+// ---------------------------------------------------------------------------
+
+/** Checks whether any teams exist in the database. */
+function teamsExist(db: Database): boolean {
+  const row = db
+    .query<{ cnt: number }, []>("SELECT COUNT(*) AS cnt FROM teams")
+    .get();
+  return (row?.cnt ?? 0) > 0;
+}
+
+/**
+ * POST /team — create a team.
+ * Unauthenticated bootstrap when no teams exist; admin auth required otherwise.
+ */
+async function handleCreateTeam(
+  req: Request,
+  db: Database,
+  requestId: string,
+): Promise<Response> {
+  const existing = teamsExist(db);
+
+  if (existing) {
+    let authCtx: AuthContext;
+    try {
+      authCtx = await authenticateRequest(req, db);
+    } catch (err) {
+      const msg = err instanceof AuthError ? err.message : "Unauthorized";
+      return unauthorizedResponse(msg, requestId);
+    }
+    if (authCtx.role !== "admin") {
+      return forbiddenResponse("Admin role required to create additional teams", requestId);
+    }
+  }
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return badRequestResponse("Request body must be valid JSON", requestId);
+  }
+
+  const parsed = CreateTeamBody.safeParse(body);
+  if (!parsed.success) {
+    const msg = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+    return badRequestResponse(`Invalid request body: ${msg}`, requestId);
+  }
+
+  try {
+    const { teamId, adminKey } = createTeam(db, parsed.data.name);
+    logger.info("Team created via HTTP", { teamId, requestId });
+    return jsonResponse({ teamId, adminKey }, 201, requestId);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error("Failed to create team", { error: msg, requestId });
+    return internalErrorResponse("Failed to create team", requestId);
+  }
+}
+
+/**
+ * POST /team/invite — generate an invite key.
+ * Requires admin Bearer token.
+ */
+async function handleCreateInvite(
+  req: Request,
+  db: Database,
+  requestId: string,
+): Promise<Response> {
+  let authCtx: AuthContext;
+  try {
+    authCtx = await authenticateRequest(req, db);
+  } catch (err) {
+    const msg = err instanceof AuthError ? err.message : "Unauthorized";
+    return unauthorizedResponse(msg, requestId);
+  }
+
+  if (authCtx.role !== "admin") {
+    return forbiddenResponse("Admin role required to create invite keys", requestId);
+  }
+
+  try {
+    const inviteKey = createInviteKey(db, authCtx.teamId);
+    logger.info("Invite key created via HTTP", { teamId: authCtx.teamId, requestId });
+    return jsonResponse({ inviteKey, expiresInHours: 24 }, 201, requestId);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error("Failed to create invite key", { error: msg, requestId });
+    return internalErrorResponse("Failed to create invite key", requestId);
+  }
+}
+
+/**
+ * POST /team/join — exchange an invite key for a member key.
+ * The invite key IS the Bearer token.
+ */
+async function handleJoinTeam(
+  req: Request,
+  db: Database,
+  requestId: string,
+): Promise<Response> {
+  let authCtx: AuthContext;
+  try {
+    authCtx = await authenticateRequest(req, db);
+  } catch (err) {
+    const msg = err instanceof AuthError ? err.message : "Unauthorized";
+    return unauthorizedResponse(msg, requestId);
+  }
+
+  if (authCtx.role !== "invite") {
+    return forbiddenResponse("An invite key is required to join a team", requestId);
+  }
+
+  // Extract the raw invite key from the Authorization header so joinTeam
+  // can run its internal bcrypt verification.
+  const rawKey = req.headers.get("Authorization")?.split(" ")[1] ?? "";
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return badRequestResponse("Request body must be valid JSON", requestId);
+  }
+
+  const parsed = JoinTeamBody.safeParse(body);
+  if (!parsed.success) {
+    const msg = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+    return badRequestResponse(`Invalid request body: ${msg}`, requestId);
+  }
+
+  try {
+    const { developerId, memberKey } = await joinTeam(db, rawKey, parsed.data.displayName);
+    logger.info("Developer joined team via HTTP", { developerId, requestId });
+    return jsonResponse({ developerId, memberKey }, 201, requestId);
+  } catch (err) {
+    if (err instanceof AuthError) {
+      return unauthorizedResponse(err.message, requestId);
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error("Failed to join team", { error: msg, requestId });
+    return internalErrorResponse("Failed to join team", requestId);
+  }
+}
+
+/**
+ * GET /team/members — list team members.
+ * Any authenticated member may call this.
+ */
+async function handleListMembers(
+  req: Request,
+  db: Database,
+  requestId: string,
+): Promise<Response> {
+  let authCtx: AuthContext;
+  try {
+    authCtx = await authenticateRequest(req, db);
+  } catch (err) {
+    const msg = err instanceof AuthError ? err.message : "Unauthorized";
+    return unauthorizedResponse(msg, requestId);
+  }
+
+  try {
+    const members = getTeamMembers(db, authCtx.teamId);
+    return jsonResponse({ members }, 200, requestId);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error("Failed to list members", { error: msg, requestId });
+    return internalErrorResponse("Failed to list team members", requestId);
+  }
+}
+
+/**
+ * DELETE /team/members/:id — remove a member and revoke all their keys.
+ * Requires admin role. Cannot remove yourself.
+ */
+async function handleRemoveMember(
+  req: Request,
+  db: Database,
+  requestId: string,
+  targetDeveloperId: string,
+): Promise<Response> {
+  let authCtx: AuthContext;
+  try {
+    authCtx = await authenticateRequest(req, db);
+  } catch (err) {
+    const msg = err instanceof AuthError ? err.message : "Unauthorized";
+    return unauthorizedResponse(msg, requestId);
+  }
+
+  if (authCtx.role !== "admin") {
+    return forbiddenResponse("Admin role required to remove members", requestId);
+  }
+
+  if (authCtx.developerId !== null && authCtx.developerId === targetDeveloperId) {
+    return badRequestResponse("Cannot remove yourself from the team", requestId);
+  }
+
+  try {
+    removeMember(db, authCtx.teamId, targetDeveloperId);
+    logger.info("Member removed via HTTP", { targetDeveloperId, teamId: authCtx.teamId, requestId });
+    return jsonResponse({ success: true }, 200, requestId);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error("Failed to remove member", { error: msg, requestId });
+    return internalErrorResponse("Failed to remove member", requestId);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// /mcp request handler
 // ---------------------------------------------------------------------------
 
 /**
@@ -123,46 +407,67 @@ function createMcpServer(db: Database, authCtx: AuthContext): McpServer {
  *  2. Create a stateless transport + scoped MCP server.
  *  3. Connect and delegate to the transport.
  *
- * @param req - Incoming Web Standard Request.
- * @param db  - Shared database connection.
+ * @param req       - Incoming Web Standard Request.
+ * @param db        - Shared database connection.
+ * @param requestId - UUID for this request (added to response headers).
  */
-async function handleMcpRequest(req: Request, db: Database): Promise<Response> {
-  // 1. Authenticate
+async function handleMcpRequest(
+  req: Request,
+  db: Database,
+  requestId: string,
+): Promise<Response> {
   let authCtx: AuthContext;
   try {
     authCtx = await authenticateRequest(req, db);
   } catch (err) {
     if (err instanceof AuthError) {
-      logger.warn("Authentication failed", { message: err.message });
-      return unauthorizedResponse(err.message);
+      logger.warn("Authentication failed", { message: err.message, requestId });
+      return unauthorizedResponse(err.message, requestId);
     }
     const msg = err instanceof Error ? err.message : String(err);
-    logger.error("Unexpected auth error", { error: msg });
-    return internalErrorResponse("Authentication error");
+    logger.error("Unexpected auth error", { error: msg, requestId });
+    return internalErrorResponse("Authentication error", requestId);
   }
 
-  // 2. Build scoped MCP server + stateless transport
   const mcpServer = createMcpServer(db, authCtx);
   const transport = new WebStandardStreamableHTTPServerTransport({
-    // Stateless: no sessionIdGenerator
     sessionIdGenerator: undefined,
     enableJsonResponse: false,
   });
 
-  // 3. Connect and handle
   try {
     await mcpServer.connect(transport);
     const response = await transport.handleRequest(req);
-    return response;
+    return withMeta(response, requestId);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error("MCP request handling failed", {
       teamId: authCtx.teamId,
       developerId: authCtx.developerId,
       error: msg,
+      requestId,
     });
-    return internalErrorResponse("Internal server error");
+    return internalErrorResponse("Internal server error", requestId);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Access log helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Emits a structured access log entry via logger.info.
+ */
+function logAccess(
+  requestId: string,
+  method: string,
+  path: string,
+  developerId: string | null,
+  start: number,
+  status: number,
+): void {
+  const latencyMs = Math.round(performance.now() - start);
+  logger.info("access", { requestId, method, path, developerId, latencyMs, status });
 }
 
 // ---------------------------------------------------------------------------
@@ -178,52 +483,88 @@ async function handleMcpRequest(req: Request, db: Database): Promise<Response> {
  *
  * @param options - Port and database path.
  */
-export function startHttpServer(options: HttpServerOptions): void {
+export function startHttpServer(options: HttpServerOptions): HttpServerHandle {
   const { port, dbPath } = options;
 
-  // Load config for wikiDir etc.
   const config = loadConfig();
   logger.setLevel(config.logLevel);
 
-  // Open database and apply all schema extensions
   const db = initDatabase(dbPath);
   initTeamSchema(db);
   initActivitySchema(db);
 
-  // Start Bun HTTP server
   const server = Bun.serve({
     port,
     async fetch(req: Request): Promise<Response> {
+      const start = performance.now();
+      const requestId = crypto.randomUUID();
       const url = new URL(req.url);
       const method = req.method.toUpperCase();
+      const path = url.pathname;
 
-      logger.debug("HTTP request", { method, path: url.pathname });
+      logger.debug("HTTP request", { method, path, requestId });
 
-      // Health check — no auth required
-      if (url.pathname === "/health" && method === "GET") {
-        return HEALTH_RESPONSE;
+      // ------------------------------------------------------------------
+      // CORS preflight
+      // ------------------------------------------------------------------
+      if (method === "OPTIONS") {
+        const res = new Response(null, {
+          status: 204,
+          headers: { ...CORS_HEADERS, "X-Request-Id": requestId },
+        });
+        logAccess(requestId, method, path, null, start, 204);
+        return res;
       }
 
-      // MCP endpoint
-      if (url.pathname === "/mcp" && (method === "POST" || method === "GET")) {
-        return handleMcpRequest(req, db);
+      let response: Response;
+
+      // ------------------------------------------------------------------
+      // Route dispatch
+      // ------------------------------------------------------------------
+      if (path === "/health" && method === "GET") {
+        response = jsonResponse(
+          { status: "ok", service: "gyst", version: "0.1.0" },
+          200,
+          requestId,
+        );
+      } else if (path === "/mcp" && (method === "POST" || method === "GET")) {
+        response = await handleMcpRequest(req, db, requestId);
+      } else if (path === "/team" && method === "POST") {
+        response = await handleCreateTeam(req, db, requestId);
+      } else if (path === "/team/invite" && method === "POST") {
+        response = await handleCreateInvite(req, db, requestId);
+      } else if (path === "/team/join" && method === "POST") {
+        response = await handleJoinTeam(req, db, requestId);
+      } else if (path === "/team/members" && method === "GET") {
+        response = await handleListMembers(req, db, requestId);
+      } else {
+        const memberDeleteMatch = /^\/team\/members\/([^/]+)$/.exec(path);
+        if (memberDeleteMatch !== null && method === "DELETE") {
+          response = await handleRemoveMember(req, db, requestId, memberDeleteMatch[1]!);
+        } else {
+          response = notFoundResponse(requestId);
+        }
       }
 
-      return notFoundResponse();
+      logAccess(requestId, method, path, null, start, response.status);
+      return response;
     },
   });
 
-  logger.info("Gyst HTTP server started", {
-    port: server.port,
-    dbPath,
-  });
+  logger.info("Gyst HTTP server started", { port: server.port, dbPath });
 
-  // Log startup to stdout so the user can see the address
   process.stdout.write(
     `Gyst HTTP server listening on http://localhost:${server.port}\n`,
   );
   process.stdout.write(`  MCP endpoint : POST http://localhost:${server.port}/mcp\n`);
   process.stdout.write(`  Health check : GET  http://localhost:${server.port}/health\n`);
+
+  return {
+    stop: () => {
+      server.stop(true);
+      logger.info("Gyst HTTP server stopped", { port: server.port });
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------

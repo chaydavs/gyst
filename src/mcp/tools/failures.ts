@@ -17,6 +17,7 @@ import { searchByBM25 } from "../../store/search.js";
 import { loadConfig } from "../../utils/config.js";
 import { truncateToTokenBudget } from "../../utils/tokens.js";
 import { logger } from "../../utils/logger.js";
+import type { ToolContext } from "../register-tools.js";
 
 // ---------------------------------------------------------------------------
 // Input schema
@@ -135,9 +136,10 @@ function formatFailures(rows: FailureRow[], maxTokens: number): string {
  * fixes and resolutions.
  *
  * @param server - The McpServer instance to register on.
- * @param db - Open bun:sqlite Database.
+ * @param ctx - Tool context containing db, mode, and optional team identifiers.
  */
-export function registerFailuresTool(server: McpServer, db: Database): void {
+export function registerFailuresTool(server: McpServer, ctx: ToolContext): void {
+  const { db } = ctx;
   server.tool(
     "failures",
     "Check if an error has been seen before and retrieve known fixes. Call this immediately when encountering an unfamiliar error.",
@@ -180,6 +182,13 @@ export function registerFailuresTool(server: McpServer, db: Database): void {
         total: rows.length,
         afterFilter: filtered.length,
       });
+
+      // Log activity when running in team mode with a known developer
+      if (ctx.mode === "team" && ctx.developerId !== undefined && ctx.teamId !== undefined) {
+        const { logActivity } = await import("../../server/activity.js");
+        const fileList = input.file !== undefined ? [input.file] : undefined;
+        logActivity(ctx.db, ctx.teamId, ctx.developerId, "failures", undefined, fileList);
+      }
 
       const formatted = formatFailures(filtered, config.maxRecallTokens);
 

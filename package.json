@@ -35,7 +35,8 @@
     "collab:flow": "bun test tests/collaborative/knowledge-flow.test.ts",
     "collab:cross": "bun test tests/collaborative/cross-tool.test.ts",
     "collab:evolution": "bun test tests/collaborative/knowledge-evolution.test.ts",
-    "collab:concurrent": "bun test tests/collaborative/concurrent.test.ts"
+    "collab:concurrent": "bun test tests/collaborative/concurrent.test.ts",
+    "test:e2e:http": "bun test tests/e2e/http-e2e.test.ts"
   },
   "bin": {
     "gyst": "./src/cli/index.ts"

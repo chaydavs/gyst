@@ -24,6 +24,7 @@ import { embedAndStore } from "../../store/embeddings.js";
 import { loadConfig } from "../../utils/config.js";
 import { logger } from "../../utils/logger.js";
 import { DatabaseError, ValidationError } from "../../utils/errors.js";
+import type { ToolContext } from "../register-tools.js";
 
 // ---------------------------------------------------------------------------
 // Input schema
@@ -245,9 +246,10 @@ function mergeIntoExisting(
  * and persists to SQLite + the markdown wiki.
  *
  * @param server - The McpServer instance to register on.
- * @param db - Open bun:sqlite Database.
+ * @param ctx - Tool context containing db, mode, and optional team identifiers.
  */
-export function registerLearnTool(server: McpServer, db: Database): void {
+export function registerLearnTool(server: McpServer, ctx: ToolContext): void {
+  const { db } = ctx;
   server.tool(
     "learn",
     "Record team knowledge: error patterns, conventions, decisions, or learnings. Use this whenever you discover something worth remembering for the team.",
@@ -308,6 +310,12 @@ export function registerLearnTool(server: McpServer, db: Database): void {
             now,
           });
 
+          // Log activity when running in team mode with a known developer
+          if (ctx.mode === "team" && ctx.developerId !== undefined && ctx.teamId !== undefined) {
+            const { logActivity } = await import("../../server/activity.js");
+            logActivity(ctx.db, ctx.teamId, ctx.developerId, "learn", existingRow.id, valid.files);
+          }
+
           return {
             content: [
               {
@@ -323,9 +331,14 @@ export function registerLearnTool(server: McpServer, db: Database): void {
       const id = crypto.randomUUID();
 
       // Determine scope: use explicit input if provided, otherwise apply
-      // type-based defaults (learning → personal; everything else → team).
-      const defaultScope =
-        valid.type === "learning" ? "personal" : "team";
+      // mode-based defaults. In team mode all entries default to "team";
+      // in personal mode learnings default to "personal", others to "team".
+      const defaultScope: "personal" | "team" =
+        ctx.mode === "team"
+          ? "team"
+          : valid.type === "learning"
+            ? "personal"
+            : "team";
       const resolvedScope: "personal" | "team" | "project" =
         valid.scope ?? defaultScope;
 
@@ -371,6 +384,12 @@ export function registerLearnTool(server: McpServer, db: Database): void {
       }
 
       logger.info("New entry created", { id, type: valid.type, title: valid.title });
+
+      // Log activity when running in team mode with a known developer
+      if (ctx.mode === "team" && ctx.developerId !== undefined && ctx.teamId !== undefined) {
+        const { logActivity } = await import("../../server/activity.js");
+        logActivity(ctx.db, ctx.teamId, ctx.developerId, "learn", id, valid.files);
+      }
 
       return {
         content: [

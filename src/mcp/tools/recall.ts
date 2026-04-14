@@ -18,6 +18,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Database } from "bun:sqlite";
+import type { ToolContext } from "../register-tools.js";
 import {
   searchByFilePath,
   searchByBM25,
@@ -157,9 +158,10 @@ function fetchEntries(
  *   < 800    → ultra-minimal (1 entry, first sentence only)
  *
  * @param server - The McpServer instance to register on.
- * @param db - Open bun:sqlite Database.
+ * @param ctx - Tool context containing db, mode, and optional team identifiers.
  */
-export function registerRecallTool(server: McpServer, db: Database): void {
+export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
+  const { db } = ctx;
   server.tool(
     "recall",
     "Search team knowledge for relevant patterns, conventions, decisions, or learnings. Use this before writing code to surface applicable team context.",
@@ -283,6 +285,12 @@ export function registerRecallTool(server: McpServer, db: Database): void {
       });
 
       const formatted = formatForContext(formattableEntries, budget);
+
+      // Log activity when running in team mode with a known developer
+      if (ctx.mode === "team" && ctx.developerId !== undefined && ctx.teamId !== undefined) {
+        const { logActivity } = await import("../../server/activity.js");
+        logActivity(ctx.db, ctx.teamId, ctx.developerId, "recall", undefined, input.files);
+      }
 
       return {
         content: [

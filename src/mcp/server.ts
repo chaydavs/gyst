@@ -14,14 +14,7 @@ import { canLoadExtensions, initDatabase } from "../store/database.js";
 import { backfillVectors, initVectorStore } from "../store/embeddings.js";
 import { loadConfig } from "../utils/config.js";
 import { logger } from "../utils/logger.js";
-import { registerLearnTool } from "./tools/learn.js";
-import { registerRecallTool } from "./tools/recall.js";
-import { registerConventionsTool } from "./tools/conventions.js";
-import { registerFailuresTool } from "./tools/failures.js";
-import { registerActivityTool } from "./tools/activity.js";
-import { registerStatusTool } from "./tools/status.js";
-import { registerFeedbackTool } from "./tools/feedback.js";
-import { registerHarvestTool } from "./tools/harvest.js";
+import { registerAllTools } from "./register-tools.js";
 
 // ---------------------------------------------------------------------------
 // Bootstrap
@@ -63,14 +56,7 @@ async function main(): Promise<void> {
   }
 
   // Register tools
-  registerLearnTool(server, db);
-  registerRecallTool(server, db);
-  registerConventionsTool(server, db);
-  registerFailuresTool(server, db);
-  registerActivityTool(server, db);
-  registerStatusTool(server, db);
-  registerFeedbackTool(server, db);
-  registerHarvestTool(server, db);
+  registerAllTools(server, { mode: "personal", db });
 
   // Connect via stdio transport
   const transport = new StdioServerTransport();

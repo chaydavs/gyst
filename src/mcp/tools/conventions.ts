@@ -13,6 +13,7 @@ import type { Database } from "bun:sqlite";
 import { loadConfig } from "../../utils/config.js";
 import { truncateToTokenBudget } from "../../utils/tokens.js";
 import { logger } from "../../utils/logger.js";
+import type { ToolContext } from "../register-tools.js";
 
 // ---------------------------------------------------------------------------
 // Input schema
@@ -134,9 +135,10 @@ function formatConventions(rows: ConventionRow[], maxTokens: number): string {
  * Returns team coding standards that apply to the current directory or tags.
  *
  * @param server - The McpServer instance to register on.
- * @param db - Open bun:sqlite Database.
+ * @param ctx - Tool context containing db, mode, and optional team identifiers.
  */
-export function registerConventionsTool(server: McpServer, db: Database): void {
+export function registerConventionsTool(server: McpServer, ctx: ToolContext): void {
+  const { db } = ctx;
   server.tool(
     "conventions",
     "Get team coding standards and conventions relevant to the current context. Optionally filter by directory or tags.",
@@ -151,6 +153,12 @@ export function registerConventionsTool(server: McpServer, db: Database): void {
       const rows = fetchConventions(db, input.directory, input.tags);
 
       logger.info("conventions results", { count: rows.length });
+
+      // Log activity when running in team mode with a known developer
+      if (ctx.mode === "team" && ctx.developerId !== undefined && ctx.teamId !== undefined) {
+        const { logActivity } = await import("../../server/activity.js");
+        logActivity(ctx.db, ctx.teamId, ctx.developerId, "conventions");
+      }
 
       const formatted = formatConventions(rows, config.maxRecallTokens);
 

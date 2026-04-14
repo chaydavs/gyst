@@ -14,6 +14,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Database } from "bun:sqlite";
 import { truncateToTokenBudget } from "../../utils/tokens.js";
 import { logger } from "../../utils/logger.js";
+import type { ToolContext } from "../register-tools.js";
 
 // ---------------------------------------------------------------------------
 // Input schema
@@ -197,9 +198,10 @@ function formatStatus(
  * message is returned.
  *
  * @param server - The McpServer instance to register on.
- * @param db - Open bun:sqlite Database.
+ * @param ctx - Tool context containing db, mode, and optional team identifiers.
  */
-export function registerStatusTool(server: McpServer, db: Database): void {
+export function registerStatusTool(server: McpServer, ctx: ToolContext): void {
+  const { db } = ctx;
   server.tool(
     "status",
     "See who on the team is currently active and what files/modules they're working on",

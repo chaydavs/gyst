@@ -8,9 +8,9 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { Database } from "bun:sqlite";
 import { logger } from "../../utils/logger.js";
 import { ValidationError } from "../../utils/errors.js";
+import type { ToolContext } from "../register-tools.js";
 
 // ---------------------------------------------------------------------------
 // Input schema
@@ -34,9 +34,10 @@ const FeedbackInput = z.object({
  * calibration of the confidence scoring formula over time.
  *
  * @param server - The McpServer instance to register on.
- * @param db - Open bun:sqlite Database.
+ * @param ctx - Tool context containing db, mode, and optional team identifiers.
  */
-export function registerFeedbackTool(server: McpServer, db: Database): void {
+export function registerFeedbackTool(server: McpServer, ctx: ToolContext): void {
+  const { db } = ctx;
   server.tool(
     "feedback",
     "Record feedback on whether a recalled knowledge entry was helpful. This signal is used to calibrate confidence scores over time.",
@@ -44,6 +45,11 @@ export function registerFeedbackTool(server: McpServer, db: Database): void {
     async (input) => {
       try {
         const parsed = FeedbackInput.parse(input);
+
+        // In team mode, use the context developerId if the input didn't supply one.
+        const resolvedDeveloperId =
+          parsed.developer_id ??
+          (ctx.mode === "team" ? ctx.developerId : undefined);
 
         // Verify entry exists
         const existing = db
@@ -65,7 +71,7 @@ export function registerFeedbackTool(server: McpServer, db: Database): void {
            VALUES (?, ?, ?, ?, datetime('now'))`,
           [
             parsed.entry_id,
-            parsed.developer_id ?? null,
+            resolvedDeveloperId ?? null,
             parsed.helpful ? 1 : 0,
             parsed.note ?? null,
           ],

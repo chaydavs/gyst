@@ -646,6 +646,10 @@ describe("Suite 3: 500 read queries P50/P95 latency on 200-entry DB", () => {
     db.close();
   });
 
+  // 500 BM25 queries with query expansion + FTS5 sanitisation collectively
+  // exceed Bun's default 5s per-test timeout on a 200-entry DB. The P50/P95
+  // thresholds (20ms / 100ms) are the real performance contracts; this budget
+  // only covers the total wall-clock time needed to run all 500 queries.
   test("all 500 queries complete without throwing", () => {
     const errors: string[] = [];
 
@@ -666,7 +670,7 @@ describe("Suite 3: 500 read queries P50/P95 latency on 200-entry DB", () => {
 
     expect(errors).toHaveLength(0);
     expect(latencies).toHaveLength(500);
-  });
+  }, { timeout: 15000 });
 
   test("all recorded latencies are non-negative", () => {
     const negative = latencies.filter((l) => l < 0);

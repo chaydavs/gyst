@@ -29,6 +29,7 @@ import { findDuplicate } from "../../compiler/deduplicate.js";
 import { insertEntry } from "../../store/database.js";
 import { logger } from "../../utils/logger.js";
 import { ValidationError } from "../../utils/errors.js";
+import type { ToolContext } from "../register-tools.js";
 
 const HarvestInputSchema = z.object({
   transcript: z.string().min(1).max(100_000),
@@ -54,9 +55,10 @@ export interface HarvestParams {
  * Registers the harvest tool on the given MCP server.
  *
  * @param server - The McpServer instance to register on.
- * @param db - Open bun:sqlite Database.
+ * @param ctx - Tool context containing db, mode, and optional team identifiers.
  */
-export function registerHarvestTool(server: McpServer, db: Database): void {
+export function registerHarvestTool(server: McpServer, ctx: ToolContext): void {
+  const { db } = ctx;
   server.tool(
     "harvest",
     "Extract knowledge entries from a coding session transcript. Filters noise, pattern-matches decisions/errors/conventions/learnings, and stores them via the normal learn pipeline with automatic deduplication.",
@@ -72,7 +74,22 @@ export function registerHarvestTool(server: McpServer, db: Database): void {
         throw new ValidationError(`Invalid harvest input: ${msg}`);
       }
 
-      const result = harvestTranscript(db, parsed.data);
+      // In team mode, fall back to the context developerId if the input
+      // didn't provide one explicitly.
+      const resolvedDeveloperId =
+        parsed.data.developer_id ??
+        (ctx.mode === "team" ? ctx.developerId : undefined);
+
+      const result = harvestTranscript(db, {
+        ...parsed.data,
+        developer_id: resolvedDeveloperId,
+      });
+
+      // Log activity when running in team mode with a known developer
+      if (ctx.mode === "team" && resolvedDeveloperId !== undefined && ctx.teamId !== undefined) {
+        const { logActivity } = await import("../../server/activity.js");
+        logActivity(ctx.db, ctx.teamId, resolvedDeveloperId, "harvest");
+      }
 
       return {
         content: [
