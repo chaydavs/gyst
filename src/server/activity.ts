@@ -22,7 +22,7 @@ const ACTIVITY_SCHEMA_STATEMENTS: readonly string[] = [
     id           INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     team_id      TEXT    NOT NULL REFERENCES teams(id),
     developer_id TEXT    NOT NULL,
-    action       TEXT    NOT NULL CHECK (action IN ('learn', 'recall', 'conventions', 'failures', 'harvest', 'feedback')),
+    action       TEXT    NOT NULL CHECK (action IN ('learn', 'recall', 'conventions', 'failures', 'harvest', 'feedback', 'search', 'get_entry')),
     entry_id     TEXT,
     files        TEXT,
     timestamp    TEXT    NOT NULL DEFAULT (datetime('now'))
@@ -39,8 +39,8 @@ const ACTIVITY_SCHEMA_STATEMENTS: readonly string[] = [
 // Public types
 // ---------------------------------------------------------------------------
 
-/** The six MCP tool names that can be logged. */
-export type ActivityAction = "learn" | "recall" | "conventions" | "check_conventions" | "failures" | "harvest" | "feedback";
+/** The eight MCP tool names that can be logged. */
+export type ActivityAction = "learn" | "recall" | "conventions" | "check_conventions" | "failures" | "harvest" | "feedback" | "search" | "get_entry";
 
 /** A single row from `activity_log` with deserialized fields. */
 export interface ActivityEntry {
@@ -107,7 +107,7 @@ export function initActivitySchema(db: Database): void {
           id           INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
           team_id      TEXT    NOT NULL REFERENCES teams(id),
           developer_id TEXT    NOT NULL,
-          action       TEXT    NOT NULL CHECK (action IN ('learn', 'recall', 'conventions', 'failures', 'harvest', 'feedback')),
+          action       TEXT    NOT NULL CHECK (action IN ('learn', 'recall', 'conventions', 'failures', 'harvest', 'feedback', 'search', 'get_entry')),
           entry_id     TEXT,
           files        TEXT,
           timestamp    TEXT    NOT NULL DEFAULT (datetime('now'))

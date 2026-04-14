@@ -164,7 +164,7 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
   const { db } = ctx;
   server.tool(
     "recall",
-    "Search team knowledge for relevant patterns, conventions, decisions, or learnings. Use this before writing code to surface applicable team context.",
+    "Search team knowledge for relevant patterns, conventions, decisions, or learnings. Use this before writing code to surface applicable team context. For token-efficient retrieval, consider `search` + `get_entry` (7× savings): `search` returns a compact index, then call `get_entry` only for the results you want to read in full.",
     RecallInput.shape,
     async (input: RecallInputType) => {
       logger.info("recall tool called", {

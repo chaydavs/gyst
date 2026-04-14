@@ -775,4 +775,27 @@ program
     }
   });
 
+// ---------------------------------------------------------------------------
+// gyst inject-context — print compact session-start context block
+// ---------------------------------------------------------------------------
+
+program
+  .command("inject-context")
+  .description("Print a compact session-start context block for the current project")
+  .option("--write", "Also write to .gyst-context.md for tools that read project files")
+  .option("--dir <path>", "Project directory", process.cwd())
+  .action(async (opts: { write: boolean; dir: string }) => {
+    const config = loadConfig(opts.dir);
+    const db = initDatabase(config.dbPath);
+    const { generateSessionContext } = await import("../capture/session-inject.js");
+    const text = generateSessionContext({ db, projectDir: opts.dir });
+    db.close();
+    process.stdout.write(text + "\n");
+    if (opts.write) {
+      const { writeFileSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      writeFileSync(join(opts.dir, ".gyst-context.md"), text);
+    }
+  });
+
 program.parse();
