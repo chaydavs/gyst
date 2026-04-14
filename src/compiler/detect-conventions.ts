@@ -10,6 +10,13 @@
 import { readdir, readFile } from "fs/promises";
 import { join, relative, extname, basename } from "path";
 import { logger } from "../utils/logger.js";
+import {
+  IMPORT_LINE,
+  FILE_NAMING,
+  ERR_THROW_BARE,
+  ERR_THROW_CUSTOM,
+  classifyImportSource,
+} from "./patterns.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -17,7 +24,15 @@ import { logger } from "../utils/logger.js";
 
 /** A single convention detected within a directory. */
 export interface DetectedConvention {
-  category: "naming" | "imports" | "error_handling" | "exports" | "testing";
+  category:
+    | "naming"
+    | "imports"
+    | "error_handling"
+    | "exports"
+    | "testing"
+    | "file_naming"
+    | "imports_order"
+    | "custom_errors";
   /** Relative path like "src/api" */
   directory: string;
   /** Human-readable description: "camelCase functions", "relative imports", etc. */
@@ -97,6 +112,44 @@ interface FileAnalysis {
   namedExports: number;
   jestStyle: number;
   bunTest: number;
+  // file_naming: basename of the analysed file
+  fileBasename: string;
+  // imports_order: true when all imports follow builtin→external→internal order
+  importsOrdered: boolean;
+  // number of import statements (used to enforce the min-3-imports filter)
+  importCount: number;
+  // custom_errors: counts of bare vs. custom error throws
+  bareErrors: number;
+  customErrors: number;
+}
+
+/** Count import statements in a file. */
+function countImportLines(content: string): number {
+  return (content.match(/^import\s+/gm) ?? []).length;
+}
+
+/**
+ * Returns true if all imports in the file follow builtin→external→internal
+ * ordering.  Files with fewer than 3 imports are skipped (return true) because
+ * there is not enough signal to judge ordering discipline.
+ */
+function checkImportsOrdered(content: string): boolean {
+  // Reset lastIndex before using the global regex.
+  IMPORT_LINE.lastIndex = 0;
+  const matches = [...content.matchAll(IMPORT_LINE)];
+  if (matches.length < 3) return true;
+
+  type ImportKind = "builtin" | "external" | "internal";
+  const kindOrder: ImportKind[] = ["builtin", "external", "internal"];
+  const kinds = matches.map((m) => classifyImportSource(m[1] ?? ""));
+
+  let maxSeen = 0;
+  for (const kind of kinds) {
+    const idx = kindOrder.indexOf(kind);
+    if (idx < maxSeen) return false; // out of order
+    if (idx > maxSeen) maxSeen = idx;
+  }
+  return true;
 }
 
 /**
@@ -128,6 +181,11 @@ async function analyseFile(filePath: string): Promise<FileAnalysis | null> {
     namedExports: countMatches(content, namedExportRegex),
     jestStyle: countMatches(content, jestStyleRegex),
     bunTest: countMatches(content, bunTestRegex),
+    fileBasename: basename(filePath),
+    importsOrdered: checkImportsOrdered(content),
+    importCount: countImportLines(content),
+    bareErrors: countMatches(content, ERR_THROW_BARE),
+    customErrors: countMatches(content, ERR_THROW_CUSTOM),
   };
 }
 
@@ -266,6 +324,71 @@ function detectForDirectory(
 
     maybeEmit("testing", "bun test style", bunFiles, THRESHOLD_60);
     maybeEmit("testing", "jest describe/it style", jestFiles, THRESHOLD_60);
+  }
+
+  // --- file_naming ---
+  const filenames = analyses.map((a) => a.fileBasename);
+  const kebabCount = filenames.filter((n) => FILE_NAMING.kebab.test(n)).length;
+  const camelCount = filenames.filter(
+    (n) => FILE_NAMING.camel.test(n) && !FILE_NAMING.pascal.test(n),
+  ).length;
+  const pascalCount = filenames.filter((n) => FILE_NAMING.pascal.test(n)).length;
+  const maxFileNaming = Math.max(kebabCount, camelCount, pascalCount);
+
+  if (total >= MIN_FILES_PER_DIR && maxFileNaming / total >= THRESHOLD_70) {
+    const dominant =
+      maxFileNaming === kebabCount
+        ? "kebab-case"
+        : maxFileNaming === pascalCount
+          ? "PascalCase"
+          : "camelCase";
+
+    const matchingPaths = analyses
+      .filter((a) => {
+        const n = a.fileBasename;
+        if (dominant === "kebab-case") return FILE_NAMING.kebab.test(n);
+        if (dominant === "PascalCase") return FILE_NAMING.pascal.test(n);
+        return FILE_NAMING.camel.test(n) && !FILE_NAMING.pascal.test(n);
+      })
+      .map((a) => a.path);
+
+    conventions.push({
+      category: "file_naming",
+      directory: relDir,
+      pattern: `${dominant} file naming`,
+      confidence: clamp01(maxFileNaming / total),
+      evidence: buildEvidence(matchingPaths),
+    });
+  }
+
+  // --- imports_order ---
+  const filesWithEnoughImports = analyses.filter((a) => a.importCount >= 3);
+  if (filesWithEnoughImports.length >= MIN_FILES_PER_DIR) {
+    const orderedFiles = filesWithEnoughImports.filter(
+      (a) => a.importsOrdered,
+    );
+    maybeEmit(
+      "imports_order",
+      "imports ordered builtin→external→internal",
+      orderedFiles.map((a) => a.path),
+      THRESHOLD_70,
+    );
+  }
+
+  // --- custom_errors ---
+  const filesWithThrows = analyses.filter(
+    (a) => a.bareErrors + a.customErrors > 0,
+  );
+  if (filesWithThrows.length >= MIN_FILES_PER_DIR) {
+    const customErrFiles = filesWithThrows.filter(
+      (a) => a.customErrors > a.bareErrors,
+    );
+    maybeEmit(
+      "custom_errors",
+      "custom error classes",
+      customErrFiles.map((a) => a.path),
+      THRESHOLD_60,
+    );
   }
 
   return conventions;
