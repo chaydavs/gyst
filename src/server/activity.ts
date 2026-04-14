@@ -22,7 +22,7 @@ const ACTIVITY_SCHEMA_STATEMENTS: readonly string[] = [
     id           INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     team_id      TEXT    NOT NULL REFERENCES teams(id),
     developer_id TEXT    NOT NULL,
-    action       TEXT    NOT NULL CHECK (action IN ('learn', 'recall', 'conventions', 'failures', 'harvest', 'feedback', 'search', 'get_entry')),
+    action       TEXT    NOT NULL CHECK (action IN ('learn', 'recall', 'conventions', 'check_conventions', 'check', 'score', 'failures', 'harvest', 'feedback', 'search', 'get_entry')),
     entry_id     TEXT,
     files        TEXT,
     timestamp    TEXT    NOT NULL DEFAULT (datetime('now'))
@@ -39,8 +39,8 @@ const ACTIVITY_SCHEMA_STATEMENTS: readonly string[] = [
 // Public types
 // ---------------------------------------------------------------------------
 
-/** The eight MCP tool names that can be logged. */
-export type ActivityAction = "learn" | "recall" | "conventions" | "check_conventions" | "failures" | "harvest" | "feedback" | "search" | "get_entry";
+/** The MCP tool names that can be logged. */
+export type ActivityAction = "learn" | "recall" | "conventions" | "check_conventions" | "check" | "score" | "failures" | "harvest" | "feedback" | "search" | "get_entry";
 
 /** A single row from `activity_log` with deserialized fields. */
 export interface ActivityEntry {
@@ -107,7 +107,7 @@ export function initActivitySchema(db: Database): void {
           id           INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
           team_id      TEXT    NOT NULL REFERENCES teams(id),
           developer_id TEXT    NOT NULL,
-          action       TEXT    NOT NULL CHECK (action IN ('learn', 'recall', 'conventions', 'failures', 'harvest', 'feedback', 'search', 'get_entry')),
+          action       TEXT    NOT NULL CHECK (action IN ('learn', 'recall', 'conventions', 'check_conventions', 'check', 'score', 'failures', 'harvest', 'feedback', 'search', 'get_entry')),
           entry_id     TEXT,
           files        TEXT,
           timestamp    TEXT    NOT NULL DEFAULT (datetime('now'))
@@ -129,6 +129,39 @@ export function initActivitySchema(db: Database): void {
                 ON activity_log(developer_id, timestamp)`);
 
       logger.info("activity_log: migration complete");
+    }
+  }
+
+  // Migration: expand CHECK constraint to include check, check_conventions, score.
+  const ddlAfterFirstMigration = db
+    .query<SqlRow, [string]>(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+    )
+    .get("activity_log");
+
+  if (ddlAfterFirstMigration?.sql !== null && ddlAfterFirstMigration?.sql !== undefined) {
+    const needsSecondMigration = !ddlAfterFirstMigration.sql.includes("'score'");
+    if (needsSecondMigration) {
+      logger.info("activity_log: migrating CHECK constraint to include check/check_conventions/score");
+      db.transaction(() => {
+        db.run(`CREATE TABLE IF NOT EXISTS activity_log_new2 (
+          id           INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+          team_id      TEXT    NOT NULL REFERENCES teams(id),
+          developer_id TEXT    NOT NULL,
+          action       TEXT    NOT NULL CHECK (action IN ('learn', 'recall', 'conventions', 'check_conventions', 'check', 'score', 'failures', 'harvest', 'feedback', 'search', 'get_entry')),
+          entry_id     TEXT,
+          files        TEXT,
+          timestamp    TEXT    NOT NULL DEFAULT (datetime('now'))
+        )`);
+        db.run(`INSERT INTO activity_log_new2
+                  (id, team_id, developer_id, action, entry_id, files, timestamp)
+                SELECT id, team_id, developer_id, action, entry_id, files, timestamp
+                FROM   activity_log`);
+        db.run("DROP TABLE activity_log");
+        db.run("ALTER TABLE activity_log_new2 RENAME TO activity_log");
+      })();
+      db.run(`CREATE INDEX IF NOT EXISTS idx_activity_team_time ON activity_log(team_id, timestamp)`);
+      db.run(`CREATE INDEX IF NOT EXISTS idx_activity_developer ON activity_log(developer_id, timestamp)`);
     }
   }
 
