@@ -114,12 +114,20 @@ export function registerSearchTool(server: McpServer, ctx: ToolContext): void {
         vectorResults: vectorResults.length,
       });
 
+      // Classify intent to weight temporal results and apply per-type boosts.
+      const { classifyIntent, applyIntentBoost } = await import("../../store/intent.js");
+      const intent = classifyIntent(input.query);
+      // For debugging/history intents, double-weight temporal results (rank-based cheapest weighting).
+      const temporalWeight = (intent === "debugging" || intent === "history")
+        ? [temporalResults, temporalResults]
+        : [temporalResults];
+
       // Fuse with Reciprocal Rank Fusion (empty lists are ignored by RRF).
       const rawFused = reciprocalRankFusion([
         fileResults,
         bm25Results,
         graphResults,
-        temporalResults,
+        ...temporalWeight,
         vectorResults,
       ]);
 
@@ -130,8 +138,35 @@ export function registerSearchTool(server: McpServer, ctx: ToolContext): void {
 
       const entries = fetchEntriesByIds(db, topIds, developerId);
 
+      // Build score map and apply ghost/convention boosts.
+      const scoreMap = new Map(rawFused.map((r) => [r.id, r.score]));
+      const boostedScores = new Map(
+        entries.map((e) => {
+          const base = scoreMap.get(e.id) ?? 0;
+          let boosted = base;
+          if (e.type === "ghost_knowledge") {
+            boosted = Math.min(1.0, base + 0.1);
+          } else if (e.type === "convention") {
+            boosted = Math.min(1.0, base + 0.05);
+          }
+          return [e.id, boosted] as const;
+        }),
+      );
+
+      // Apply intent-aware boosting on top of ghost/convention boosts.
+      const intentBoostedScores = applyIntentBoost(entries, boostedScores, intent);
+
+      // Re-sort: ghost_knowledge first, then by intent-boosted score.
+      const sortedEntries = [...entries].sort((a, b) => {
+        const aIsGhost = a.type === "ghost_knowledge" ? 0 : 1;
+        const bIsGhost = b.type === "ghost_knowledge" ? 0 : 1;
+        const tierDiff = aIsGhost - bIsGhost;
+        if (tierDiff !== 0) return tierDiff;
+        return (intentBoostedScores.get(b.id) ?? 0) - (intentBoostedScores.get(a.id) ?? 0);
+      });
+
       // Apply confidence threshold — ghost_knowledge is always included.
-      const filtered = entries
+      const filtered = sortedEntries
         .filter(
           (e) =>
             e.type === "ghost_knowledge" ||

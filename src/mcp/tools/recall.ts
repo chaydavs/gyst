@@ -216,12 +216,20 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
         vectorResults: vectorResults.length,
       });
 
+      // Classify intent to weight temporal results and apply per-type boosts.
+      const { classifyIntent, applyIntentBoost } = await import("../../store/intent.js");
+      const intent = classifyIntent(input.query);
+      // For debugging/history intents, double-weight temporal results (rank-based cheapest weighting).
+      const temporalWeight = (intent === "debugging" || intent === "history")
+        ? [temporalResults, temporalResults]
+        : [temporalResults];
+
       // Fuse with Reciprocal Rank Fusion (empty lists are ignored by RRF)
       const rawFused = reciprocalRankFusion([
         fileResults,
         bm25Results,
         graphResults,
-        temporalResults,
+        ...temporalWeight,
         vectorResults,
       ]);
 
@@ -255,6 +263,9 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
         }),
       );
 
+      // Apply intent-aware boosting on top of ghost/convention boosts.
+      const intentBoostedScores = applyIntentBoost(entries, boostedScores, intent);
+
       // Sort by priority tier first, then by boosted score within each tier.
       // Tier 0: ghost_knowledge (always surfaces first — mandatory constraints)
       // Tier 1: convention (coding standards relevant to this context)
@@ -268,7 +279,7 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
       const sortedEntries = [...entries].sort((a, b) => {
         const tierDiff = tierOf(a.type) - tierOf(b.type);
         if (tierDiff !== 0) return tierDiff;
-        return (boostedScores.get(b.id) ?? 0) - (boostedScores.get(a.id) ?? 0);
+        return (intentBoostedScores.get(b.id) ?? 0) - (intentBoostedScores.get(a.id) ?? 0);
       });
 
       // Apply confidence threshold — ghost_knowledge is always included
