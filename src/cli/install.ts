@@ -1,15 +1,15 @@
 /**
- * Gyst install command — one-command setup for new users.
+ * Gyst install command — one-command infrastructure setup.
  *
- * Runs the complete first-time setup flow:
+ * Handles plumbing only — knowledge extraction is left to the agent:
  *   1. Check Bun is available and meets minimum version (>=1.1.0)
  *   2. Detect installed AI coding tools by checking user home directories
  *   3. Register Gyst MCP server config with each detected tool
  *   4. Initialize project (.gyst/, gyst-wiki/, SQLite database)
- *   5. Optionally scan source tree for coding conventions
- *   6. Optionally capture ghost knowledge (3 quick questions)
+ *   5. Scan source tree for coding conventions (automated, capped at 30)
+ *   6. Install git hooks inline (no external scripts)
  *   7. Register SessionStart + PreCompact hooks for Claude Code
- *   8. Print installation summary
+ *   8. Print agent instructions for populating the knowledge base
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
@@ -17,11 +17,8 @@ import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { spawnSync } from "node:child_process";
 import type { Database } from "bun:sqlite";
-import { initDatabase, insertEntry } from "../store/database.js";
-import { extractEntry } from "../compiler/extract.js";
-import type { LearnInput } from "../compiler/extract.js";
+import { initDatabase } from "../store/database.js";
 import { logger } from "../utils/logger.js";
-import { deriveTitle, extractFilePaths } from "./ghost-init.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -59,13 +56,6 @@ const GYST_MCP_ENTRY = {
   command: "bunx",
   args: ["gyst-mcp", "serve"],
 } as const;
-
-/** Three focused ghost-knowledge questions used during quick setup. */
-const QUICK_GHOST_QUESTIONS = [
-  { id: "onboarding", prompt: "What should every new hire know about this codebase?" },
-  { id: "sacred_files", prompt: "Any files that should never be changed without approval?" },
-  { id: "common_mistake", prompt: "What's the most common mistake new devs make?" },
-] as const;
 
 // ---------------------------------------------------------------------------
 // Step 1 — Dependency check
@@ -267,23 +257,6 @@ export function initProject(dir: string = process.cwd()): void {
 // Stdin helpers (interactive I/O)
 // ---------------------------------------------------------------------------
 
-/** Reads a single line from stdin after printing a prompt. */
-async function readLine(prompt: string): Promise<string> {
-  process.stdout.write(`    ${prompt}\n    > `);
-  const reader = Bun.stdin.stream().getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    if (buffer.includes("\n")) break;
-  }
-  reader.releaseLock();
-  return buffer.split("\n")[0]!.trim();
-}
-
 /** Prints an inline y/n prompt and returns true for y/yes. */
 async function askYesNo(question: string): Promise<boolean> {
   process.stdout.write(`\n  ? ${question} (y/n) `);
@@ -369,70 +342,13 @@ async function scanAndSaveConventions(db: Database, projectDir: string): Promise
     process.stdout.write(`    … and ${conventions.length - 8} more\n`);
   }
 
-  // Confirm before writing — prevents silently saving hundreds of entries.
-  const save = await askYesNo(
-    `Found ${conventions.length} coding convention(s). Save to knowledge base?`,
-  );
-  if (!save) {
-    process.stdout.write("    Skipped — conventions not saved.\n");
-    return 0;
-  }
-
   const stored = await storeDetectedConventions(db, conventions);
   process.stdout.write(`    → Saved ${stored} conventions\n`);
   return stored;
 }
 
 // ---------------------------------------------------------------------------
-// Step 6 (interactive) — Quick ghost knowledge
-// ---------------------------------------------------------------------------
-
-async function quickGhostInit(db: Database): Promise<number> {
-  process.stdout.write("\n  ✓ Ghost Knowledge Setup\n");
-  let created = 0;
-
-  for (const q of QUICK_GHOST_QUESTIONS) {
-    const answer = await readLine(q.prompt);
-    if (!answer) continue;
-
-    const entry = extractEntry({
-      type: "ghost_knowledge",
-      title: deriveTitle(q.id, answer),
-      content: answer,
-      files: extractFilePaths(answer),
-      tags: ["ghost", q.id],
-      confidence: 1.0,
-      scope: "team",
-    } satisfies LearnInput);
-
-    insertEntry(db, entry);
-    process.stdout.write(`    → Saved\n\n`);
-    created += 1;
-  }
-
-  // Optional open-ended loop after the 3 fixed questions.
-  while (true) {
-    const extra = await readLine("Any more? (enter to skip)");
-    if (!extra) break;
-
-    insertEntry(db, extractEntry({
-      type: "ghost_knowledge",
-      title: deriveTitle("install_extra", extra),
-      content: extra,
-      files: extractFilePaths(extra),
-      tags: ["ghost", "install"],
-      confidence: 1.0,
-      scope: "team",
-    } satisfies LearnInput));
-    process.stdout.write(`    → Saved\n\n`);
-    created += 1;
-  }
-
-  return created;
-}
-
-// ---------------------------------------------------------------------------
-// Step 6.5 — Git hooks (inline, no external scripts)
+// Step 6 — Git hooks (inline, no external scripts)
 // ---------------------------------------------------------------------------
 
 /** Lines we inject into git hooks. Idempotent — safe to call repeatedly. */
@@ -517,11 +433,11 @@ async function registerHooks(claudeTool: ToolInfo | undefined): Promise<boolean>
 // ---------------------------------------------------------------------------
 
 /**
- * Runs the full interactive Gyst install flow.
+ * Runs the Gyst infrastructure setup flow.
  *
- * Guides the user through dependency checking, tool detection, MCP config
- * registration, project initialisation, optional convention scanning, optional
- * ghost knowledge capture, hook registration, and a final summary.
+ * Sets up the plumbing (MCP config, database, git hooks, conventions).
+ * Knowledge extraction is left to the agent — it reads code better than
+ * any script can.
  */
 export async function runInstall(): Promise<void> {
   process.stdout.write("\n");
@@ -570,28 +486,13 @@ export async function runInstall(): Promise<void> {
     process.stdout.write("    Database initialized at .gyst/wiki.db\n");
   }
 
-  // Open database for remaining steps
+  // Step 5: Convention scanning (automated, capped at 30)
   const { loadConfig } = await import("../utils/config.js");
   const db = initDatabase(loadConfig().dbPath);
-
-  let conventionCount = 0;
-  let ghostCount = 0;
-
-  // Step 5: Convention scanning (optional)
-  const doConventions = await askYesNo("Scan codebase for coding conventions?");
-  if (doConventions) {
-    conventionCount = await scanAndSaveConventions(db, process.cwd());
-  }
-
-  // Step 6: Ghost knowledge (optional)
-  const doGhost = await askYesNo("Add team rules (ghost knowledge)?");
-  if (doGhost) {
-    ghostCount = await quickGhostInit(db);
-  }
-
+  const conventionCount = await scanAndSaveConventions(db, process.cwd());
   db.close();
 
-  // Step 7: Git hooks (inline, no external scripts)
+  // Step 6: Git hooks (inline, no external scripts)
   process.stdout.write("\n  ✓ Installing git hooks...\n");
   const gitResult = installGitHooks(process.cwd());
   if (gitResult.noGit) {
@@ -605,36 +506,36 @@ export async function runInstall(): Promise<void> {
     }
   }
 
-  // Step 7b: Claude Code session hooks
+  // Step 7: Claude Code session hooks
   const claudeTool = tools.find((t) => t.name === "Claude Code");
   if (claudeTool?.detected) {
     process.stdout.write("\n  ✓ Registering Claude Code session hooks...\n");
     await registerHooks(claudeTool);
   }
 
-  // Step 8: Summary
+  // Step 8: Agent instructions
   const configuredNames = detectedTools.map((t) => t.name).join(", ") || "none";
   process.stdout.write(`
-  ${"═".repeat(50)}
-  ✓ Gyst installed successfully
+  ${"═".repeat(56)}
+  ✓ Gyst installed. Restart your AI tool to activate.
 
-  Tools configured:    ${configuredNames}
-  Database:            .gyst/wiki.db
-  Wiki:                gyst-wiki/
-  Conventions:         ${conventionCount} detected
-  Ghost knowledge:     ${ghostCount} entries
+  Tools configured:  ${configuredNames}
+  Database:          .gyst/wiki.db
+  Conventions:       ${conventionCount} detected
+  ${"═".repeat(56)}
 
-  Your agents now have 14 tools:
-    learn, recall, search, get_entry, conventions,
-    failures, activity, status, feedback, harvest,
-    check, graph, onboard, score
+  On your next session, tell your agent:
 
-  Next steps:
-    gyst dashboard     — visualize your knowledge graph
-    gyst score         — check code uniformity
-    gyst onboard       — generate onboarding doc
-    gyst team create   — set up team sharing
-  ${"═".repeat(50)}
+    "Scan this project with Gyst. Read the README, package.json,
+    recent git history, and key source files. Use the learn tool
+    to record important conventions, decisions, error patterns,
+    and anything a new developer should know."
+
+  The agent will use Gyst's learn tool to populate your knowledge
+  base automatically. It understands your code better than any
+  script can.
+
+  Or run: gyst ghost-init to add unwritten team rules manually.
 
 `);
 }
