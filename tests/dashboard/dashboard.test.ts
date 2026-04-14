@@ -7,6 +7,7 @@
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { initDatabase } from "../../src/store/database.js";
+import { initActivitySchema } from "../../src/server/activity.js";
 import { startDashboardServer } from "../../src/dashboard/server.js";
 import type { DashboardServerHandle } from "../../src/dashboard/server.js";
 
@@ -19,6 +20,7 @@ let baseUrl: string;
 
 beforeAll(async () => {
   const db = initDatabase(":memory:");
+  initActivitySchema(db);
   handle = await startDashboardServer({ db, port: 0, openBrowser: false });
   baseUrl = handle.url;
 });
