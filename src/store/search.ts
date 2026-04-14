@@ -177,6 +177,7 @@ export function searchByBM25(
   query: string,
   type?: string,
   developerId?: string,
+  includeAllPersonal = false,
 ): RankedResult[] {
   if (!query.trim()) {
     return [];
@@ -198,9 +199,12 @@ export function searchByBM25(
     let params: SQLQueryBindings[];
 
     // Build the scope clause depending on whether we know who is asking.
-    const scopeClause =
-      developerId !== undefined
-        ? `AND (e.scope IN ('team', 'project') OR (e.scope = 'personal' AND e.developer_id = ?))`
+    // In personal mode with no developerId, all entries belong to the single
+    // user so we drop the scope filter entirely.
+    const scopeClause = developerId !== undefined
+      ? `AND (e.scope IN ('team', 'project') OR (e.scope = 'personal' AND e.developer_id = ?))`
+      : includeAllPersonal
+        ? ``
         : `AND e.scope IN ('team', 'project')`;
 
     if (type !== undefined) {

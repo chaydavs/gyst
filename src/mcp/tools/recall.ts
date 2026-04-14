@@ -98,6 +98,7 @@ function fetchEntries(
   db: Database,
   ids: string[],
   developerId?: string,
+  includeAllPersonal = false,
 ): EntryRow[] {
   if (ids.length === 0) {
     return [];
@@ -118,6 +119,15 @@ function fetchEntries(
               OR (scope = 'personal' AND developer_id = ?))
     `;
     params = [...ids, developerId];
+  } else if (includeAllPersonal) {
+    // Personal mode with no developer_id — single user, all entries are theirs.
+    sql = `
+      SELECT id, type, title, content, confidence, scope
+      FROM   entries
+      WHERE  id IN (${placeholders})
+        AND  status = 'active'
+    `;
+    params = [...ids];
   } else {
     sql = `
       SELECT id, type, title, content, confidence, scope
@@ -178,6 +188,9 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
       const config = loadConfig();
       const typeFilter = input.type === "all" ? undefined : input.type;
       const developerId = input.developer_id;
+      // In personal mode with no developer_id, all stored entries belong to
+      // the single user — drop scope filtering entirely so they are visible.
+      const includeAllPersonal = ctx.mode === "personal" && developerId === undefined;
 
       // Resolve the effective token budget: explicit parameter takes priority
       // over the configured default so callers on small context windows can
@@ -201,8 +214,8 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
         temporalResults,
         vectorResults,
       ] = await Promise.all([
-        Promise.resolve(searchByFilePath(db, input.files)),
-        Promise.resolve(searchByBM25(db, input.query, typeFilter, developerId)),
+        Promise.resolve(searchByFilePath(db, input.files ?? [])),
+        Promise.resolve(searchByBM25(db, input.query, typeFilter, developerId, includeAllPersonal)),
         Promise.resolve(searchByGraph(db, input.query)),
         Promise.resolve(searchByTemporal(db, input.query)),
         semanticPromise,
@@ -236,10 +249,10 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
       // Filter by minimum confidence (use RRF score as proxy pre-fetch,
       // then re-filter after hydrating with actual confidence values).
       const topIds = rawFused
-        .slice(0, input.max_results * 3) // over-fetch to account for confidence filtering
+        .slice(0, (input.max_results ?? 5) * 3) // over-fetch; default 5 when Zod defaults not applied
         .map((r) => r.id);
 
-      const entries = fetchEntries(db, topIds, developerId);
+      const entries = fetchEntries(db, topIds, developerId, includeAllPersonal);
 
       // Build a score map from the fused results so we can apply the ghost
       // knowledge boost before re-sorting.
@@ -251,7 +264,7 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
           let boosted = base;
           if (e.type === "ghost_knowledge") {
             boosted = Math.min(1.0, base + 0.15);
-          } else if (e.type === "convention" && input.files.length > 0) {
+          } else if (e.type === "convention" && (input.files ?? []).length > 0) {
             // Boost conventions relevant to the requested file directories.
             // We don't have entry_files in the fetched rows, so use a small
             // unconditional convention boost when files are provided — the
@@ -291,7 +304,7 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
             e.type === "ghost_knowledge" ||
             e.confidence >= config.confidenceThreshold,
         )
-        .slice(0, input.max_results);
+        .slice(0, input.max_results ?? 5);
 
       // Record co-retrieval for strengthening over time — best-effort, never throws.
       if (filtered.length >= 2) {
@@ -329,7 +342,7 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
       // Log activity when running in team mode with a known developer
       if (ctx.mode === "team" && ctx.developerId !== undefined && ctx.teamId !== undefined) {
         const { logActivity } = await import("../../server/activity.js");
-        logActivity(ctx.db, ctx.teamId, ctx.developerId, "recall", undefined, input.files);
+        logActivity(ctx.db, ctx.teamId, ctx.developerId, "recall", undefined, input.files ?? []);
       }
 
       return {
