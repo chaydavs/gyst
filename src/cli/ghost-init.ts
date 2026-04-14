@@ -118,24 +118,26 @@ export function deriveTitle(questionId: string, answer: string): string {
  * @param prompt - Text to display before the input cursor.
  * @returns The trimmed line entered by the user, or "" on EOF.
  */
-async function readLine(prompt: string): Promise<string> {
+/**
+ * Reads a single line from an already-acquired stdin reader.
+ * The reader must be created once and shared across all calls — Bun's
+ * stdin stream cannot be re-locked after release without losing buffered input.
+ */
+async function readLine(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  prompt: string,
+): Promise<string> {
   process.stdout.write(`${prompt}\n> `);
-  const reader = Bun.stdin.stream().getReader();
   const decoder = new TextDecoder();
   let buffer = "";
 
   while (true) {
     const { value, done } = await reader.read();
-    if (done) {
-      break;
-    }
+    if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    if (buffer.includes("\n")) {
-      break;
-    }
+    if (buffer.includes("\n")) break;
   }
 
-  reader.releaseLock();
   return buffer.split("\n")[0]!.trim();
 }
 
@@ -166,9 +168,11 @@ export async function runGhostInit(db?: Database): Promise<number> {
     );
 
     let created = 0;
+    // Create the reader once — re-acquiring it per question drops buffered bytes in Bun.
+    const stdinReader = Bun.stdin.stream().getReader();
 
     for (const question of QUESTIONS) {
-      const answer = await readLine(question.prompt);
+      const answer = await readLine(stdinReader, question.prompt);
 
       if (answer.length === 0) {
         logger.debug("ghost-init: skipped question", { questionId: question.id });

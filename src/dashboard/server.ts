@@ -6,8 +6,9 @@
  * for local / intranet use only.
  */
 
-import { join } from "node:path";
 import type { Database } from "bun:sqlite";
+// @ts-ignore — Bun bundler resolves this as a text import (inlined at build time)
+import DASHBOARD_HTML from "./index.html" with { type: "text" };
 import { logger } from "../utils/logger.js";
 import {
   getFullGraph,
@@ -180,10 +181,9 @@ export async function startDashboardServer(
           return res;
         }
 
-        // Static HTML root
+        // Static HTML root — served from inlined bundle string (no file dependency)
         if (method === "GET" && path === "/") {
-          const htmlPath = join(import.meta.dir, "index.html");
-          const res = new Response(Bun.file(htmlPath), {
+          const res = new Response(DASHBOARD_HTML as unknown as string, {
             headers: {
               "Content-Type": "text/html; charset=utf-8",
               "X-Request-Id": requestId,

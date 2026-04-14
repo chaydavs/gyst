@@ -295,8 +295,11 @@ async function resolveTeamFromEnv(
   const rawKey = process.env["GYST_API_KEY"];
   if (!rawKey) {
     process.stdout.write(
-      "Error: GYST_API_KEY environment variable is not set.\n" +
-        "  Set it to your admin or member API key.\n",
+      "Error: GYST_API_KEY is not set.\n\n" +
+        "  If you haven't created a team yet:\n" +
+        "    gyst team create \"My Team\"\n\n" +
+        "  If you already have a key, export it first:\n" +
+        "    export GYST_API_KEY=\"gyst_admin_...\"\n",
     );
     process.exit(1);
   }
