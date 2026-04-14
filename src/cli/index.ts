@@ -101,7 +101,14 @@ program
       process.stdout.write("Installing git hooks...\n");
       await execFileAsync("bash", ["scripts/install-hooks.sh"]);
 
-      process.stdout.write("\nGyst setup complete.\n");
+      // Detect conventions and print count (silent, non-blocking).
+      try {
+        const { detectConventions } = await import("../compiler/detect-conventions.js");
+        const conventions = await detectConventions(process.cwd());
+        process.stdout.write(`\nGyst setup complete. Detected ${conventions.length} convention(s).\n`);
+      } catch {
+        process.stdout.write("\nGyst setup complete.\n");
+      }
       logger.info("Gyst setup completed successfully");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -662,11 +669,11 @@ program
   });
 
 // ---------------------------------------------------------------------------
-// gyst check [file] — show conventions that apply to a file or directory
+// gyst check-conventions [file] — show conventions that apply to a file or directory
 // ---------------------------------------------------------------------------
 
 program
-  .command("check [file]")
+  .command("check-conventions [file]")
   .description("Show coding conventions that apply to a file or directory")
   .action(async (file: string | undefined) => {
     try {
@@ -718,6 +725,46 @@ program
         : err instanceof Error
           ? err.message
           : String(err);
+      logger.error("check failed", { error: message });
+      process.stdout.write(`Error: ${message}\n`);
+      process.exit(1);
+    }
+  });
+
+// ---------------------------------------------------------------------------
+// gyst check <file> — run enforcement: check file against active conventions
+// ---------------------------------------------------------------------------
+
+program
+  .command("check <file>")
+  .description("Check a file against active team conventions and report violations")
+  .action(async (file: string) => {
+    try {
+      const config = loadConfig();
+      const db = initDatabase(config.dbPath);
+      const { checkFileViolations } = await import("../compiler/check-violations.js");
+      const violations = checkFileViolations(db, file);
+      db.close();
+
+      if (violations.length === 0) {
+        process.stdout.write(`✅ No violations found in ${file}\n`);
+        logger.info("check: no violations", { file });
+        return;
+      }
+
+      process.stdout.write(`Checking ${file} against conventions...\n\n`);
+      for (const v of violations) {
+        const icon = v.severity === "error" ? "❌" : v.severity === "warning" ? "⚠️" : "ℹ️";
+        process.stdout.write(`${icon} Line ${v.line} [${v.severity}] ${v.rule}\n   ${v.message}\n`);
+        if (v.suggestion !== undefined) {
+          process.stdout.write(`   → ${v.suggestion}\n`);
+        }
+      }
+      process.stdout.write(`\n${violations.length} violation(s) found.\n`);
+      logger.info("check: violations found", { file, count: violations.length });
+      process.exit(1);
+    } catch (err) {
+      const message = err instanceof GystError ? err.message : err instanceof Error ? err.message : String(err);
       logger.error("check failed", { error: message });
       process.stdout.write(`Error: ${message}\n`);
       process.exit(1);
@@ -795,6 +842,71 @@ program
       const { writeFileSync } = await import("node:fs");
       const { join } = await import("node:path");
       writeFileSync(join(opts.dir, ".gyst-context.md"), text);
+    }
+  });
+
+// ---------------------------------------------------------------------------
+// gyst score — print uniformity score
+// ---------------------------------------------------------------------------
+
+program
+  .command("score")
+  .description("Print the team knowledge uniformity score (0–100) with subscores")
+  .action(async () => {
+    try {
+      const config = loadConfig();
+      const db = initDatabase(config.dbPath);
+      const { computeUniformityScore } = await import("../store/uniformity.js");
+      const report = computeUniformityScore(db);
+      db.close();
+
+      process.stdout.write(`Uniformity score: ${report.score}/100\n`);
+      process.stdout.write(`  Coverage:    ${report.subscores.coverage.toFixed(2)}   (${report.details.directoriesCovered} of ${report.details.directoriesTotal} directories)\n`);
+      process.stdout.write(`  Ghost rules: ${report.subscores.ghost.toFixed(2)}   (${report.details.ghostCount} active rules)\n`);
+      process.stdout.write(`  Freshness:   ${report.subscores.freshness.toFixed(2)}   (avg ${Math.round(report.details.avgFreshnessDays)} days since confirmation)\n`);
+      process.stdout.write(`  Style:       ${report.subscores.style.toFixed(2)}   (${Math.round(report.details.highConfidenceRatio * 100)}% of conventions high-confidence)\n`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stdout.write(`Error: ${message}\n`);
+      process.exit(1);
+    }
+  });
+
+// ---------------------------------------------------------------------------
+// gyst onboard — generate onboarding markdown
+// ---------------------------------------------------------------------------
+
+program
+  .command("onboard")
+  .description("Generate onboarding markdown from team knowledge")
+  .option("--write", "Write to .gyst-onboarding.md")
+  .option("--force", "Overwrite existing .gyst-onboarding.md")
+  .option("--dir <path>", "Project directory", process.cwd())
+  .action(async (opts: { write?: boolean; force?: boolean; dir: string }) => {
+    try {
+      const config = loadConfig(opts.dir);
+      const db = initDatabase(config.dbPath);
+      const { generateOnboarding } = await import("../cli/onboard.js");
+      const text = generateOnboarding(db, { dir: opts.dir });
+      db.close();
+
+      process.stdout.write(text + "\n");
+
+      if (opts.write === true) {
+        const { existsSync, writeFileSync } = await import("node:fs");
+        const { join } = await import("node:path");
+        const outPath = join(opts.dir, ".gyst-onboarding.md");
+        if (existsSync(outPath) && opts.force !== true) {
+          process.stdout.write(`\n.gyst-onboarding.md already exists. Use --force to overwrite.\n`);
+          process.exit(1);
+        }
+        writeFileSync(outPath, text);
+        process.stdout.write(`\nWrote .gyst-onboarding.md\n`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stdout.write(`Error: ${message}\n`);
+      process.exit(1);
     }
   });
 
