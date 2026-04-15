@@ -72,9 +72,8 @@ if (canLoadExtensions()) {
   backfillVectors(db).catch(() => {});
   backfillVectors(globalDb).catch(() => {});
 }
-...
-// Register tools
-registerAllTools(server, { mode: "personal", db, globalDb });
+
+  // Auto-rebuild: if any wiki markdown file is newer than the database,
   // the index is stale (e.g. after a git pull that brought in new entries).
   const wikiMtime = getNewestFileMtime(config.wikiDir);
   const dbMtime = existsSync(config.dbPath) ? statSync(config.dbPath).mtimeMs : 0;
@@ -93,7 +92,7 @@ registerAllTools(server, { mode: "personal", db, globalDb });
   }
 
   // Register tools
-  registerAllTools(server, { mode: "personal", db });
+  registerAllTools(server, { mode: "personal", db, globalDb });
 
   // Connect via stdio transport
   const transport = new StdioServerTransport();
