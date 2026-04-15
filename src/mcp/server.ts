@@ -19,6 +19,29 @@ import { loadConfig } from "../utils/config.js";
 import { logger } from "../utils/logger.js";
 import { registerAllTools } from "./register-tools.js";
 import { startEventProcessor } from "./events.js";
+import pkg from "../../package.json" with { type: "json" };
+
+const CURRENT_VERSION: string = (pkg as { version: string }).version;
+
+/**
+ * Checks npm registry for a newer version and logs to stderr.
+ * Non-blocking — fires and returns immediately. Never throws.
+ */
+async function checkForUpdate(): Promise<void> {
+  try {
+    const res = await fetch(
+      "https://registry.npmjs.org/gyst-mcp/latest",
+      { signal: AbortSignal.timeout(3000) },
+    );
+    const data = (await res.json()) as { version?: string };
+    const latest = data.version;
+    if (latest && latest !== CURRENT_VERSION) {
+      process.stderr.write(`[gyst] Update available: ${CURRENT_VERSION} → ${latest}\n`);
+    }
+  } catch {
+    // offline or registry unreachable — skip silently
+  }
+}
 
 /**
  * Recursively finds the maximum mtimeMs across all .md files under `dir`.
@@ -57,8 +80,11 @@ async function main(): Promise<void> {
 
   const server = new McpServer({
     name: "gyst",
-    version: "0.1.0",
+    version: CURRENT_VERSION,
   });
+
+  // Non-blocking update check — writes to stderr, never to stdout (MCP transport)
+  checkForUpdate().catch(() => {});
 // Initialise database (synchronous — bun:sqlite)
 const db = initDatabase(config.dbPath);
 const globalDb = initDatabase(config.globalDbPath);

@@ -5,6 +5,7 @@ import { withRetry } from "./database.js";
 export type EventType =
   | "session_start"
   | "session_end"
+  | "pre_compact"
   | "prompt"
   | "tool_use"
   | "commit"

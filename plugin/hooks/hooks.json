@@ -1,0 +1,25 @@
+{
+  "hooks": [
+    {
+      "event": "SessionStart",
+      "script": "plugin/scripts/session-start.js",
+      "timeout": 5000
+    },
+    {
+      "event": "UserPromptSubmit",
+      "script": "plugin/scripts/prompt.js",
+      "timeout": 2000
+    },
+    {
+      "event": "PostToolUse",
+      "matcher": "",
+      "script": "plugin/scripts/tool-use.js",
+      "timeout": 2000
+    },
+    {
+      "event": "Stop",
+      "script": "plugin/scripts/session-end.js",
+      "timeout": 5000
+    }
+  ]
+}
