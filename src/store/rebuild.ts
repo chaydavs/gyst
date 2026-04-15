@@ -340,7 +340,7 @@ function parseMarkdownEntry(filePath: string, wikiDir: string): ParsedEntry | nu
  * @throws {DatabaseError} If the transaction fails.
  */
 function upsertEntry(db: Database, entry: ParsedEntry): "created" | "updated" {
-  // Check existence before upsert so we can return the correct action.
+  // Check existence before INSERT so we can return the correct action.
   const existing = db
     .query<{ id: string }, [string]>("SELECT id FROM entries WHERE id = ?")
     .get(entry.id);
@@ -349,22 +349,13 @@ function upsertEntry(db: Database, entry: ParsedEntry): "created" | "updated" {
 
   try {
     db.transaction(() => {
+      // Use INSERT OR IGNORE to prevent overwriting live DB entries during rebuild.
+      // Existing entries are never modified — new entries from markdown are inserted only if not present.
       db.run(
-        `INSERT INTO entries
+        `INSERT OR IGNORE INTO entries
           (id, type, title, content, file_path, error_signature,
-           confidence, source_count, source_tool, created_at, last_confirmed, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET
-           type            = excluded.type,
-           title           = excluded.title,
-           content         = excluded.content,
-           file_path       = excluded.file_path,
-           error_signature = excluded.error_signature,
-           confidence      = excluded.confidence,
-           source_count    = excluded.source_count,
-           source_tool     = excluded.source_tool,
-           last_confirmed  = excluded.last_confirmed,
-           status          = excluded.status`,
+           confidence, source_count, source_tool, created_at, last_confirmed, status, markdown_path)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           entry.id,
           entry.type,
@@ -378,6 +369,7 @@ function upsertEntry(db: Database, entry: ParsedEntry): "created" | "updated" {
           now,
           entry.lastConfirmed ?? now,
           entry.status,
+          entry.relPath,
         ],
       );
 
