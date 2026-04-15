@@ -1,26 +1,314 @@
 # Gyst Knowledge Base Index
 
-> Generated: 2026-04-15T06:31:28.898Z  
-> Active entries: 13
+> Generated: 2026-04-15T21:13:43.921Z  
+> Active entries: 298
 
 ## Convention
 
-- Idempotency optional for GET requests *(confidence: 0.50)*
-- Idempotency keys required in test and production environments *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.86)*
+- Naming: src/api uses camelCase functions *(confidence: 0.86)*
+- Exports: src/api uses named exports *(confidence: 0.86)*
+- Naming: src/api uses camelCase functions *(confidence: 0.86)*
+- Naming: src/api uses camelCase functions *(confidence: 0.86)*
+- Naming: src/api uses camelCase functions *(confidence: 0.86)*
+- No Friday production deploys *(confidence: 0.86)*
+- Error_handling: src/cli uses try/catch error handling *(confidence: 0.50)*
+- Exports: src/api uses named exports *(confidence: 0.50)*
+- Exports: src/api uses named exports *(confidence: 0.50)*
+- Exports: src/api uses named exports *(confidence: 0.50)*
+- Exports: src/api uses named exports *(confidence: 0.50)*
+- Exports: src/api uses named exports *(confidence: 0.50)*
+- Exports: src/api uses named exports *(confidence: 0.50)*
+- Exports: src/api uses named exports *(confidence: 0.50)*
+- Exports: src/api uses named exports *(confidence: 0.50)*
+- Exports: src/api uses named exports *(confidence: 0.50)*
+- Exports: src/api uses named exports *(confidence: 0.50)*
+- Exports: src/api uses named exports *(confidence: 0.50)*
+- Exports: src/compiler uses named exports *(confidence: 0.50)*
+- Exports: src/mcp/tools uses named exports *(confidence: 0.50)*
+- Exports: src/store uses named exports *(confidence: 0.50)*
+- Exports: src/utils uses named exports *(confidence: 0.50)*
+- File_naming: src/cli uses kebab-case file naming *(confidence: 0.50)*
+- File_naming: src/compiler uses kebab-case file naming *(confidence: 0.50)*
+- File_naming: src/mcp/tools uses kebab-case file naming *(confidence: 0.50)*
+- File_naming: src/store uses kebab-case file naming *(confidence: 0.50)*
+- File_naming: src/utils uses kebab-case file naming *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: src/api uses relative imports *(confidence: 0.50)*
+- Imports: tests/collaborative uses relative imports *(confidence: 0.50)*
+- Imports: tests/stress uses relative imports *(confidence: 0.50)*
+- Imports_order: src/cli uses imports ordered builtin→external→internal *(confidence: 0.50)*
+- Imports_order: tests/collaborative uses imports ordered builtin→external→internal *(confidence: 0.50)*
+- Imports_order: tests/store uses imports ordered builtin→external→internal *(confidence: 0.50)*
+- Imports_order: tests/stress uses imports ordered builtin→external→internal *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/api uses camelCase functions *(confidence: 0.50)*
+- Naming: src/cli uses camelCase functions *(confidence: 0.50)*
+- Naming: src/compiler uses camelCase functions *(confidence: 0.50)*
+- Naming: src/mcp/tools uses camelCase functions *(confidence: 0.50)*
+- Naming: src/store uses camelCase functions *(confidence: 0.50)*
+- Naming: tests/collaborative uses camelCase functions *(confidence: 0.50)*
+- Naming: tests/compiler uses camelCase functions *(confidence: 0.50)*
+- Naming: tests/store uses camelCase functions *(confidence: 0.50)*
+- Naming: tests/stress uses camelCase functions *(confidence: 0.50)*
+- Naming: tests/uniformity uses camelCase functions *(confidence: 0.50)*
+- No Friday production deploys *(confidence: 0.50)*
+- No Friday production deploys *(confidence: 0.50)*
+- No Friday production deploys *(confidence: 0.50)*
+- No Friday production deploys *(confidence: 0.50)*
+- No Friday production deploys *(confidence: 0.50)*
+- No Friday production deploys *(confidence: 0.50)*
+- No Friday production deploys *(confidence: 0.50)*
+- No Friday production deploys *(confidence: 0.50)*
+- No Friday production deploys *(confidence: 0.50)*
+- No Friday production deploys *(confidence: 0.50)*
+- No Friday production deploys *(confidence: 0.50)*
+- Testing: tests/collaborative uses bun test style *(confidence: 0.50)*
+- Testing: tests/compiler uses bun test style *(confidence: 0.50)*
+- Testing: tests/store uses bun test style *(confidence: 0.50)*
+- Testing: tests/stress uses bun test style *(confidence: 0.50)*
+- Testing: tests/uniformity uses bun test style *(confidence: 0.50)*
+- Use async/await not callbacks *(confidence: 0.50)*
+- Use async/await not callbacks *(confidence: 0.50)*
+- Use async/await not callbacks *(confidence: 0.50)*
+- Use async/await not callbacks *(confidence: 0.50)*
+- Use async/await not callbacks *(confidence: 0.50)*
+- Use async/await not callbacks *(confidence: 0.50)*
+- Use async/await not callbacks *(confidence: 0.50)*
+- Use async/await not callbacks *(confidence: 0.50)*
+- Use async/await not callbacks *(confidence: 0.50)*
+- Use async/await not callbacks *(confidence: 0.50)*
+- Use async/await not callbacks *(confidence: 0.50)*
+- Use async/await not callbacks *(confidence: 0.50)*
+- Use async/await not callbacks *(confidence: 0.50)*
+- Use async/await not callbacks *(confidence: 0.50)*
+- Use async/await not callbacks *(confidence: 0.50)*
+- Use async/await not callbacks *(confidence: 0.50)*
+- Use async/await not callbacks *(confidence: 0.50)*
+- Use camelCase for function names in TypeScript *(confidence: 0.50)*
+- Use camelCase for function names in TypeScript *(confidence: 0.50)*
+- Use camelCase for function names in TypeScript *(confidence: 0.50)*
+- Use camelCase for function names in TypeScript *(confidence: 0.50)*
+- Use camelCase for function names in TypeScript *(confidence: 0.50)*
+- Use camelCase for function names in TypeScript *(confidence: 0.50)*
+- Use camelCase for function names in TypeScript *(confidence: 0.50)*
+- Use camelCase for function names in TypeScript *(confidence: 0.50)*
+- Use camelCase for function names in TypeScript *(confidence: 0.50)*
+- Use camelCase for function names in TypeScript *(confidence: 0.50)*
+- Use camelCase for function names in TypeScript *(confidence: 0.50)*
+- Use camelCase for function names in TypeScript *(confidence: 0.50)*
+- Use camelCase for function names in TypeScript *(confidence: 0.50)*
+- Use camelCase for function names in TypeScript *(confidence: 0.50)*
+- Use camelCase for function names in TypeScript *(confidence: 0.50)*
+- Use camelCase for function names in TypeScript *(confidence: 0.50)*
+- Use camelCase for function names in TypeScript *(confidence: 0.50)*
+- Use camelCase for function names in TypeScript *(confidence: 0.50)*
+
+## Decision
+
+- Why we chose SQLite over PostgreSQL for local knowledge storage *(confidence: 0.85)*
+- Why knowledge entries have four types instead of a free-form taxonomy *(confidence: 0.83)*
+- Why we chose Bun over Node.js as the runtime *(confidence: 0.83)*
+- Why we use Zod for runtime validation instead of io-ts or ArkType *(confidence: 0.80)*
+- Why we use the Model Context Protocol (MCP) instead of a REST API for AI agent integration *(confidence: 0.80)*
+- Why we use JWT over session cookies for API authentication *(confidence: 0.80)*
+- Why confidence scores use source saturation instead of a simple count *(confidence: 0.75)*
+- Why we use FTS5 with Porter stemmer instead of vector embeddings for search *(confidence: 0.75)*
+- Why we use Reciprocal Rank Fusion instead of a learned re-ranker *(confidence: 0.75)*
 
 ## Error Pattern
 
-- Stripe webhook signature validation failure *(confidence: 0.66)*
-- Stripe API timeout causes checkout failure *(confidence: 0.66)*
-- Refund race condition with webhook *(confidence: 0.66)*
-- Payment idempotency key prevents double charges *(confidence: 0.28)*
-- Webhook delivery order not guaranteed *(confidence: 0.28)*
-- PaymentIntent requires_action state handling *(confidence: 0.28)*
-- Stripe Connect platform fees calculation *(confidence: 0.28)*
-- Currency mismatch in payment amounts *(confidence: 0.28)*
-- 3D Secure authentication timeout *(confidence: 0.28)*
-- Webhook endpoint must return 2xx within 30 seconds *(confidence: 0.28)*
+- TypeScript: Cannot find module '../../src/utils/logger.js' or its corresponding type declarations *(confidence: 0.81)*
+- JWT verification failed: invalid signature *(confidence: 0.77)*
+- TypeScript strict mode: Object is possibly undefined (TS2532) *(confidence: 0.77)*
+- Stripe webhook signature verification failed: No signatures found *(confidence: 0.77)*
+- getUserProfile throwing null error on missing user context *(confidence: 0.74)*
+- TypeError: Cannot read properties of undefined (reading 'id') *(confidence: 0.74)*
+- Express: req.body is undefined when body-parser middleware is missing *(confidence: 0.70)*
+- React hydration error: Prop className did not match between server and client *(confidence: 0.70)*
+- FTS5 MATCH query syntax error: malformed MATCH expression *(confidence: 0.70)*
+- PostgreSQL deadlock detected: process waits for ShareLock *(confidence: 0.70)*
+- Stripe rate limit error: 429 Too Many Requests *(confidence: 0.70)*
+- Unhandled promise rejection: fetch failed ETIMEDOUT *(confidence: 0.70)*
+- OAuth access token expired: 401 Unauthorized from provider API *(confidence: 0.70)*
+- Bun test: Cannot use import statement outside a module (CommonJS vs ESM) *(confidence: 0.62)*
+- Zod validation: ZodError with 'Required' on optional fields *(confidence: 0.62)*
+- Bun test runner: async test leaking open handles *(confidence: 0.62)*
+- Bun build: Dynamic require of 'node:fs' is not supported *(confidence: 0.62)*
+- Node.js memory leak: EventEmitter listeners not removed *(confidence: 0.62)*
+- Postgres pool exhausted *(confidence: 0.50)*
+- Postgres pool exhausted *(confidence: 0.50)*
+- Postgres pool exhausted *(confidence: 0.50)*
+- Postgres pool exhausted *(confidence: 0.50)*
+- Postgres pool exhausted *(confidence: 0.50)*
+- Postgres pool exhausted *(confidence: 0.50)*
+- Postgres pool exhausted *(confidence: 0.50)*
+- Postgres pool exhausted *(confidence: 0.50)*
+- Postgres pool exhausted *(confidence: 0.50)*
+- Postgres pool exhausted *(confidence: 0.50)*
+- Postgres pool exhausted *(confidence: 0.50)*
+- Postgres pool exhausted *(confidence: 0.50)*
+- Postgres pool exhausted *(confidence: 0.50)*
+- Postgres pool exhausted *(confidence: 0.50)*
+- Postgres pool exhausted *(confidence: 0.50)*
+- Postgres pool exhausted *(confidence: 0.50)*
+- Postgres pool exhausted *(confidence: 0.50)*
+- Token refresh timeout *(confidence: 0.50)*
 
-## Ghost Knowledge
+## Learning
 
-- Never log card numbers or CVV in any environment *(confidence: 1.00)*
+- Summary: src/auth/auth-service.ts patterns and knowledge *(confidence: 0.98)*
+- Summary: src/store/database.ts patterns and knowledge *(confidence: 0.89)*
+- Test isolation: each Bun test file should use a separate in-memory SQLite database *(confidence: 0.77)*
+- OAuth PKCE flow: the code_verifier must be stored per-session, not globally *(confidence: 0.77)*
+- Stripe webhook: always use raw Buffer body, not parsed JSON *(confidence: 0.77)*
+- Debugging: MCP tool calls don't surface errors to Claude without explicit error formatting *(confidence: 0.72)*
+- Deployment lesson: environment variables not available at build time in Vercel *(confidence: 0.72)*
+- SQLite FTS5 BM25: negative rank values mean more negative = better match *(confidence: 0.72)*
+- Redis connection reuse: create one client per process, not per request *(confidence: 0.72)*
+- Porter stemmer reduces recall for technical terms: 'typing' matches 'type' unexpectedly *(confidence: 0.64)*
+- TypeScript: template literal types for type-safe event names *(confidence: 0.64)*
