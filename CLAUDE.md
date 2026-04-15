@@ -92,6 +92,7 @@ gyst/
 - `gyst score` — print uniformity score
 - `gyst detect-conventions` — run convention detectors and print results
 - `gyst check <file>` — check a file for convention violations
+- `gyst export` — export all active knowledge entries to markdown files (derived from DB)
 - `gyst dashboard` — start the dashboard HTTP server
 
 DO NOT build yet:
@@ -112,8 +113,8 @@ DO NOT build yet:
 
 ## Architecture Rules
 - MCP server is the ONLY agent interface to the knowledge base
-- Markdown files are source of truth. SQLite is a derived index
-- If SQLite is deleted, it MUST be rebuildable from markdown files
+- SQLite is the source of truth. Markdown files are a derived export (autoExport config or gyst export command).
+- If SQLite is deleted, use `gyst export` after restoring a DB backup, or run `gyst rebuild` to migrate legacy markdown.
 - Never store raw source code in entries — store descriptions and patterns
 - Recall responses: max 5000 tokens. Hard limit, not suggestion
 - Confidence scores: always between 0.0 and 1.0
