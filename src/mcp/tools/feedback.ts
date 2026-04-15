@@ -11,6 +11,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { logger } from "../../utils/logger.js";
 import { ValidationError } from "../../utils/errors.js";
 import type { ToolContext } from "../register-tools.js";
+import { withRetry } from "../../store/database.js";
 
 // ---------------------------------------------------------------------------
 // Input schema
@@ -69,7 +70,7 @@ export function registerFeedbackTool(server: McpServer, ctx: ToolContext): void 
         let before: { confidence: number } | null = null;
         let after: { confidence: number } | null = null;
 
-        db.transaction(() => {
+        withRetry(() => db.transaction(() => {
           db.run(
             `INSERT INTO feedback (entry_id, developer_id, helpful, note, timestamp)
              VALUES (?, ?, ?, ?, datetime('now'))`,
@@ -101,7 +102,7 @@ export function registerFeedbackTool(server: McpServer, ctx: ToolContext): void 
             confidenceBefore: before?.confidence,
             confidenceAfter: after?.confidence,
           });
-        })();
+        })());
 
         return {
           content: [{

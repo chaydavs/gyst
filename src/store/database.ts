@@ -95,6 +95,10 @@ const PRAGMAS = [
   "PRAGMA journal_mode = WAL;",
   "PRAGMA foreign_keys = ON;",
   "PRAGMA synchronous = NORMAL;",
+  // Allow SQLite to retry for up to 5 seconds before returning SQLITE_BUSY.
+  // Most writes complete in <50ms; 5s handles any realistic contention between
+  // concurrent agent processes without busy-looping in JS.
+  "PRAGMA busy_timeout = 5000;",
 ] as const;
 
 /** Individual DDL statements — one per CREATE TABLE / INDEX / TRIGGER */
@@ -291,8 +295,65 @@ export function initDatabase(path: string = "gyst-wiki/.wiki.db"): Database {
     throw new DatabaseError(`Failed to initialise schema: ${msg}`);
   }
 
+  // Verify WAL mode is active (defensive check — should always be "wal").
+  const journalRow = db
+    .query<{ journal_mode: string }, []>("PRAGMA journal_mode")
+    .get();
+  const journalMode = journalRow?.journal_mode ?? "unknown";
+  if (journalMode !== "wal") {
+    logger.warn("SQLite journal mode is not WAL — concurrency may degrade", {
+      mode: journalMode,
+    });
+  }
+
   logger.info("Database ready", { path });
   return db;
+}
+
+// ---------------------------------------------------------------------------
+// Concurrency helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Wraps a synchronous SQLite write operation with exponential-backoff retry
+ * for "database is locked" (SQLITE_BUSY) errors.
+ *
+ * WAL mode + busy_timeout handles the vast majority of contention at the
+ * C library level. This function is the last-resort application-level safety
+ * net for any SQLITE_BUSY that still bubbles up to JavaScript.
+ *
+ * @param fn          - Synchronous function to execute (typically a transaction).
+ * @param maxRetries  - Maximum number of additional attempts after the first failure.
+ * @param baseDelayMs - Initial delay before the first retry; doubles each attempt.
+ * @returns The return value of `fn` on success.
+ * @throws Re-throws any error that is not SQLITE_BUSY, or after exhausting retries.
+ */
+export function withRetry<T>(
+  fn: () => T,
+  maxRetries: number = 3,
+  baseDelayMs: number = 100,
+): T {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return fn();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (attempt < maxRetries && msg.includes("database is locked")) {
+        const delay = baseDelayMs * Math.pow(2, attempt);
+        logger.warn("SQLite busy, retrying", {
+          attempt: attempt + 1,
+          delayMs: delay,
+        });
+        // Bun.sleepSync blocks this thread without spinning the JS event loop.
+        // Safe here because bun:sqlite write ops are synchronous by design.
+        Bun.sleepSync(delay);
+        continue;
+      }
+      throw err;
+    }
+  }
+  // TypeScript requires an explicit unreachable throw.
+  throw new Error("withRetry: exhausted retries — should not reach here");
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +390,7 @@ export interface EntryRow {
 export function insertEntry(db: Database, entry: EntryRow): void {
   const now = new Date().toISOString();
 
-  db.transaction(() => {
+  withRetry(() => db.transaction(() => {
     db.run(
       `INSERT INTO entries
         (id, type, title, content, file_path, error_signature,
@@ -373,7 +434,7 @@ export function insertEntry(db: Database, entry: EntryRow): void {
       `INSERT INTO sources (entry_id, tool, timestamp) VALUES (?, ?, ?)`,
       [entry.id, entry.sourceTool ?? "manual", now],
     );
-  })();
+  })());
 
   logger.debug("Entry inserted", { id: entry.id, type: entry.type });
 }
