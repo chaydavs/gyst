@@ -223,6 +223,56 @@ const membersTeamAction = async () => {
 const program = new Command();
 program.name("gyst").description("Team knowledge compiler").version(_pkgVersion);
 
+program
+  .command("show [resource]")
+  .description("Visualize Gyst resources (memory|members)")
+  .action(async (resource: string | undefined) => {
+    if (resource?.toLowerCase() === "memory") {
+      // Logic from dashboardAction
+      const config = loadConfig();
+      const db = initDatabase(config.dbPath);
+      const { startDashboardServer } = await import("../dashboard/server.js");
+      const { url } = await startDashboardServer({ db, port: 37778, openBrowser: true });
+      process.stdout.write(`Memory visualization live at: ${url}\n`);
+      return;
+    }
+    if (resource?.toLowerCase() === "members") {
+      await membersTeamAction();
+      return;
+    }
+    process.stdout.write("Usage: gyst show memory | gyst show members\n");
+  });
+
+program
+  .command("probe [dir]")
+  .description("Technically scan for patterns/conventions")
+  .option("--dry-run")
+  .action(detectConventionsAction);
+
+program
+  .command("audit <file>")
+  .description("Audit a file against the knowledge graph")
+  .action(async (file: string) => {
+    // Re-use logic from 'check' command
+    const config = loadConfig();
+    const db = initDatabase(config.dbPath);
+    const { checkFileViolations } = await import("../compiler/check-violations.js");
+    const violations = checkFileViolations(db, file);
+    db.close();
+    if (violations.length === 0) {
+      process.stdout.write(`✅ Audit passed: ${file}\n`);
+      return;
+    }
+    process.stdout.write(`❌ Audit failed: ${file} (${violations.length} violations)\n`);
+    for (const v of violations) process.stdout.write(`  - [${v.rule}] ${v.message}\n`);
+    process.exit(1);
+  });
+
+program
+  .command("heartbeat")
+  .description("Start the MCP server (Alias for serve)")
+  .action(serveAction);
+
 program.command("setup").description("Initialize Gyst").action(setupAction);
 
 program.command("recall <query>").description("Search memory").option("-t, --type <type>", "Filter", "all").option("-n, --max <max>", "Limit", "5").action(searchAction);
