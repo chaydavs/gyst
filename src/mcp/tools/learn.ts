@@ -67,9 +67,10 @@ interface EntryRow {
  * @param db - Open database connection.
  * @param entry - Fully-resolved entry data ready for storage.
  * @param wikiDir - Path to the wiki markdown directory.
+ * @param autoExport - When true, write the markdown file and store the path in entries.markdown_path.
  * @throws {DatabaseError} On any SQLite failure.
  */
-function persistEntry(
+export function persistEntry(
   db: Database,
   entry: {
     id: string;
@@ -87,6 +88,7 @@ function persistEntry(
     metadata?: string | null;
   },
   wikiDir: string,
+  autoExport = false,
 ): void {
   try {
     withRetry(() => db.transaction(() => {
@@ -136,34 +138,41 @@ function persistEntry(
     throw new DatabaseError(`Failed to persist entry ${entry.id}: ${msg}`);
   }
 
-  // Write markdown file outside the transaction (non-atomic I/O is acceptable
-  // here; if it fails the DB entry still exists and can be re-exported).
-  try {
-    writeEntry(
-      {
+  // Write markdown file only when autoExport is enabled. I/O is intentionally
+  // outside the transaction (if it fails the DB entry still exists and can be
+  // re-exported). On success, store the returned path in entries.markdown_path.
+  if (autoExport) {
+    try {
+      const markdownPath = writeEntry(
+        {
+          id: entry.id,
+          type: entry.type as "error_pattern" | "convention" | "decision" | "learning",
+          title: entry.title,
+          content: entry.content,
+          files: entry.files,
+          tags: entry.tags,
+          errorSignature: entry.errorSignature,
+          fingerprint: entry.fingerprint,
+          confidence: entry.confidence,
+          sourceCount: entry.sourceCount,
+          createdAt: entry.now,
+          lastConfirmed: entry.now,
+          status: "active",
+          scope: entry.scope,
+        },
+        wikiDir,
+      );
+      db.run(
+        "UPDATE entries SET markdown_path = ? WHERE id = ?",
+        [markdownPath, entry.id],
+      );
+    } catch (err) {
+      // Log but do not re-throw — markdown write failure is recoverable.
+      logger.warn("Failed to write wiki markdown", {
         id: entry.id,
-        type: entry.type as "error_pattern" | "convention" | "decision" | "learning",
-        title: entry.title,
-        content: entry.content,
-        files: entry.files,
-        tags: entry.tags,
-        errorSignature: entry.errorSignature,
-        fingerprint: entry.fingerprint,
-        confidence: entry.confidence,
-        sourceCount: entry.sourceCount,
-        createdAt: entry.now,
-        lastConfirmed: entry.now,
-        status: "active",
-        scope: entry.scope,
-      },
-      wikiDir,
-    );
-  } catch (err) {
-    // Log but do not re-throw — markdown write failure is recoverable.
-    logger.warn("Failed to write wiki markdown", {
-      id: entry.id,
-      error: err instanceof Error ? err.message : String(err),
-    });
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 }
 
@@ -367,6 +376,7 @@ export function registerLearnTool(server: McpServer, ctx: ToolContext): void {
           metadata: styleMetadata,
         },
         config.wikiDir,
+        config.autoExport,
       );
 
       // If global personal memory is enabled, also persist there
@@ -391,6 +401,7 @@ export function registerLearnTool(server: McpServer, ctx: ToolContext): void {
               metadata: styleMetadata,
             },
             config.wikiDir, // Markdown still goes to current project wiki
+            config.autoExport,
           );
         } catch (err) {
           logger.warn("Failed to persist to global memory", { error: (err as Error).message });
