@@ -26,7 +26,7 @@ import { extractEntry } from "../../compiler/extract.js";
 import type { LearnInput } from "../../compiler/extract.js";
 import { stripSensitiveData } from "../../compiler/security.js";
 import { findDuplicate } from "../../compiler/deduplicate.js";
-import { insertEntry } from "../../store/database.js";
+import { insertEntry, withRetry } from "../../store/database.js";
 import { logger } from "../../utils/logger.js";
 import { ValidationError } from "../../utils/errors.js";
 import type { ToolContext } from "../register-tools.js";
@@ -160,19 +160,19 @@ export function harvestTranscript(
       const duplicateId = findDuplicate(db, entry);
 
       if (duplicateId !== null) {
-        db.run(
+        withRetry(() => db.run(
           `UPDATE entries
            SET source_count   = source_count + 1,
                last_confirmed = ?
            WHERE id = ?`,
           [new Date().toISOString(), duplicateId],
-        );
+        ));
 
         if (
           params.session_id !== undefined ||
           params.developer_id !== undefined
         ) {
-          db.run(
+          withRetry(() => db.run(
             `INSERT INTO sources (entry_id, developer_id, tool, session_id, timestamp)
              VALUES (?, ?, 'harvest', ?, ?)`,
             [
@@ -181,7 +181,7 @@ export function harvestTranscript(
               params.session_id ?? null,
               new Date().toISOString(),
             ],
-          );
+          ));
         }
 
         merged += 1;
@@ -210,7 +210,7 @@ export function harvestTranscript(
         params.session_id !== undefined ||
         params.developer_id !== undefined
       ) {
-        db.run(
+        withRetry(() => db.run(
           `INSERT INTO sources (entry_id, developer_id, tool, session_id, timestamp)
            VALUES (?, ?, 'harvest', ?, ?)`,
           [
@@ -219,7 +219,7 @@ export function harvestTranscript(
             params.session_id ?? null,
             new Date().toISOString(),
           ],
-        );
+        ));
       }
 
       created += 1;

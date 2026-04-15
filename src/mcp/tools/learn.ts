@@ -19,7 +19,7 @@ import {
   extractEntities,
   extractEntitiesFromTitle,
 } from "../../compiler/entities.js";
-import { canLoadExtensions } from "../../store/database.js";
+import { canLoadExtensions, withRetry } from "../../store/database.js";
 import { fingerprintFile } from "../../compiler/style-fingerprint.js";
 import { embedAndStore } from "../../store/embeddings.js";
 import { loadConfig } from "../../utils/config.js";
@@ -88,7 +88,7 @@ function persistEntry(
   wikiDir: string,
 ): void {
   try {
-    db.transaction(() => {
+    withRetry(() => db.transaction(() => {
       db.run(
         `INSERT INTO entries
           (id, type, title, content, error_signature, confidence,
@@ -146,7 +146,7 @@ function persistEntry(
           [entry.id],
         );
       }
-    })();
+    })());
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new DatabaseError(`Failed to persist entry ${entry.id}: ${msg}`);
@@ -203,7 +203,7 @@ function mergeIntoExisting(
   },
 ): void {
   try {
-    db.transaction(() => {
+    withRetry(() => db.transaction(() => {
       db.run(
         `UPDATE entries
          SET content        = ?,
@@ -231,7 +231,7 @@ function mergeIntoExisting(
         "INSERT INTO sources (entry_id, tool, timestamp) VALUES (?, 'mcp', ?)",
         [existingId, incoming.now],
       );
-    })();
+    })());
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new DatabaseError(`Failed to merge into entry ${existingId}: ${msg}`);
