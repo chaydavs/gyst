@@ -82,4 +82,27 @@ export function registerAllTools(server: McpServer, ctx: ToolContext): void {
   registerCheckTool(server, ctx);
   registerScoreTool(server, ctx);
   registerGraphTool(server, ctx);
+
+  // --- Proactive Learning Prompt ---
+  // Tells the agent how to behave without the user repeating instructions.
+  server.prompt(
+    "proactive-learning",
+    "Gyst instructions for proactive knowledge capture.",
+    () => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `You are equipped with Gyst, a team knowledge engine. 
+To be effective, you must follow these behavioral rules:
+1. **Always Recall First:** Before starting a task or solving an error, use the 'recall' tool to check for existing team knowledge or conventions.
+2. **Proactive Learning:** Whenever you solve a non-trivial bug, identify a coding convention, or make an architectural decision, use the 'learn' tool to record it automatically.
+3. **Be Specific:** When using 'learn', include the relevant file paths and tags so your teammates can find this knowledge later.
+4. **Auto-Harvest:** If you forget to call 'learn', know that your session transcript will be processed at the end to extract key takeaways.`,
+          },
+        },
+      ],
+    }),
+  );
 }

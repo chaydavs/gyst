@@ -209,7 +209,12 @@ export function mergeClaudeHooks(config: McpConfig): McpConfig {
 
   const gystSessionStart: HookEntry = {
     matcher: "auto",
-    hooks: [{ type: "command", command: "gyst inject-context" }],
+    hooks: [
+      { 
+        type: "command", 
+        command: "gyst inject-context --always-on --graph-traverse" 
+      }
+    ],
   };
   const gystPreCompact: HookEntry = {
     matcher: "auto",

@@ -138,11 +138,16 @@
 
     // ─── Details panel ────────────────────────────────────────────────────────
     function showDetails(node) {
+      console.log('Clicked node data:', node);
       details.innerHTML = `
         <h2>${escHtml(node.title)}</h2>
         <div class="detail-section">
           <div class="detail-label">Type</div>
           <div class="detail-content"><span class="tag" style="color:${nodeColor(node.type)}">${node.type}</span></div>
+        </div>
+        <div class="detail-section">
+          <div class="detail-label">Content</div>
+          <div class="detail-content" style="white-space: pre-wrap; background: var(--bg); padding: 8px; border-radius: 4px; border: 1px solid var(--border); font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto;">${escHtml(node.content)}</div>
         </div>
         <div class="detail-section">
           <div class="detail-label">Scope / Confidence</div>

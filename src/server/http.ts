@@ -515,7 +515,7 @@ function logAccess(
  * @param options - Port and database path.
  */
 export function startHttpServer(options: HttpServerOptions): HttpServerHandle {
-  const { port, dbPath } = options;
+  const { port: startPort, dbPath } = options;
 
   const config = loadConfig();
   logger.setLevel(config.logLevel);
@@ -524,76 +524,88 @@ export function startHttpServer(options: HttpServerOptions): HttpServerHandle {
   initTeamSchema(db);
   initActivitySchema(db);
 
-  const server = Bun.serve({
-    port,
-    async fetch(req: Request): Promise<Response> {
-      const start = performance.now();
-      const requestId = crypto.randomUUID();
-      const url = new URL(req.url);
-      const method = req.method.toUpperCase();
-      const path = url.pathname;
+  const tryStart = (port: number): any => {
+    try {
+      return Bun.serve({
+        port,
+        async fetch(req: Request): Promise<Response> {
+          const start = performance.now();
+          const requestId = crypto.randomUUID();
+          const url = new URL(req.url);
+          const method = req.method.toUpperCase();
+          const path = url.pathname;
 
-      logger.debug("HTTP request", { method, path, requestId });
+          logger.debug("HTTP request", { method, path, requestId });
 
-      // ------------------------------------------------------------------
-      // CORS preflight
-      // ------------------------------------------------------------------
-      if (method === "OPTIONS") {
-        const res = new Response(null, {
-          status: 204,
-          headers: { ...CORS_HEADERS, "X-Request-Id": requestId },
-        });
-        logAccess(requestId, method, path, null, start, 204);
-        return res;
+          // ------------------------------------------------------------------
+          // CORS preflight
+          // ------------------------------------------------------------------
+          if (method === "OPTIONS") {
+            const res = new Response(null, {
+              status: 204,
+              headers: { ...CORS_HEADERS, "X-Request-Id": requestId },
+            });
+            logAccess(requestId, method, path, null, start, 204);
+            return res;
+          }
+
+          let response: Response;
+
+          // ------------------------------------------------------------------
+          // Route dispatch
+          // ------------------------------------------------------------------
+          if (path === "/health" && method === "GET") {
+            response = jsonResponse(
+              { status: "ok", service: "gyst", version: "0.1.0" },
+              200,
+              requestId,
+            );
+          } else if (path === "/mcp" && (method === "POST" || method === "GET")) {
+            response = await handleMcpRequest(req, db, requestId);
+          } else if (path === "/team" && method === "POST") {
+            response = await handleCreateTeam(req, db, requestId);
+          } else if (path === "/team/invite" && method === "POST") {
+            response = await handleCreateInvite(req, db, requestId);
+          } else if (path === "/team/join" && method === "POST") {
+            response = await handleJoinTeam(req, db, requestId);
+          } else if (path === "/team/members" && method === "GET") {
+            response = await handleListMembers(req, db, requestId);
+          } else {
+            const memberDeleteMatch = /^\/team\/members\/([^/]+)$/.exec(path);
+            if (memberDeleteMatch !== null && method === "DELETE") {
+              response = await handleRemoveMember(req, db, requestId, memberDeleteMatch[1]!);
+            } else {
+              response = notFoundResponse(requestId);
+            }
+          }
+
+          // Read the internal developer-id header (set by auth-resolving handlers)
+          // before stripping it so it never reaches the HTTP client.
+          const developerId = response.headers.get("x-developer-id");
+          if (developerId !== null) {
+            const stripped = new Headers(response.headers);
+            stripped.delete("x-developer-id");
+            response = new Response(response.body, {
+              status: response.status,
+              statusText: response.statusText,
+              headers: stripped,
+            });
+          }
+
+          logAccess(requestId, method, path, developerId, start, response.status);
+          return response;
+        },
+      });
+    } catch (err: any) {
+      if (err.code === "EADDRINUSE" && port < startPort + 10) {
+        logger.info("http-port-in-use", { port, next: port + 1 });
+        return tryStart(port + 1);
       }
+      throw err;
+    }
+  };
 
-      let response: Response;
-
-      // ------------------------------------------------------------------
-      // Route dispatch
-      // ------------------------------------------------------------------
-      if (path === "/health" && method === "GET") {
-        response = jsonResponse(
-          { status: "ok", service: "gyst", version: "0.1.0" },
-          200,
-          requestId,
-        );
-      } else if (path === "/mcp" && (method === "POST" || method === "GET")) {
-        response = await handleMcpRequest(req, db, requestId);
-      } else if (path === "/team" && method === "POST") {
-        response = await handleCreateTeam(req, db, requestId);
-      } else if (path === "/team/invite" && method === "POST") {
-        response = await handleCreateInvite(req, db, requestId);
-      } else if (path === "/team/join" && method === "POST") {
-        response = await handleJoinTeam(req, db, requestId);
-      } else if (path === "/team/members" && method === "GET") {
-        response = await handleListMembers(req, db, requestId);
-      } else {
-        const memberDeleteMatch = /^\/team\/members\/([^/]+)$/.exec(path);
-        if (memberDeleteMatch !== null && method === "DELETE") {
-          response = await handleRemoveMember(req, db, requestId, memberDeleteMatch[1]!);
-        } else {
-          response = notFoundResponse(requestId);
-        }
-      }
-
-      // Read the internal developer-id header (set by auth-resolving handlers)
-      // before stripping it so it never reaches the HTTP client.
-      const developerId = response.headers.get("x-developer-id");
-      if (developerId !== null) {
-        const stripped = new Headers(response.headers);
-        stripped.delete("x-developer-id");
-        response = new Response(response.body, {
-          status: response.status,
-          statusText: response.statusText,
-          headers: stripped,
-        });
-      }
-
-      logAccess(requestId, method, path, developerId, start, response.status);
-      return response;
-    },
-  });
+  const server = tryStart(startPort);
 
   logger.info("Gyst HTTP server started", { port: server.port, dbPath });
 

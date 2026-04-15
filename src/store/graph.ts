@@ -21,6 +21,7 @@ export interface GraphNode {
   id: string;
   type: string;
   title: string;
+  content: string;
   confidence: number;
   scope: string;
 }
@@ -48,6 +49,7 @@ interface NeighborRow {
   id: string;
   type: string;
   title: string;
+  content: string;
   confidence: number;
   scope: string;
   source_id: string;
@@ -60,6 +62,7 @@ interface EntryRow {
   id: string;
   type: string;
   title: string;
+  content: string;
   confidence: number;
   scope: string;
 }
@@ -79,6 +82,7 @@ interface HubRow {
   id: string;
   type: string;
   title: string;
+  content: string;
   confidence: number;
   scope: string;
   degree: number;
@@ -121,7 +125,7 @@ export function getNeighbors(
   const rows = db
     .query<NeighborRow, [string, string, string, number]>(
       `SELECT
-        e.id, e.type, e.title, e.confidence, e.scope,
+        e.id, e.type, e.title, e.content, e.confidence, e.scope,
         r.source_id, r.target_id, r.type AS rel_type, r.strength
       FROM relationships r
       JOIN entries e ON (
@@ -143,6 +147,7 @@ export function getNeighbors(
         id: row.id,
         type: row.type,
         title: row.title,
+        content: row.content,
         confidence: row.confidence,
         scope: row.scope,
       });
@@ -212,7 +217,7 @@ export function getFileSubgraph(
   const entryPlaceholders = allIds.map(() => "?").join(", ");
   const entryRows = db
     .query<EntryRow, string[]>(
-      `SELECT id, type, title, confidence, scope FROM entries
+      `SELECT id, type, title, content, confidence, scope FROM entries
        WHERE id IN (${entryPlaceholders}) AND status = 'active'`,
     )
     .all(...allIds);
@@ -221,6 +226,7 @@ export function getFileSubgraph(
     id: e.id,
     type: e.type,
     title: e.title,
+    content: e.content,
     confidence: e.confidence,
     scope: e.scope,
   }));
@@ -311,7 +317,7 @@ export function getClusters(
 
     const entryRows = db
       .query<EntryRow, string[]>(
-        `SELECT id, type, title, confidence, scope FROM entries
+        `SELECT id, type, title, content, confidence, scope FROM entries
          WHERE id IN (${placeholders}) AND status = 'active'`,
       )
       .all(...componentIds);
@@ -341,6 +347,7 @@ export function getClusters(
       id: e.id,
       type: e.type,
       title: e.title,
+      content: e.content,
       confidence: e.confidence,
       scope: e.scope,
     }));
@@ -431,7 +438,7 @@ export function getHubs(
 ): readonly (GraphNode & { degree: number })[] {
   const rows = db
     .query<HubRow, [number]>(
-      `SELECT e.id, e.type, e.title, e.confidence, e.scope,
+      `SELECT e.id, e.type, e.title, e.content, e.confidence, e.scope,
         COUNT(x.id) AS degree
       FROM entries e
       LEFT JOIN (
@@ -454,6 +461,7 @@ export function getHubs(
     id: r.id,
     type: r.type,
     title: r.title,
+    content: r.content,
     confidence: r.confidence,
     scope: r.scope,
     degree: r.degree,
@@ -476,7 +484,7 @@ export function getFullGraph(
 ): Subgraph {
   const entryRows = db
     .query<EntryRow, [number]>(
-      `SELECT id, type, title, confidence, scope
+      `SELECT id, type, title, content, confidence, scope
        FROM entries WHERE status = 'active'
        ORDER BY confidence DESC
        LIMIT ?`,
@@ -495,7 +503,7 @@ export function getFullGraph(
     .query<RelRow, string[]>(
       `SELECT source_id, target_id, type, strength
        FROM relationships
-       WHERE source_id IN (${placeholders}) AND target_id IN (${placeholders})`,
+       WHERE source_id IN (${placeholders}) OR target_id IN (${placeholders})`,
     )
     .all(...nodeIds, ...nodeIds);
 
@@ -503,6 +511,7 @@ export function getFullGraph(
     id: e.id,
     type: e.type,
     title: e.title,
+    content: e.content,
     confidence: e.confidence,
     scope: e.scope,
   }));

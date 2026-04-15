@@ -866,14 +866,29 @@ program
   .command("inject-context")
   .description("Print a compact session-start context block for the current project")
   .option("--write", "Also write to .gyst-context.md for tools that read project files")
+  .option("--always-on", "Include mandatory behavioral instructions for the agent")
+  .option("--graph-traverse", "Include graph traversal instructions for complex tasks")
   .option("--dir <path>", "Project directory", process.cwd())
-  .action(async (opts: { write: boolean; dir: string }) => {
+  .action(async (opts: { write: boolean; alwaysOn: boolean; graphTraverse: boolean; dir: string }) => {
     const { resolve } = await import("node:path");
     const config = loadConfig(opts.dir);
     // Resolve dbPath relative to opts.dir so --dir truly isolates the project.
     const db = initDatabase(resolve(opts.dir, config.dbPath));
     const { generateSessionContext } = await import("../capture/session-inject.js");
-    const text = generateSessionContext({ db, projectDir: opts.dir });
+    let text = generateSessionContext({ db, projectDir: opts.dir });
+
+    if (opts.alwaysOn) {
+      text += "\n\n## Gyst Mandatory Instructions\n" +
+        "1. **Continuous Retrieval:** For EVERY user prompt, first check Gyst 'recall' if the task touches complex logic or previously solved areas.\n" +
+        "2. **Real-time Storage:** When you solve a bug or make a decision, immediately use 'learn' to store it. Do not wait for the session to end.\n" +
+        "3. **Contextual Awareness:** Use 'check-conventions' before editing files to ensure you follow local standards.";
+    }
+
+    if (opts.graphTraverse) {
+      text += "\n\n## Knowledge Graph Traversal\n" +
+        "Use the 'graph' tool to explore relationships between files. If a file is a 'Hub', investigate its connected entries to understand its fragile points.";
+    }
+
     db.close();
     process.stdout.write(text + "\n");
     if (opts.write) {

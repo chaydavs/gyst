@@ -155,135 +155,145 @@ export async function startDashboardServer(
 ): Promise<DashboardServerHandle> {
   const { db } = options;
 
-  const server = Bun.serve({
-    port: options.port,
+  const tryStart = (port: number): any => {
+    try {
+      return Bun.serve({
+        port,
+        async fetch(req: Request): Promise<Response> {
+          const requestId = crypto.randomUUID();
+          const start = performance.now();
+          const method = req.method.toUpperCase();
+          const url = new URL(req.url);
+          const path = url.pathname;
 
-    async fetch(req: Request): Promise<Response> {
-      const requestId = crypto.randomUUID();
-      const start = performance.now();
-      const method = req.method.toUpperCase();
-      const url = new URL(req.url);
-      const path = url.pathname;
-
-      try {
-        // CORS preflight
-        if (method === "OPTIONS") {
-          const res = new Response(null, {
-            status: 204,
-            headers: {
-              "Access-Control-Allow-Origin": CORS_ORIGIN,
-              "Access-Control-Allow-Methods": "GET, OPTIONS",
-              "Access-Control-Allow-Headers": "Content-Type",
-              "X-Request-Id": requestId,
-            },
-          });
-          logAccess(requestId, method, path, start, 204);
-          return res;
-        }
-
-        // Static HTML root — served from inlined bundle string (no file dependency)
-        if (method === "GET" && path === "/") {
-          const res = new Response(DASHBOARD_HTML as unknown as string, {
-            headers: {
-              "Content-Type": "text/html; charset=utf-8",
-              "X-Request-Id": requestId,
-            },
-          });
-          logAccess(requestId, method, path, start, 200);
-          return res;
-        }
-
-        // JSON API routes
-        if (method === "GET") {
-          if (path === "/api/stats") {
-            const data = buildStats(db);
-            logAccess(requestId, method, path, start, 200);
-            return jsonResponse(data, 200, requestId);
-          }
-
-          if (path === "/api/graph") {
-            const data = getFullGraph(db);
-            logAccess(requestId, method, path, start, 200);
-            return jsonResponse(data, 200, requestId);
-          }
-
-          // /api/graph/:id  — must come before the bare /api/graph check
-          const graphNodeMatch = GRAPH_NODE_RE.exec(path);
-          if (graphNodeMatch !== null) {
-            const entryId = decodeURIComponent(graphNodeMatch[1] ?? "");
-            const data = getNeighbors(db, entryId);
-            logAccess(requestId, method, path, start, 200);
-            return jsonResponse(data, 200, requestId);
-          }
-
-          if (path === "/api/files") {
-            const raw = url.searchParams.get("paths") ?? "";
-            const paths = raw.length > 0 ? raw.split(",").map((p) => p.trim()) : [];
-            const data = getFileSubgraph(db, paths);
-            logAccess(requestId, method, path, start, 200);
-            return jsonResponse(data, 200, requestId);
-          }
-
-          if (path === "/api/clusters") {
-            const data = getClusters(db);
-            logAccess(requestId, method, path, start, 200);
-            return jsonResponse(data, 200, requestId);
-          }
-
-          if (path === "/api/hubs") {
-            const limitParam = url.searchParams.get("limit");
-            const limit = limitParam !== null ? parseInt(limitParam, 10) || 20 : 20;
-            const data = getHubs(db, limit);
-            logAccess(requestId, method, path, start, 200);
-            return jsonResponse(data, 200, requestId);
-          }
-
-          if (path === "/api/path") {
-            const from = url.searchParams.get("from") ?? "";
-            const to = url.searchParams.get("to") ?? "";
-            if (from.length === 0 || to.length === 0) {
-              logAccess(requestId, method, path, start, 400);
-              return jsonResponse(
-                { error: "Missing 'from' or 'to' query parameters" },
-                400,
-                requestId,
-              );
+          try {
+            // CORS preflight
+            if (method === "OPTIONS") {
+              const res = new Response(null, {
+                status: 204,
+                headers: {
+                  "Access-Control-Allow-Origin": CORS_ORIGIN,
+                  "Access-Control-Allow-Methods": "GET, OPTIONS",
+                  "Access-Control-Allow-Headers": "Content-Type",
+                  "X-Request-Id": requestId,
+                },
+              });
+              logAccess(requestId, method, path, start, 204);
+              return res;
             }
-            const data = findPath(db, from, to);
-            logAccess(requestId, method, path, start, 200);
-            return jsonResponse(data, 200, requestId);
-          }
 
-          if (path === "/api/activity") {
-            const hoursParam = url.searchParams.get("hours");
-            const hours = hoursParam !== null ? parseInt(hoursParam, 10) || 24 : 24;
-            const data = getRecentActivity(db, "local", hours);
-            logAccess(requestId, method, path, start, 200);
-            return jsonResponse(data, 200, requestId);
-          }
+            // Static HTML root — served from inlined bundle string (no file dependency)
+            if (method === "GET" && path === "/") {
+              const res = new Response(DASHBOARD_HTML as unknown as string, {
+                headers: {
+                  "Content-Type": "text/html; charset=utf-8",
+                  "X-Request-Id": requestId,
+                },
+              });
+              logAccess(requestId, method, path, start, 200);
+              return res;
+            }
 
-          if (path === "/api/uniformity") {
-            const { computeUniformityScore } = await import("../store/uniformity.js");
-            const report = computeUniformityScore(db);
-            logAccess(requestId, method, path, start, 200);
-            return jsonResponse(report, 200, requestId);
-          }
-        }
+            // JSON API routes
+            if (method === "GET") {
+              if (path === "/api/stats") {
+                const data = buildStats(db);
+                logAccess(requestId, method, path, start, 200);
+                return jsonResponse(data, 200, requestId);
+              }
 
-        // 404 fallthrough
-        logAccess(requestId, method, path, start, 404);
-        return jsonResponse({ error: "Not found" }, 404, requestId);
-      } catch (err) {
-        logger.error("dashboard handler error", {
-          requestId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        logAccess(requestId, method, path, start, 500);
-        return jsonResponse({ error: "internal" }, 500, requestId);
+              if (path === "/api/graph") {
+                const data = getFullGraph(db);
+                logAccess(requestId, method, path, start, 200);
+                return jsonResponse(data, 200, requestId);
+              }
+
+              // /api/graph/:id  — must come before the bare /api/graph check
+              const graphNodeMatch = GRAPH_NODE_RE.exec(path);
+              if (graphNodeMatch !== null) {
+                const entryId = decodeURIComponent(graphNodeMatch[1] ?? "");
+                const data = getNeighbors(db, entryId);
+                logAccess(requestId, method, path, start, 200);
+                return jsonResponse(data, 200, requestId);
+              }
+
+              if (path === "/api/files") {
+                const raw = url.searchParams.get("paths") ?? "";
+                const paths = raw.length > 0 ? raw.split(",").map((p) => p.trim()) : [];
+                const data = getFileSubgraph(db, paths);
+                logAccess(requestId, method, path, start, 200);
+                return jsonResponse(data, 200, requestId);
+              }
+
+              if (path === "/api/clusters") {
+                const data = getClusters(db);
+                logAccess(requestId, method, path, start, 200);
+                return jsonResponse(data, 200, requestId);
+              }
+
+              if (path === "/api/hubs") {
+                const limitParam = url.searchParams.get("limit");
+                const limit = limitParam !== null ? parseInt(limitParam, 10) || 20 : 20;
+                const data = getHubs(db, limit);
+                logAccess(requestId, method, path, start, 200);
+                return jsonResponse(data, 200, requestId);
+              }
+
+              if (path === "/api/path") {
+                const from = url.searchParams.get("from") ?? "";
+                const to = url.searchParams.get("to") ?? "";
+                if (from.length === 0 || to.length === 0) {
+                  logAccess(requestId, method, path, start, 400);
+                  return jsonResponse(
+                    { error: "Missing 'from' or 'to' query parameters" },
+                    400,
+                    requestId,
+                  );
+                }
+                const data = findPath(db, from, to);
+                logAccess(requestId, method, path, start, 200);
+                return jsonResponse(data, 200, requestId);
+              }
+
+              if (path === "/api/activity") {
+                const hoursParam = url.searchParams.get("hours");
+                const hours = hoursParam !== null ? parseInt(hoursParam, 10) || 24 : 24;
+                const data = getRecentActivity(db, "local", hours);
+                logAccess(requestId, method, path, start, 200);
+                return jsonResponse(data, 200, requestId);
+              }
+
+              if (path === "/api/uniformity") {
+                const { computeUniformityScore } = await import("../store/uniformity.js");
+                const report = computeUniformityScore(db);
+                logAccess(requestId, method, path, start, 200);
+                return jsonResponse(report, 200, requestId);
+              }
+            }
+
+            // 404 fallthrough
+            logAccess(requestId, method, path, start, 404);
+            return jsonResponse({ error: "Not found" }, 404, requestId);
+          } catch (err) {
+            logger.error("dashboard handler error", {
+              requestId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+            logAccess(requestId, method, path, start, 500);
+            return jsonResponse({ error: "internal" }, 500, requestId);
+          }
+        },
+      });
+    } catch (err: any) {
+      if (err.code === "EADDRINUSE" && port < options.port + 10) {
+        logger.info("dashboard-port-in-use", { port, next: port + 1 });
+        return tryStart(port + 1);
       }
-    },
-  });
+      throw err;
+    }
+  };
 
+  const server = tryStart(options.port);
   const boundUrl = `http://localhost:${server.port}`;
 
   logger.info("dashboard-server-started", { url: boundUrl });
