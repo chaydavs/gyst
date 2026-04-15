@@ -235,7 +235,23 @@ team.command("create <name>").description("Create team").action(createTeamAction
 team.command("invite").description("Invite member").action(inviteTeamAction);
 team.command("members").description("List members").action(membersTeamAction);
 
-program.command("create <name>").description("Alias for team create").action(createTeamAction);
+program
+  .command("create [keyword] [name]")
+  .description("Create a new team")
+  .action((keyword: string | undefined, name: string | undefined) => {
+    let teamName = "";
+    if (keyword?.toLowerCase() === "team") {
+      teamName = (name ?? "").trim();
+    } else {
+      teamName = (keyword ?? "").trim();
+    }
+
+    if (!teamName) {
+      process.stdout.write("Error: team name is required. Usage: gyst create team \"name\"\n");
+      process.exit(1);
+    }
+    createTeamAction(teamName);
+  });
 program.command("invite").description("Alias for team invite").action(inviteTeamAction);
 program.command("members").description("Alias for team members").action(membersTeamAction);
 
