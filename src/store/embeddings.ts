@@ -1,7 +1,7 @@
 /**
  * Semantic search strategy for Gyst (Strategy 5).
  *
- * Uses sqlite-vec + all-MiniLM-L6-v2 (via @xenova/transformers) to give
+ * Uses sqlite-vec + all-MiniLM-L6-v2 (via @huggingface/transformers) to give
  * recall a meaning-based fallback that complements BM25's keyword matching.
  * This is what lets queries like "why did we choose bun" match an entry
  * titled "Decision: Migrate to Bun runtime" — BM25 can't see that
@@ -55,7 +55,7 @@ async function getExtractor(): Promise<Extractor> {
   if (extractorPromise === null) {
     extractorPromise = (async () => {
       logger.info("Loading embedding model", { model: MODEL_ID });
-      const transformers = await import("@xenova/transformers");
+      const transformers = await import("@huggingface/transformers");
       const pipeline = transformers.pipeline as unknown as (
         task: string,
         model: string,
