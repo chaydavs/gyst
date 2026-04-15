@@ -31,6 +31,8 @@ const ConfigSchema = z.object({
   logLevel: z
     .enum(["debug", "info", "warn", "error"])
     .default("info"),
+  /** When true, write markdown files after every learn. Default: false. */
+  autoExport: z.boolean().default(false),
 });
 
 /** Fully-resolved Gyst configuration. */

@@ -233,6 +233,25 @@ describe("CLI commands", () => {
 
 import { installGitHooks } from "../../src/cli/install.js";
 import { readFileSync, mkdirSync } from "node:fs";
+import { loadConfig } from "../../src/utils/config.js";
+
+describe("loadConfig", () => {
+  test("loadConfig: autoExport defaults to false", () => {
+    const cfg = loadConfig();
+    expect(cfg.autoExport).toBe(false);
+  });
+
+  test("loadConfig: autoExport can be set to true", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "gyst-cfg-"));
+    writeFileSync(
+      join(tmpDir, ".gyst-wiki.json"),
+      JSON.stringify({ autoExport: true }),
+    );
+    const cfg = loadConfig(tmpDir);
+    expect(cfg.autoExport).toBe(true);
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
 
 describe("installGitHooks", () => {
   let gitTmp: string;
