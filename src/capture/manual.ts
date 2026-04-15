@@ -138,7 +138,19 @@ export async function addManualEntry(
   // 4. Insert into database (FTS5 is auto-synced via trigger)
   insertEntry(db, entry);
 
-  // 5. Write markdown file
+  // 5. Embed for semantic search if available
+  const { canLoadExtensions } = await import("../store/database.js");
+  if (canLoadExtensions()) {
+    try {
+      const { initVectorStore, embedAndStore } = await import("../store/embeddings.js");
+      initVectorStore(db);
+      await embedAndStore(db, entry.id, `${entry.title}\n\n${entry.content}`);
+    } catch (err) {
+      logger.warn("Failed to embed manual entry", { id: entry.id, error: String(err) });
+    }
+  }
+
+  // 6. Write markdown file
   const config = loadConfig();
   writeEntry(entry, config.wikiDir);
 
