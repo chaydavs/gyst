@@ -363,6 +363,103 @@ const teamCommand = program
   .command("team")
   .description("Manage team collaboration");
 
+const createTeamAction = (name: string) => {
+  try {
+    const db = openTeamDb();
+    const { teamId, adminKey } = createTeam(db, name.trim());
+    db.close();
+
+    process.stdout.write(`Team created successfully.\n`);
+    process.stdout.write(`  Team ID  : ${teamId}\n`);
+    process.stdout.write(`  Name     : ${name.trim()}\n`);
+    process.stdout.write(`\n`);
+    process.stdout.write(`  Admin API Key (save this — it will not be shown again):\n`);
+    process.stdout.write(`  ${adminKey}\n`);
+    process.stdout.write(`\n`);
+    process.stdout.write(`  Set it in your shell:\n`);
+    process.stdout.write(`    export GYST_API_KEY="${adminKey}"\n`);
+
+    logger.info("Team created via CLI", { teamId });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error("team create failed", { error: message });
+    process.stdout.write(`Error: ${message}\n`);
+    process.exit(1);
+  }
+};
+
+const inviteTeamAction = async () => {
+  try {
+    const db = openTeamDb();
+    const teamId = await resolveTeamFromEnv(db);
+    const inviteKey = createInviteKey(db, teamId);
+    db.close();
+
+    process.stdout.write(`Invite key created (valid for 24 hours).\n`);
+    process.stdout.write(`\n`);
+    process.stdout.write(`  Share this with the new member:\n`);
+    process.stdout.write(`    gyst join ${inviteKey} "Their Name"\n`);
+
+    logger.info("Invite key created via CLI", { teamId });
+  } catch (err) {
+    if (err instanceof AuthError) {
+      process.stdout.write(`Error: ${err.message}\n`);
+      process.exit(1);
+      return;
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error("team invite failed", { error: message });
+    process.stdout.write(`Error: ${message}\n`);
+    process.exit(1);
+  }
+};
+
+const membersTeamAction = async () => {
+  try {
+    const db = openTeamDb();
+    const teamId = await resolveTeamFromEnv(db);
+    const members = getTeamMembers(db, teamId);
+    db.close();
+
+    if (members.length === 0) {
+      process.stdout.write("No members found.\n");
+      return;
+    }
+
+    process.stdout.write(`Team members (${members.length}):\n\n`);
+    for (const member of members) {
+      process.stdout.write(
+        `  ${member.displayName.padEnd(24)} ${member.role.padEnd(10)}  ${member.developerId}  (joined ${member.joinedAt.slice(0, 10)})\n`,
+      );
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error("team members failed", { error: message });
+    process.stdout.write(`Error: ${message}\n`);
+    process.exit(1);
+  }
+};
+
+const revokeTeamAction = async (developerId: string) => {
+  try {
+    const db = openTeamDb();
+    const teamId = await resolveTeamFromEnv(db);
+    removeMember(db, teamId, developerId.trim());
+    db.close();
+
+    process.stdout.write(`Member revoked successfully.\n`);
+    process.stdout.write(`  Developer ID : ${developerId.trim()}\n`);
+    process.stdout.write(`  All API keys for this developer have been revoked.\n`);
+
+    logger.info("Member revoked via CLI", { teamId, developerId: developerId.trim() });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error("team revoke failed", { error: message });
+    process.stdout.write(`Error: ${message}\n`);
+    process.exit(1);
+  }
+};
+
 /**
  * gyst team create "<Team Name>"
  *
@@ -372,30 +469,13 @@ const teamCommand = program
 teamCommand
   .command("create <name>")
   .description("Create a new team and print the admin API key")
-  .action((name: string) => {
-    try {
-      const db = openTeamDb();
-      const { teamId, adminKey } = createTeam(db, name.trim());
-      db.close();
+  .action(createTeamAction);
 
-      process.stdout.write(`Team created successfully.\n`);
-      process.stdout.write(`  Team ID  : ${teamId}\n`);
-      process.stdout.write(`  Name     : ${name.trim()}\n`);
-      process.stdout.write(`\n`);
-      process.stdout.write(`  Admin API Key (save this — it will not be shown again):\n`);
-      process.stdout.write(`  ${adminKey}\n`);
-      process.stdout.write(`\n`);
-      process.stdout.write(`  Set it in your shell:\n`);
-      process.stdout.write(`    export GYST_API_KEY="${adminKey}"\n`);
-
-      logger.info("Team created via CLI", { teamId });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error("team create failed", { error: message });
-      process.stdout.write(`Error: ${message}\n`);
-      process.exit(1);
-    }
-  });
+// Alias
+program
+  .command("create <name>")
+  .description("Alias for 'gyst team create'")
+  .action(createTeamAction);
 
 /**
  * gyst team invite
@@ -408,31 +488,13 @@ teamCommand
 teamCommand
   .command("invite")
   .description("Create an invite key for a new team member (requires GYST_API_KEY)")
-  .action(async () => {
-    try {
-      const db = openTeamDb();
-      const teamId = await resolveTeamFromEnv(db);
-      const inviteKey = createInviteKey(db, teamId);
-      db.close();
+  .action(inviteTeamAction);
 
-      process.stdout.write(`Invite key created (valid for 24 hours).\n`);
-      process.stdout.write(`\n`);
-      process.stdout.write(`  Share this with the new member:\n`);
-      process.stdout.write(`    gyst join ${inviteKey} "Their Name"\n`);
-
-      logger.info("Invite key created via CLI", { teamId });
-    } catch (err) {
-      if (err instanceof AuthError) {
-        process.stdout.write(`Error: ${err.message}\n`);
-        process.exit(1);
-        return;
-      }
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error("team invite failed", { error: message });
-      process.stdout.write(`Error: ${message}\n`);
-      process.exit(1);
-    }
-  });
+// Alias
+program
+  .command("invite")
+  .description("Alias for 'gyst team invite'")
+  .action(inviteTeamAction);
 
 /**
  * gyst team members
@@ -444,31 +506,13 @@ teamCommand
 teamCommand
   .command("members")
   .description("List team members (requires GYST_API_KEY)")
-  .action(async () => {
-    try {
-      const db = openTeamDb();
-      const teamId = await resolveTeamFromEnv(db);
-      const members = getTeamMembers(db, teamId);
-      db.close();
+  .action(membersTeamAction);
 
-      if (members.length === 0) {
-        process.stdout.write("No members found.\n");
-        return;
-      }
-
-      process.stdout.write(`Team members (${members.length}):\n\n`);
-      for (const member of members) {
-        process.stdout.write(
-          `  ${member.displayName.padEnd(24)} ${member.role.padEnd(10)}  ${member.developerId}  (joined ${member.joinedAt.slice(0, 10)})\n`,
-        );
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error("team members failed", { error: message });
-      process.stdout.write(`Error: ${message}\n`);
-      process.exit(1);
-    }
-  });
+// Alias
+program
+  .command("members")
+  .description("Alias for 'gyst team members'")
+  .action(membersTeamAction);
 
 /**
  * gyst team revoke <developer-id>
@@ -480,25 +524,13 @@ teamCommand
 teamCommand
   .command("revoke <developerId>")
   .description("Revoke a member's API keys and remove them from the team (requires GYST_API_KEY)")
-  .action(async (developerId: string) => {
-    try {
-      const db = openTeamDb();
-      const teamId = await resolveTeamFromEnv(db);
-      removeMember(db, teamId, developerId.trim());
-      db.close();
+  .action(revokeTeamAction);
 
-      process.stdout.write(`Member revoked successfully.\n`);
-      process.stdout.write(`  Developer ID : ${developerId.trim()}\n`);
-      process.stdout.write(`  All API keys for this developer have been revoked.\n`);
-
-      logger.info("Member revoked via CLI", { teamId, developerId: developerId.trim() });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error("team revoke failed", { error: message });
-      process.stdout.write(`Error: ${message}\n`);
-      process.exit(1);
-    }
-  });
+// Alias
+program
+  .command("revoke <developerId>")
+  .description("Alias for 'gyst team revoke'")
+  .action(revokeTeamAction);
 
 // ---------------------------------------------------------------------------
 // gyst join <invite-key> <display-name>
