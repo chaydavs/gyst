@@ -14,8 +14,8 @@ if (!(process.versions as Record<string, string>)["bun"]) {
  */
 
 import { Command } from "commander";
-import { mkdirSync, existsSync, writeFileSync } from "fs";
-import { join, resolve } from "path";
+import { mkdirSync, existsSync } from "fs";
+import { join } from "path";
 // @ts-ignore — JSON import resolved by Bun bundler; string fallback for dev mode
 import _pkg from "../../package.json" with { type: "json" };
 const _pkgVersion: string = (typeof _pkg === "object" && _pkg !== null && "version" in _pkg)
@@ -26,16 +26,14 @@ import { installForDetectedTools } from "../mcp/installer.js";
 import { logger } from "../utils/logger.js";
 import { loadConfig } from "../utils/config.js";
 import { addManualEntry } from "../capture/manual.js";
-import { GystError } from "../utils/errors.js";
 import {
   createTeam,
   createInviteKey,
   joinTeam,
   initTeamSchema,
-  AuthError,
 } from "../server/auth.js";
 import { initActivitySchema } from "../server/activity.js";
-import { getTeamMembers, removeMember } from "../server/team.js";
+import { getTeamMembers } from "../server/team.js";
 
 const WIKI_SUBDIRS = [
   "error_pattern",
@@ -58,33 +56,58 @@ type EntryType = typeof VALID_ENTRY_TYPES[number];
 // Action Handlers
 // ---------------------------------------------------------------------------
 
-const setupAction = async () => {
+const detectConventionsAction = async (dir: string | undefined, options: { dryRun?: boolean }) => {
   try {
+    const targetDir = dir ?? process.cwd();
+    const isDryRun = options.dryRun === true;
+    const { detectConventions } = await import("../compiler/detect-conventions.js");
+    process.stdout.write(`Scanning for conventions in: ${targetDir}\n`);
+    if (isDryRun) process.stdout.write("(dry-run mode — nothing will be saved)\n");
+    process.stdout.write("\n");
+    const conventions = await detectConventions(targetDir);
+    if (conventions.length === 0) {
+      process.stdout.write("No conventions detected.\n");
+      return;
+    }
+    process.stdout.write(`Found ${conventions.length} convention(s):\n`);
+    for (const c of conventions) {
+      process.stdout.write(`  ${c.category.padEnd(14)} ${c.directory.padEnd(24)} ${c.pattern.padEnd(36)} (${(c.confidence * 100).toFixed(0)}%)\n`);
+    }
+    process.stdout.write("\n");
+    if (isDryRun) return;
     const config = loadConfig();
-    process.stdout.write("Setting up gyst-wiki directory structure...\n");
-    if (!existsSync(config.wikiDir)) {
-      mkdirSync(config.wikiDir, { recursive: true });
-    }
-    for (const sub of WIKI_SUBDIRS) {
-      const dir = join(config.wikiDir, sub);
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    }
-    process.stdout.write(`  wiki dir : ${config.wikiDir}\n`);
     const db = initDatabase(config.dbPath);
+    const { storeDetectedConventions } = await import("../compiler/store-conventions.js");
+    const stored = await storeDetectedConventions(db, conventions);
     db.close();
-    process.stdout.write(`  database : ${config.dbPath}\n`);
-    const installed = installForDetectedTools(process.cwd());
-    for (const tool of installed) process.stdout.write(`  configured: ${tool}\n`);
-    const { installGitHooks } = await import("./install.js");
-    const gitResult = installGitHooks(process.cwd());
-    if (!gitResult.noGit) {
-      const done = [...gitResult.installed, ...gitResult.skipped.map((f) => `${f} (already set)`)];
-      process.stdout.write(`  hooks: ${done.join(", ")}\n`);
-    }
-    logger.info("Gyst setup completed successfully");
+    process.stdout.write(`Stored ${stored} convention(s) to knowledge base.\n`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    process.stdout.write(`\nSetup failed: ${message}\n`);
+    process.stdout.write(`Error: ${message}\n`);
+    process.exit(1);
+  }
+};
+
+const checkConventionsAction = async (file: string | undefined) => {
+  try {
+    const targetPath = file ?? process.cwd();
+    const config = loadConfig();
+    const db = initDatabase(config.dbPath);
+    const rows = db.query<{ id: string; title: string; confidence: number }, [string]>(
+      `SELECT DISTINCT e.id, e.title, e.confidence FROM entries e JOIN entry_files ef ON ef.entry_id = e.id WHERE e.type = 'convention' AND e.status = 'active' AND ? LIKE ef.file_path || '%' ORDER BY e.confidence DESC LIMIT 10`,
+    ).all(targetPath);
+    db.close();
+    process.stdout.write(`Conventions for ${targetPath}:\n\n`);
+    if (rows.length === 0) {
+      process.stdout.write("No conventions found for this path.\n");
+      return;
+    }
+    for (const row of rows) {
+      process.stdout.write(`  ${row.title.padEnd(48)} (${(row.confidence * 100).toFixed(0)}%)\n`);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    process.stdout.write(`Error: ${message}\n`);
     process.exit(1);
   }
 };
@@ -116,36 +139,37 @@ const searchAction = async (query: string, options: { type: string; max: string 
   }
 };
 
-const addAction = async (
-  posTitle: string | undefined,
-  posContent: string | undefined,
-  options: { type: string; title?: string; content?: string; files?: string[]; tags?: string[] }
-) => {
+const serveAction = async () => {
+  await import("../mcp/server.js");
+};
+
+const setupAction = async () => {
   try {
-    const finalTitle = (options.title ?? posTitle ?? "").trim();
-    const finalContent = (options.content ?? posContent ?? finalTitle).trim();
-    if (!VALID_ENTRY_TYPES.includes(options.type as EntryType)) {
-      process.stdout.write(`Error: --type must be one of: ${VALID_ENTRY_TYPES.join(", ")}\n`);
-      process.exit(1);
-    }
-    if (finalTitle === "") {
-      process.stdout.write("Error: title is required\n");
-      process.exit(1);
-    }
     const config = loadConfig();
+    process.stdout.write("Setting up gyst-wiki directory structure...\n");
+    if (!existsSync(config.wikiDir)) {
+      mkdirSync(config.wikiDir, { recursive: true });
+    }
+    for (const sub of WIKI_SUBDIRS) {
+      const dir = join(config.wikiDir, sub);
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    }
+    process.stdout.write(`  wiki dir : ${config.wikiDir}\n`);
     const db = initDatabase(config.dbPath);
-    const entryId = await addManualEntry(db, {
-      type: options.type as EntryType,
-      title: finalTitle,
-      content: finalContent,
-      files: options.files,
-      tags: options.tags,
-    });
     db.close();
-    process.stdout.write(`Entry added successfully (ID: ${entryId})\n`);
+    process.stdout.write(`  database : ${config.dbPath}\n`);
+    const installed = installForDetectedTools(process.cwd());
+    for (const tool of installed) process.stdout.write(`  configured: ${tool}\n`);
+    const { installGitHooks } = await import("./install.js");
+    const gitResult = installGitHooks(process.cwd());
+    if (!gitResult.noGit) {
+      const done = [...gitResult.installed, ...gitResult.skipped.map((f) => `${f} (already set)`)];
+      process.stdout.write(`  hooks: ${done.join(", ")}\n`);
+    }
+    logger.info("Gyst setup completed successfully");
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    process.stdout.write(`Error: ${message}\n`);
+    process.stdout.write(`\nSetup failed: ${message}\n`);
     process.exit(1);
   }
 };
@@ -228,7 +252,6 @@ program
   .description("Visualize Gyst resources (memory|members)")
   .action(async (resource: string | undefined) => {
     if (resource?.toLowerCase() === "memory") {
-      // Logic from dashboardAction
       const config = loadConfig();
       const db = initDatabase(config.dbPath);
       const { startDashboardServer } = await import("../dashboard/server.js");
@@ -253,7 +276,6 @@ program
   .command("audit <file>")
   .description("Audit a file against the knowledge graph")
   .action(async (file: string) => {
-    // Re-use logic from 'check' command
     const config = loadConfig();
     const db = initDatabase(config.dbPath);
     const { checkFileViolations } = await import("../compiler/check-violations.js");
@@ -278,7 +300,31 @@ program.command("setup").description("Initialize Gyst").action(setupAction);
 program.command("recall <query>").description("Search memory").option("-t, --type <type>", "Filter", "all").option("-n, --max <max>", "Limit", "5").action(searchAction);
 program.command("search <query>").description("Alias for recall").option("-t, --type <type>", "Filter", "all").option("-n, --max <max>", "Limit", "5").action(searchAction);
 
-program.command("add [title] [content]").description("Add knowledge").option("-t, --type <type>", "Type", "learning").option("-f, --files <files...>", "Files").option("--tags <tags...>", "Tags").action(addAction);
+program.command("add [title] [content]").description("Add knowledge").option("-t, --type <type>", "Type", "learning").option("-f, --files <files...>", "Files").option("--tags <tags...>", "Tags").action(async (posTitle, posContent, options) => {
+  try {
+    const finalTitle = (options.title ?? posTitle ?? "").trim();
+    const finalContent = (options.content ?? posContent ?? finalTitle).trim();
+    if (finalTitle === "") {
+      process.stdout.write("Error: title is required\n");
+      process.exit(1);
+    }
+    const config = loadConfig();
+    const db = initDatabase(config.dbPath);
+    const entryId = await addManualEntry(db, {
+      type: options.type as EntryType,
+      title: finalTitle,
+      content: finalContent,
+      files: options.files,
+      tags: options.tags,
+    });
+    db.close();
+    process.stdout.write(`Entry added successfully (ID: ${entryId})\n`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    process.stdout.write(`Error: ${message}\n`);
+    process.exit(1);
+  }
+});
 
 const team = program.command("team").description("Team management");
 team.command("create <name>").description("Create team").action(createTeamAction);
@@ -295,20 +341,20 @@ program
     } else {
       teamName = (keyword ?? "").trim();
     }
-
     if (!teamName) {
       process.stdout.write("Error: team name is required. Usage: gyst create team \"name\"\n");
       process.exit(1);
     }
     createTeamAction(teamName);
   });
+
 program.command("invite").description("Alias for team invite").action(inviteTeamAction);
 program.command("members").description("Alias for team members").action(membersTeamAction);
 
 program.command("join <inviteKey> <displayName>").description("Join team").action(async (key, name) => {
   try {
     const db = openTeamDb();
-    const { developerId, memberKey } = await joinTeam(db, key.trim(), name.trim());
+    const { memberKey } = await joinTeam(db, key.trim(), name.trim());
     db.close();
     process.stdout.write(`Joined! Member Key: ${memberKey}\n`);
   } catch (err) {
@@ -389,7 +435,7 @@ program.command("inject").description("Alias for inject-context").option("--alwa
   process.stdout.write(text + "\n");
 });
 
-program.command("serve").description("Start MCP server").action(async () => { await import("../mcp/server.js"); });
-program.command("start").description("Alias for serve").action(async () => { await import("../mcp/server.js"); });
+program.command("serve").description("Start MCP server").action(serveAction);
+program.command("start").description("Alias for serve").action(serveAction);
 
 program.parse();
