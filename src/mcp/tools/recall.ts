@@ -317,7 +317,7 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
       // Apply confidence threshold — ghost_knowledge is always included
       // regardless of threshold (confidence is 1.0 by spec, but be explicit
       // here so a misconfigured threshold can never suppress them).
-      const filtered = sortedEntries
+      let filtered = sortedEntries
         .filter(
           (e) =>
             e.type === "ghost_knowledge" ||
@@ -325,8 +325,31 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
         )
         .slice(0, input.max_results ?? 5);
 
+      // --- Global Personal Memory Fallback ---
+      // If local repo search yields no results, check the global home database.
+      let isGlobalResult = false;
+      if (filtered.length === 0 && ctx.globalDb) {
+        logger.info("Local recall yields no results, checking global memory");
+        // Reuse same search strategies against global DB
+        // For brevity we run BM25 and Semantic only for global fallback
+        const [gBm25, gVec] = await Promise.all([
+          Promise.resolve(searchByBM25(ctx.globalDb, input.query, typeFilter, undefined, true)),
+          canLoadExtensions() ? searchByVector(ctx.globalDb, input.query, 5, undefined) : Promise.resolve([])
+        ]);
+        
+        const gFused = reciprocalRankFusion([gBm25, gVec]);
+        if (gFused.length > 0) {
+          const gTopIds = gFused.slice(0, input.max_results ?? 5).map(r => r.id);
+          const gEntries = fetchEntries(ctx.globalDb, gTopIds, undefined, true);
+          if (gEntries.length > 0) {
+            filtered = gEntries;
+            isGlobalResult = true;
+          }
+        }
+      }
+
       // Record co-retrieval for strengthening over time — best-effort, never throws.
-      if (filtered.length >= 2) {
+      if (filtered.length >= 2 && !isGlobalResult) {
         try {
           const { recordCoRetrieval } = await import("../../store/graph.js");
           recordCoRetrieval(db, filtered.slice(0, 5).map((e) => e.id));
@@ -347,13 +370,16 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
       // Prefix ghost_knowledge entry titles with the team-rule warning emoji
       // so agents immediately recognise mandatory constraints.
       const formattableEntries = filtered.map((e) => {
+        let titlePrefix = "";
+        if (isGlobalResult) titlePrefix = "🌎 Global Memory: ";
+        
         if (e.type === "ghost_knowledge") {
-          return { ...e, title: `⚠️ Team Rule: ${e.title}` };
+          return { ...e, title: `${titlePrefix}⚠️ Team Rule: ${e.title}` };
         }
         if (e.type === "convention") {
-          return { ...e, title: `📏 Convention: ${e.title}` };
+          return { ...e, title: `${titlePrefix}📏 Convention: ${e.title}` };
         }
-        return e;
+        return { ...e, title: `${titlePrefix}${e.title}` };
       });
 
       let formatted = formatForContext(formattableEntries, budget);

@@ -58,25 +58,23 @@ async function main(): Promise<void> {
     name: "gyst",
     version: "0.1.0",
   });
+// Initialise database (synchronous — bun:sqlite)
+const db = initDatabase(config.dbPath);
+const globalDb = initDatabase(config.globalDbPath);
 
-  // Initialise database (synchronous — bun:sqlite)
-  const db = initDatabase(config.dbPath);
+// Initialise semantic search (Strategy 5). Graceful if unavailable —
+// the rest of the server keeps running with BM25 + graph + temporal.
+if (canLoadExtensions()) {
+  initVectorStore(db);
+  initVectorStore(globalDb);
 
-  // Initialise semantic search (Strategy 5). Graceful if unavailable —
-  // the rest of the server keeps running with BM25 + graph + temporal.
-  if (canLoadExtensions()) {
-    const ok = initVectorStore(db);
-    if (ok) {
-      // Backfill any entries that predate the vector store in the background.
-      // Fire-and-forget so the server is ready for tool calls immediately.
-      backfillVectors(db).catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        logger.warn("Vector backfill failed", { error: msg });
-      });
-    }
-  }
-
-  // Auto-rebuild: if any wiki markdown file is newer than the database,
+  // Backfill in background
+  backfillVectors(db).catch(() => {});
+  backfillVectors(globalDb).catch(() => {});
+}
+...
+// Register tools
+registerAllTools(server, { mode: "personal", db, globalDb });
   // the index is stale (e.g. after a git pull that brought in new entries).
   const wikiMtime = getNewestFileMtime(config.wikiDir);
   const dbMtime = existsSync(config.dbPath) ? statSync(config.dbPath).mtimeMs : 0;

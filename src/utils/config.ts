@@ -8,6 +8,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import { z } from "zod";
 import { logger } from "./logger.js";
 import { ValidationError } from "./errors.js";
@@ -20,7 +21,14 @@ const ConfigSchema = z.object({
   wikiDir: z.string().default("gyst-wiki"),
   /** Path to the SQLite database file. */
   dbPath: z.string().default("gyst-wiki/.wiki.db"),
+  /** Path to the global personal database. */
+  globalDbPath: z.string().default(join(homedir(), ".gyst", "global.db")),
   /** Maximum number of tokens to include in a recall response. */
+...
+import { join } from "node:path";
+import { z } from "zod";
+import { logger } from "./logger.js";
+import { ValidationError } from "./errors.js";
   maxRecallTokens: z.number().int().positive().default(5000),
   /** Minimum confidence score for a result to be returned. */
   confidenceThreshold: z.number().min(0).max(1).default(0.15),

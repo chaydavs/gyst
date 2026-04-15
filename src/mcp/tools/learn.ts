@@ -366,6 +366,34 @@ export function registerLearnTool(server: McpServer, ctx: ToolContext): void {
         config.wikiDir,
       );
 
+      // If global personal memory is enabled, also persist there
+      if (ctx.globalDb) {
+        try {
+          // Use same ID for cross-project tracking
+          persistEntry(
+            ctx.globalDb,
+            {
+              id,
+              type: valid.type,
+              title: valid.title,
+              content: safeContent,
+              errorSignature,
+              fingerprint,
+              confidence: 0.5,
+              sourceCount: 1,
+              files: valid.files,
+              tags: mergedTags,
+              now,
+              scope: "personal", // Always personal in the global store
+              metadata: styleMetadata,
+            },
+            config.wikiDir, // Markdown still goes to current project wiki
+          );
+        } catch (err) {
+          logger.warn("Failed to persist to global memory", { error: (err as Error).message });
+        }
+      }
+
       // Strategy 5: Store a semantic embedding for this entry when the
       // vector store is available. Fire-and-forget — a failed embedding
       // must not block the learn call. The catch handler logs and

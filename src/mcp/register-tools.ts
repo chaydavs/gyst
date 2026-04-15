@@ -43,6 +43,8 @@ export interface ToolContext {
   readonly mode: "personal" | "team";
   /** Open bun:sqlite database connection. */
   readonly db: Database;
+  /** Global personal database connection (optional). */
+  readonly globalDb?: Database;
   /** Present in team mode only — identifies which team this session belongs to. */
   readonly teamId?: string;
   /** Present in team mode only — identifies the authenticated developer. */
