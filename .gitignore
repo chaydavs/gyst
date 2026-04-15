@@ -49,3 +49,4 @@ tests/benchmark/coir/results/
 # Claude memory (except template)
 .claude/memory/*.md
 !.claude/memory/MEMORY.md.template
+.worktrees/
