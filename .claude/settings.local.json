@@ -113,7 +113,8 @@
       "Bash(grep -n '`' /Users/chaitanyadavuluri/Desktop/SustainableMemory/src/dashboard/index.html)",
       "Bash(gyst setup:*)",
       "Bash(sed -n '195,215p' tests/compiler/writer.test.ts)",
-      "Bash(sed -n '260,275p' tests/compiler/writer.test.ts)"
+      "Bash(sed -n '260,275p' tests/compiler/writer.test.ts)",
+      "Bash(gh pr:*)"
     ]
   }
 }
