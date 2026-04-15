@@ -2,9 +2,9 @@
 
 **Team knowledge compiler for AI coding agents.**
 
-Every AI coding tool makes individual developers faster.
-None of them make teams smarter. Your Claude Code doesn't know
-what your teammate's Cursor learned yesterday. Gyst fixes that.
+> Every AI tool makes individual developers faster. Gyst makes the team smarter by giving every agent a shared memory of the team's past fixes, decisions, and conventions.
+
+Your Claude Code doesn't know what your teammate's Cursor learned yesterday. Gyst fixes that — without infrastructure, without a SaaS subscription, without data leaving your network.
 
 ---
 
@@ -180,6 +180,36 @@ gyst ghost-init   # interactive Q&A to capture tribal knowledge
 
 Agents see ghost knowledge in every `recall()` regardless of what they're searching for.
 
+### ⚡️ Zero-Config Synchronization
+
+Gyst eliminates the "Rebuild Tax." Your knowledge base stays in sync with your code automatically:
+
+- **Git-Native:** A built-in `post-merge` hook triggers a database rebuild every time you `git pull`, so teammates' new knowledge is immediately searchable.
+- **Self-Healing Server:** On startup, the MCP server compares markdown file mtimes against the database. If any wiki file is newer, it rebuilds before serving the first query.
+- **Stale-State Detection:** If `recall()` returns zero results on a non-trivial query, agents are notified when the local index is missing files from Git, prompting a self-fix.
+
+```bash
+gyst rebuild   # manually force-sync the DB with your markdown files
+```
+
+### 🧠 Usage-Based Learning
+
+Gyst isn't just a passive index — it builds "Team Intuition" through usage:
+
+- **Co-Retrieval Strengthening:** If your team frequently looks at a "Database Error" and an "API Convention" in the same session, Gyst automatically builds a relationship between them. After 3 co-retrievals, a permanent graph edge is created.
+- **Dynamic Knowledge Graph:** Over time, Gyst identifies "Hubs" — files or patterns that cause the most friction — helping you prioritize refactoring where it matters most.
+- **Confidence Decay:** Entries that haven't been confirmed recently lose confidence gradually, so stale knowledge naturally falls out of results without manual curation.
+
+### 📊 Visualizing Team Friction
+
+```bash
+gyst dashboard   # launch the D3-powered knowledge graph at localhost:4242
+```
+
+- **Cluster Analysis:** See how your team's knowledge is grouping by domain (e.g., Auth, Payments, Infra).
+- **Friction Heatmap:** Identify the files that trigger the most recall hits to find your technical debt "hotspots."
+- **Live Graph:** Nodes are knowledge entries; edges are relationships. Click any node to read the full entry. Filter by type or confidence.
+
 ### Convention Detection
 
 ```bash
@@ -192,14 +222,6 @@ Detects naming, imports, error handling, exports, testing style, file naming, an
 ### Progressive Disclosure
 
 `recall()` returns full entries (expensive). `search()` returns a compact index at 1/7th the token cost. Use `search` to browse, then `get_entry(id)` for the ones that matter. Agents on small context windows (Ollama @ 4096 tokens) can pass `context_budget: 2000` to get compressed results automatically.
-
-### Knowledge Graph
-
-Every `learn()` call auto-links related entries by shared entities. Co-retrieved entries strengthen their connection over time. The graph becomes a map of what your team knows and how it's connected.
-
-```bash
-gyst dashboard   # D3 visualization of your knowledge graph at localhost:4242
-```
 
 ---
 
@@ -239,6 +261,17 @@ The `install` command wires a `SessionStart` hook into Claude Code (and other to
 - Most recent error pattern
 
 Your agents know your team's rules before you type the first message.
+
+---
+
+## 🚀 Scalability & Performance
+
+Gyst is stress-tested against 10,000+ entries.
+
+- **Ultra-Lean:** 10,000 entries consume only ~12MB of disk space.
+- **Mac Optimized:** Includes a custom `LIMIT` clause in FTS5 queries to bypass macOS-specific BM25 latency regressions in Homebrew SQLite 3.51.x (reduces search from 1.7–3.1s to sub-millisecond).
+- **Smart Consolidation:** Automated deduplication merges redundant learnings into single high-confidence summary entries. Incremental — only processes entries created or modified since the last run.
+- **Concurrent writes:** Three-layer protection against SQLite `SQLITE_BUSY` — WAL mode, `busy_timeout = 5000ms`, and exponential-backoff retry — handles 50+ concurrent agent writes without failures.
 
 ---
 
@@ -364,6 +397,7 @@ Model: `all-MiniLM-L6-v2` (22MB, same model used in production). **4 of 10 subta
 | Hybrid search (5 strategies) | ✓ | vector only | vector only | simple |
 | Knowledge graph | ✓ | ✗ | ✗ | ✗ |
 | Dashboard | ✓ | ✗ | ✗ | ✗ |
+| Auto-sync on git pull | ✓ | ✗ | ✗ | ✗ |
 | MCP tools | 14 | 3 | varies | 1–2 |
 | License | MIT | check | Apache 2.0 | check |
 
@@ -378,17 +412,25 @@ Model: `all-MiniLM-L6-v2` (22MB, same model used in production). **4 of 10 subta
 
 ## CLI Commands
 
-```
+```bash
+# Setup
 gyst install              # First-time setup (detects tools, registers MCP, initializes)
 gyst serve                # Start MCP server (used by tool configs)
 gyst setup                # Re-detect conventions from project
+
+# Knowledge
+gyst rebuild              # Force-sync the DB with your markdown files
 gyst ghost-init           # Capture tribal knowledge interactively
 gyst detect-conventions   # Scan and store coding conventions
 gyst check <file>         # Check file against stored conventions
 gyst score                # Print uniformity score (0–100)
 gyst onboard              # Generate onboarding markdown
-gyst dashboard            # Start knowledge graph dashboard
 gyst recall "query"       # Search from terminal
+
+# Dashboard
+gyst dashboard            # Launch the visual knowledge graph at localhost:4242
+
+# Team
 gyst team create <name>   # Create a team
 gyst team invite          # Generate invite key
 gyst join <key> <name>    # Join a team
@@ -406,9 +448,9 @@ gyst/
 │   ├── store/         # SQLite + FTS5, 5-strategy search, RRF fusion, graph, confidence
 │   ├── server/        # HTTP server, auth (API keys), activity logging, dashboard
 │   ├── capture/       # Git hooks, session harvesting, context injection
-│   ├── cli/           # Commander-based CLI (14 commands)
+│   ├── cli/           # Commander-based CLI (15 commands)
 │   └── utils/         # Config, logger, errors, token counting
-├── tests/             # 861 tests across 42 files
+├── tests/             # 877 tests across 43 files
 ├── gyst-wiki/         # Compiled knowledge base (markdown files)
 └── decisions/         # Architecture Decision Records (001–011)
 ```
@@ -421,7 +463,7 @@ gyst/
 
 ```bash
 bun install
-bun test                        # 861 tests, 42 files
+bun test                        # 877 tests, 43 files
 bun run lint                    # TypeScript type check (tsc --noEmit)
 bun run build                   # Bundle to dist/
 bun run benchmark:codememb      # CodeMemBench (NDCG@10=0.351, Hit=78%)
