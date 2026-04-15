@@ -1,7 +1,7 @@
 ---
 type: convention
 confidence: 0.5
-last_confirmed: '2026-04-14T23:12:44.901Z'
+last_confirmed: '2026-04-15T01:28:07.391Z'
 sources: 1
 ---
 # No Friday production deploys

@@ -1,7 +1,7 @@
 ---
 type: learning
 confidence: 0.5
-last_confirmed: '2026-04-14T23:12:30.354Z'
+last_confirmed: '2026-04-15T01:27:52.921Z'
 sources: 1
 affects:
   - src/auth/auth-service.ts

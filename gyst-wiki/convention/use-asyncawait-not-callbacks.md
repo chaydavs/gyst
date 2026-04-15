@@ -1,7 +1,7 @@
 ---
 type: convention
 confidence: 0.5
-last_confirmed: '2026-04-14T23:12:40.592Z'
+last_confirmed: '2026-04-15T01:28:03.043Z'
 sources: 1
 affects:
   - src/server/http.ts

@@ -109,7 +109,11 @@
       "Bash(sed -n '169,177p' src/utils/format-recall.ts)",
       "Bash(git -C /Users/chaitanyadavuluri/Desktop/SustainableMemory/.claude/worktrees/agent-a4ff5b72 diff --name-only HEAD)",
       "Bash(git:*)",
-      "Bash(npm version:*)"
+      "Bash(npm version:*)",
+      "Bash(grep -n '`' /Users/chaitanyadavuluri/Desktop/SustainableMemory/src/dashboard/index.html)",
+      "Bash(gyst setup:*)",
+      "Bash(sed -n '195,215p' tests/compiler/writer.test.ts)",
+      "Bash(sed -n '260,275p' tests/compiler/writer.test.ts)"
     ]
   }
 }
