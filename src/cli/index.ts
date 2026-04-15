@@ -209,26 +209,33 @@ const VALID_ENTRY_TYPES = [
 type EntryType = typeof VALID_ENTRY_TYPES[number];
 
 program
-  .command("add")
+  .command("add [title] [content]")
   .description("Manually add knowledge entry")
   .option(
     "-t, --type <type>",
     "Entry type (error_pattern|convention|decision|learning)",
     "learning",
   )
-  .option("--title <title>", "Entry title")
-  .option("--content <content>", "Entry content")
+  .option("--title <title>", "Entry title (overrides positional)")
+  .option("--content <content>", "Entry content (overrides positional)")
   .option("-f, --files <files...>", "Affected files")
   .option("--tags <tags...>", "Tags")
   .action(
-    async (options: {
-      type: string;
-      title?: string;
-      content?: string;
-      files?: string[];
-      tags?: string[];
-    }) => {
+    async (
+      posTitle: string | undefined,
+      posContent: string | undefined,
+      options: {
+        type: string;
+        title?: string;
+        content?: string;
+        files?: string[];
+        tags?: string[];
+      },
+    ) => {
       try {
+        const finalTitle = (options.title ?? posTitle ?? "").trim();
+        const finalContent = (options.content ?? posContent ?? finalTitle).trim();
+
         // 1. Validate input
         if (!VALID_ENTRY_TYPES.includes(options.type as EntryType)) {
           process.stdout.write(
@@ -237,13 +244,13 @@ program
           process.exit(1);
           return;
         }
-        if (!options.title || options.title.trim() === "") {
-          process.stdout.write("Error: --title is required\n");
+        if (finalTitle === "") {
+          process.stdout.write("Error: title is required (pass as first argument or use --title)\n");
           process.exit(1);
           return;
         }
-        if (!options.content || options.content.trim() === "") {
-          process.stdout.write("Error: --content is required\n");
+        if (finalContent === "") {
+          process.stdout.write("Error: content is required (pass as second argument or use --content)\n");
           process.exit(1);
           return;
         }
@@ -255,8 +262,8 @@ program
         // 3. Create entry (strip, extract, write, index)
         const entryId = await addManualEntry(db, {
           type: options.type as EntryType,
-          title: options.title.trim(),
-          content: options.content.trim(),
+          title: finalTitle,
+          content: finalContent,
           files: options.files,
           tags: options.tags,
         });
@@ -267,7 +274,7 @@ program
         process.stdout.write("Entry added successfully.\n");
         process.stdout.write(`  ID   : ${entryId}\n`);
         process.stdout.write(`  Type : ${options.type}\n`);
-        process.stdout.write(`  Title: ${options.title.trim()}\n`);
+        process.stdout.write(`  Title: ${finalTitle}\n`);
 
         logger.info("Manual entry added", { entryId, type: options.type });
       } catch (err) {
