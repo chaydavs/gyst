@@ -412,29 +412,37 @@ Model: `all-MiniLM-L6-v2` (22MB, same model used in production). **4 of 10 subta
 
 ## CLI Commands
 
-```bash
-# Setup
-gyst install              # First-time setup (detects tools, registers MCP, initializes)
-gyst serve                # Start MCP server (used by tool configs)
-gyst setup                # Re-detect conventions from project
+### Setup & Lifecycle
+- `gyst install` — First-time setup (detects tools, registers MCP, initializes).
+- `gyst setup` — Re-detect tools and reinstall git hooks.
+- `gyst serve` — Start the MCP server (stdio). Alias: `heartbeat`, `start`.
 
-# Knowledge
-gyst rebuild              # Force-sync the DB with your markdown files
-gyst ghost-init           # Capture tribal knowledge interactively
-gyst detect-conventions   # Scan and store coding conventions
-gyst check <file>         # Check file against stored conventions
-gyst score                # Print uniformity score (0–100)
-gyst onboard              # Generate onboarding markdown
-gyst recall "query"       # Search from terminal
+### Knowledge Management
+- `gyst recall <query>` — Search knowledge base (semantic + keyword). Alias: `search`.
+- `gyst add <title> [content]` — Manually add a knowledge entry.
+- `gyst rebuild` — Sync the SQLite database from markdown files. Alias: `sync`.
+- `gyst consolidate` — Run maintenance pipeline (deduplication & cleanup).
+- `gyst harvest-session` — Extract knowledge from recent Claude Code transcripts.
+- `gyst inject` — Generate session context block for manual injection.
+- `gyst ghost-init` — Interactive onboarding for tribal knowledge.
 
-# Dashboard
-gyst dashboard            # Launch the visual knowledge graph at localhost:4242
+### Analysis & Enforcement
+- `gyst audit <file>` — Check a file against all knowledge rules (fails on violations).
+- `gyst check <file>` — Show conventions applicable to a specific file or path.
+- `gyst probe [dir]` — Technically scan for patterns/conventions (supports `--dry-run`). Alias: `detect`.
+- `gyst score` — Print the team knowledge uniformity score (0–100).
+- `gyst onboard` — Generate a markdown onboarding doc from the knowledge base.
 
-# Team
-gyst team create <name>   # Create a team
-gyst team invite          # Generate invite key
-gyst join <key> <name>    # Join a team
-```
+### Team & Collaboration
+- `gyst team create <name>` — Initialize a new team and get an admin key.
+- `gyst team invite` — Generate a temporary invite key for a new member.
+- `gyst team members` — List all registered team members.
+- `gyst join <key> <name>` — Join an existing team with an invite key.
+
+### Visualization
+- `gyst dashboard` — Launch the D3-powered visual knowledge graph. Alias: `ui`.
+- `gyst show memory` — Alias for `dashboard`.
+- `gyst show members` — Alias for `team members`.
 
 ---
 
