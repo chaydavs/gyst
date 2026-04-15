@@ -464,3 +464,19 @@ describe("insertEntry", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Schema Migrations
+// ---------------------------------------------------------------------------
+
+describe("Schema migrations", () => {
+  test("entries table has markdown_path column", () => {
+    const db = initDatabase(":memory:");
+    const cols = db
+      .query<{ name: string }, []>("PRAGMA table_info(entries)")
+      .all()
+      .map((r) => r.name);
+    expect(cols).toContain("markdown_path");
+    db.close();
+  });
+});

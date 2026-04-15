@@ -314,6 +314,13 @@ export function initDatabase(path: string = "gyst-wiki/.wiki.db"): Database {
     } catch {
       // Column already exists — safe to ignore.
     }
+
+    // Migration: add markdown_path column to entries for existing DBs.
+    try {
+      db.run("ALTER TABLE entries ADD COLUMN markdown_path TEXT");
+    } catch {
+      // Column already exists — safe to ignore.
+    }
   } catch (err) {
     db.close();
     const msg = err instanceof Error ? err.message : String(err);
