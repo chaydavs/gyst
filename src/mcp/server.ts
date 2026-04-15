@@ -8,13 +8,34 @@
  * All logging goes to stderr to avoid polluting the MCP stdio channel.
  */
 
+import { readdirSync, statSync, existsSync } from "node:fs";
+import { join } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { canLoadExtensions, initDatabase } from "../store/database.js";
 import { backfillVectors, initVectorStore } from "../store/embeddings.js";
+import { rebuildFromMarkdown } from "../store/rebuild.js";
 import { loadConfig } from "../utils/config.js";
 import { logger } from "../utils/logger.js";
 import { registerAllTools } from "./register-tools.js";
+
+/**
+ * Recursively finds the maximum mtimeMs across all .md files under `dir`.
+ * Returns 0 if the directory doesn't exist or contains no markdown files.
+ */
+function getNewestFileMtime(dir: string): number {
+  if (!existsSync(dir)) return 0;
+  let newest = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      newest = Math.max(newest, getNewestFileMtime(fullPath));
+    } else if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "index.md") {
+      newest = Math.max(newest, statSync(fullPath).mtimeMs);
+    }
+  }
+  return newest;
+}
 
 // ---------------------------------------------------------------------------
 // Bootstrap
@@ -52,6 +73,24 @@ async function main(): Promise<void> {
         const msg = err instanceof Error ? err.message : String(err);
         logger.warn("Vector backfill failed", { error: msg });
       });
+    }
+  }
+
+  // Auto-rebuild: if any wiki markdown file is newer than the database,
+  // the index is stale (e.g. after a git pull that brought in new entries).
+  const wikiMtime = getNewestFileMtime(config.wikiDir);
+  const dbMtime = existsSync(config.dbPath) ? statSync(config.dbPath).mtimeMs : 0;
+  if (wikiMtime > dbMtime) {
+    logger.info("Wiki files newer than database, auto-rebuilding", {
+      wikiMtime: new Date(wikiMtime).toISOString(),
+      dbMtime: dbMtime > 0 ? new Date(dbMtime).toISOString() : "none",
+    });
+    try {
+      const stats = await rebuildFromMarkdown(config);
+      logger.info("Auto-rebuild complete", stats as unknown as Record<string, unknown>);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.warn("Auto-rebuild failed — continuing with existing index", { error: msg });
     }
   }
 

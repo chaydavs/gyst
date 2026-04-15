@@ -354,7 +354,7 @@ async function scanAndSaveConventions(db: Database, projectDir: string): Promise
 /** Lines we inject into git hooks. Idempotent — safe to call repeatedly. */
 const GIT_HOOKS: ReadonlyArray<{ file: string; line: string }> = [
   { file: "post-commit", line: "gyst harvest-session 2>/dev/null || true" },
-  { file: "post-merge", line: "gyst consolidate 2>/dev/null || true" },
+  { file: "post-merge", line: "gyst rebuild 2>/dev/null || true" },
 ];
 
 /**

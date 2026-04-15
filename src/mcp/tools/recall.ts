@@ -15,6 +15,8 @@
  *   < 800     → ultra-minimal (top 1, first sentence)
  */
 
+import { readdirSync, existsSync } from "node:fs";
+import { join } from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Database } from "bun:sqlite";
@@ -79,6 +81,23 @@ interface EntryRow {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Counts the number of .md files (excluding index.md) in `dir` recursively.
+ * Returns 0 if the directory does not exist.
+ */
+function countWikiFiles(dir: string): number {
+  if (!existsSync(dir)) return 0;
+  let count = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      count += countWikiFiles(join(dir, entry.name));
+    } else if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "index.md") {
+      count += 1;
+    }
+  }
+  return count;
+}
 
 /**
  * Fetches full entry data for a list of ids from the database, applying
@@ -337,7 +356,20 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
         return e;
       });
 
-      const formatted = formatForContext(formattableEntries, budget);
+      let formatted = formatForContext(formattableEntries, budget);
+
+      // Staleness warning: zero results on a non-trivial query may indicate
+      // the SQLite index is out of sync with the wiki markdown files.
+      if (filtered.length === 0 && input.query.length > 5) {
+        const wikiDir = loadConfig().wikiDir;
+        const fileCount = countWikiFiles(wikiDir);
+        const dbCount =
+          (db.query<{ n: number }, []>("SELECT COUNT(*) AS n FROM entries WHERE status = 'active'").get()?.n ?? 0);
+        if (fileCount > dbCount) {
+          formatted +=
+            "\n\n⚠️ Knowledge base may be stale (wiki has more files than the index). Run 'gyst rebuild' or restart your agent.";
+        }
+      }
 
       // Log activity when running in team mode with a known developer
       if (ctx.mode === "team" && ctx.developerId !== undefined && ctx.teamId !== undefined) {

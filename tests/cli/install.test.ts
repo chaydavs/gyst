@@ -268,9 +268,9 @@ describe("installGitHooks", () => {
     expect(content).toContain("#!/bin/sh");
   });
 
-  test("post-merge hook contains consolidate command", () => {
+  test("post-merge hook contains rebuild command", () => {
     const content = readFileSync(join(gitTmp, ".git", "hooks", "post-merge"), "utf-8");
-    expect(content).toContain("gyst consolidate");
+    expect(content).toContain("gyst rebuild");
   });
 
   test("is idempotent — second call skips already-present gyst hooks", () => {

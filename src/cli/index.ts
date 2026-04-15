@@ -961,6 +961,24 @@ program
   });
 
 // ---------------------------------------------------------------------------
+// gyst rebuild — rebuild SQLite index from gyst-wiki/ markdown files
+// ---------------------------------------------------------------------------
+
+program
+  .command("rebuild")
+  .description("Rebuild the SQLite knowledge index from gyst-wiki/ markdown files")
+  .action(async () => {
+    const { rebuildFromMarkdown } = await import("../store/rebuild.js");
+    const { loadConfig } = await import("../utils/config.js");
+    const config = loadConfig();
+    process.stdout.write("Rebuilding knowledge index from markdown files...\n");
+    const stats = await rebuildFromMarkdown(config);
+    process.stdout.write(
+      `Rebuild complete — Total: ${stats.total}, Created: ${stats.created}, Updated: ${stats.updated}, Errors: ${stats.errors}\n`,
+    );
+  });
+
+// ---------------------------------------------------------------------------
 // gyst serve — start the stdio MCP server (used by MCP tool configs)
 // ---------------------------------------------------------------------------
 
