@@ -176,6 +176,30 @@ function writeJsonConfig(filePath: string, config: McpConfig): void {
 }
 
 /**
+ * Writes a hooks.json file with absolute script paths to `targetDir`.
+ * Creates the directory if it does not exist.
+ *
+ * Claude Code and Codex share the same hooks.json schema; the only
+ * difference is the destination directory.
+ */
+function writeHooksPlugin(targetDir: string): void {
+  // Resolve scripts dir relative to this file:
+  //   src/cli/install.ts  → ../../plugin/scripts  (dev)
+  //   dist/cli/install.js → ../../plugin/scripts  (prod, same relative depth)
+  const scriptsDir = join(import.meta.dir, "..", "..", "plugin", "scripts");
+  const hooksConfig = {
+    hooks: [
+      { event: "SessionStart", script: join(scriptsDir, "session-start.js"), timeout: 5000 },
+      { event: "UserPromptSubmit", script: join(scriptsDir, "prompt.js"), timeout: 2000 },
+      { event: "PostToolUse", matcher: "", script: join(scriptsDir, "tool-use.js"), timeout: 2000 },
+      { event: "Stop", script: join(scriptsDir, "session-end.js"), timeout: 5000 },
+    ],
+  };
+  mkdirSync(targetDir, { recursive: true });
+  writeFileSync(join(targetDir, "hooks.json"), JSON.stringify(hooksConfig, null, 2) + "\n", "utf-8");
+}
+
+/**
  * Returns a new config with the Gyst MCP entry merged into `mcpServers`.
  * Does not mutate the original.
  *
@@ -443,25 +467,46 @@ export function installGitHooks(projectDir: string = process.cwd()): {
 // ---------------------------------------------------------------------------
 
 async function registerHooks(tools: ToolInfo[]): Promise<void> {
+  // Claude Code — write hooks.json to plugin dir (auto-discovered by Claude Code)
   const claude = tools.find((t) => t.name === "Claude Code");
   if (claude?.detected) {
     try {
-      const existing = readJsonConfig(claude.configPath);
-      writeJsonConfig(claude.configPath, mergeClaudeHooks(existing));
-      process.stdout.write("    Claude Code: SessionStart + PreCompact hooks ✓\n");
+      writeHooksPlugin(join(homedir(), ".claude", "plugins", "gyst"));
+      process.stdout.write("    Claude Code: MCP server + lifecycle hooks ✓\n");
     } catch (err) {
       logger.warn("install: failed to write Claude Code hooks", { error: err });
     }
   }
 
+  // Codex CLI — same hooks.json format; write to ~/.codex/
+  const codex = tools.find((t) => t.name === "Codex CLI");
+  if (codex?.detected) {
+    try {
+      writeHooksPlugin(join(homedir(), ".codex"));
+      process.stdout.write("    Codex: MCP server + lifecycle hooks ✓\n");
+    } catch (err) {
+      logger.warn("install: failed to write Codex hooks", { error: err });
+    }
+  }
+
+  // Gemini CLI — different hook format; merge into ~/.gemini/settings.json
   const gemini = tools.find((t) => t.name === "Gemini CLI");
   if (gemini?.detected) {
     try {
       const existing = readJsonConfig(gemini.configPath);
       writeJsonConfig(gemini.configPath, mergeGeminiHooks(existing));
-      process.stdout.write("    Gemini CLI: Lifecycle hooks ✓\n");
+      process.stdout.write("    Gemini CLI: MCP server + lifecycle hooks ✓\n");
     } catch (err) {
       logger.warn("install: failed to write Gemini CLI hooks", { error: err });
+    }
+  }
+
+  // MCP-only tools (no hook system available)
+  const mcpOnlyTools = ["Cursor", "Windsurf", "Continue", "OpenCode"];
+  for (const toolName of mcpOnlyTools) {
+    const tool = tools.find((t) => t.name === toolName);
+    if (tool?.detected) {
+      process.stdout.write(`    ${toolName}: MCP server ✓ (no lifecycle hooks available)\n`);
     }
   }
 }

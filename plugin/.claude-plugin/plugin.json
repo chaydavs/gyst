@@ -1,0 +1,10 @@
+{
+  "name": "gyst",
+  "hooks": "plugin/hooks/hooks.json",
+  "mcpServers": {
+    "gyst": {
+      "command": "bunx",
+      "args": ["gyst-mcp", "serve"]
+    }
+  }
+}

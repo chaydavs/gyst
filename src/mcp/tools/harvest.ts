@@ -30,7 +30,6 @@ import { insertEntry, withRetry } from "../../store/database.js";
 import { logger } from "../../utils/logger.js";
 import { ValidationError } from "../../utils/errors.js";
 import { parseError } from "../../compiler/parsers/error.js";
-import { extractContextFromPrompt } from "../../compiler/parsers/prompt.js";
 import type { ToolContext } from "../register-tools.js";
 
 const HarvestInputSchema = z.object({

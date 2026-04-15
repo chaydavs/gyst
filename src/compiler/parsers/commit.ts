@@ -39,9 +39,7 @@ export async function parseLatestCommit(workingDir: string): Promise<ParsedCommi
     // Extract file paths from the diff
     const files = new Set<string>();
     for (const file of parsedDiff.files) {
-      if (file.type === "Added" || file.type === "Deleted" || file.type === "Modified" || file.type === "Renamed") {
-        if (file.path) files.add(file.path);
-      }
+      if ("path" in file && file.path) files.add(file.path);
     }
 
     let entryType: "error_pattern" | "decision" | "learning" = "learning";

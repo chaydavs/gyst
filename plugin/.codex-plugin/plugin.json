@@ -1,0 +1,14 @@
+{
+  "name": "gyst",
+  "version": "0.1.8",
+  "description": "Team knowledge compiler — shared memory across AI coding tools",
+  "hooks": "plugin/hooks/hooks.json",
+  "mcp": {
+    "servers": {
+      "gyst": {
+        "command": "bunx",
+        "args": ["gyst-mcp", "serve"]
+      }
+    }
+  }
+}
