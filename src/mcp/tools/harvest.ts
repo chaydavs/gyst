@@ -29,6 +29,8 @@ import { findDuplicate } from "../../compiler/deduplicate.js";
 import { insertEntry, withRetry } from "../../store/database.js";
 import { logger } from "../../utils/logger.js";
 import { ValidationError } from "../../utils/errors.js";
+import { parseError } from "../../compiler/parsers/error.js";
+import { extractContextFromPrompt } from "../../compiler/parsers/prompt.js";
 import type { ToolContext } from "../register-tools.js";
 
 const HarvestInputSchema = z.object({
@@ -136,7 +138,10 @@ export function harvestTranscript(
   }
 
   const cleanedLines = filterNoise(params.transcript);
-  const candidates = extractCandidates(cleanedLines);
+  const candidates = [
+    ...extractCandidates(cleanedLines),
+    ...extractToolCandidates(params.transcript),
+  ];
 
   let created = 0;
   let merged = 0;
@@ -239,9 +244,44 @@ export function harvestTranscript(
 
   return { entriesCreated: created, entriesMerged: merged, entriesSkipped: skipped };
 }
+/**
+ * Scans the raw transcript for tool output blocks and runs them through the
+ * Error Parser to find structured error patterns autonomously.
+ *
+ * @param transcript - Full session text.
+ * @returns Error pattern candidates found in tool output.
+ */
+function extractToolCandidates(transcript: string): LearnInput[] {
+  const candidates: LearnInput[] = [];
+
+  // Match blocks starting with Tool: up until the next conversation turn or end of string.
+  const toolBlockRegex = /^Tool:[\s\S]*?(?=\n(?:Human|User|Assistant|Claude|Tool):|$)/gim;
+  let match;
+
+  while ((match = toolBlockRegex.exec(transcript)) !== null) {
+    const block = match[0].replace(/^Tool:\s*/i, "").trim();
+    if (!block) continue;
+
+    const parsed = parseError(block);
+    if (parsed) {
+      logger.info("harvest: autonomous error detected in tool output", { type: parsed.type });
+      candidates.push({
+        type: "error_pattern",
+        title: truncateTitle(`Auto-detected: ${parsed.type}`),
+        content: truncateContent(parsed.message),
+        files: parsed.file ? [parsed.file] : [],
+        tags: ["auto-error"],
+        errorMessage: truncateContent(parsed.message),
+      });
+    }
+  }
+
+  return candidates;
+}
 
 /**
  * Drops lines that are obviously not human knowledge:
+...
  *   - "System:" prefix lines
  *   - Lines referencing CLAUDE.md (documentation injection artifacts)
  *   - Tool output blocks (from "Tool:" up to the next blank line or turn boundary)
