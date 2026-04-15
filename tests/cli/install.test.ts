@@ -154,7 +154,7 @@ describe("mergeClaudeHooks", () => {
     expect(sessionStart.length).toBeGreaterThan(0);
     const last = sessionStart[sessionStart.length - 1]!;
     expect(last.matcher).toBe("auto");
-    expect(last.hooks[0]!.command).toBe("gyst inject-context");
+    expect(last.hooks[0]!.command).toBe("gyst inject-context --always-on --graph-traverse");
   });
 
   test("PreCompact hook has correct gyst harvest-session command", () => {
