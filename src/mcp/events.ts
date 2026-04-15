@@ -9,6 +9,11 @@ import {
 import { runHarvestSession } from "../cli/harvest.js";
 import { rebuildFromMarkdown } from "../store/rebuild.js";
 import { loadConfig } from "../utils/config.js";
+import { parseLatestCommit } from "../compiler/parsers/commit.js";
+import { parseError } from "../compiler/parsers/error.js";
+import { extractContextFromPrompt } from "../compiler/parsers/prompt.js";
+import { insertEntry, canLoadExtensions } from "../store/database.js";
+import { embedAndStore } from "../store/embeddings.js";
 
 /**
  * Starts the background event processing loop.
@@ -61,11 +66,78 @@ async function handleEvent(
 
   switch (type) {
     case "session_end":
-    case "commit":
-    case "pre_compact": // Standard mapping for Claude's PreCompact
+    case "pre_compact":
       logger.info(`Event [${type}]: Triggering auto-harvest`);
-      await runHarvestSession(); // Currently relies on filesystem discovery
+      await runHarvestSession();
       break;
+
+    case "commit": {
+      logger.info(`Event [${type}]: Processing commit autonomously`);
+      const parsed = await parseLatestCommit(process.cwd());
+      if (parsed) {
+        const id = crypto.randomUUID();
+        insertEntry(db, {
+          id,
+          type: parsed.type,
+          title: parsed.title,
+          content: parsed.content,
+          files: parsed.files,
+          tags: ["auto-commit"],
+          confidence: 0.7,
+          sourceCount: 1,
+          sourceTool: "git",
+        });
+        if (canLoadExtensions()) {
+          try {
+            await embedAndStore(db, id, `${parsed.title}\n\n${parsed.content}`);
+          } catch (e) {
+            logger.warn("Failed to embed autonomous commit entry", { error: e });
+          }
+        }
+        logger.info("Autonomous commit knowledge captured", { id, title: parsed.title });
+      }
+      await runHarvestSession();
+      break;
+    }
+
+    case "error": {
+      logger.info("Event [error]: Processing tool error autonomously");
+      const rawError = payload.error || payload.raw || String(payload);
+      const parsed = parseError(rawError);
+      if (parsed) {
+        const id = crypto.randomUUID();
+        insertEntry(db, {
+          id,
+          type: "error_pattern",
+          title: `Auto-detected: ${parsed.type}`,
+          content: parsed.message,
+          files: parsed.file ? [parsed.file] : [],
+          tags: ["auto-error"],
+          errorSignature: parsed.fingerprint,
+          confidence: 0.6,
+          sourceCount: 1,
+          sourceTool: "error-parser",
+        });
+        if (canLoadExtensions()) {
+          try {
+            await embedAndStore(db, id, `${parsed.type}\n\n${parsed.message}`);
+          } catch (e) {
+            logger.warn("Failed to embed autonomous error entry", { error: e });
+          }
+        }
+      }
+      break;
+    }
+
+    case "prompt": {
+      const context = extractContextFromPrompt(payload.prompt || payload.raw || "");
+      logger.info("Event [prompt]: Context extracted (privacy-preserved)", { 
+        files: context.files.length,
+        symbols: context.symbols.length 
+      });
+      // Future: Update ephemeral active_context table
+      break;
+    }
 
     case "pull":
       logger.info(`Event [${type}]: Triggering auto-rebuild`);
@@ -74,7 +146,6 @@ async function handleEvent(
 
     case "session_start":
       logger.info("Event [session_start]: Session initiated", { payload });
-      // Future: Proactive dashboarding link or active context injection
       break;
 
     case "tool_use":
