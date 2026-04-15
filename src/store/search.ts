@@ -216,7 +216,7 @@ export function searchByBM25(
           JOIN   entries e ON e.rowid = f.rowid
           WHERE  entries_fts MATCH ?
             AND  e.type = ?
-            AND  e.status = 'active'
+            AND  e.status IN ('active', 'consolidated')
             ${scopeClause}
           ORDER  BY f.rank
           LIMIT  50
@@ -229,7 +229,7 @@ export function searchByBM25(
           JOIN   entries e ON e.rowid = f.rowid
           WHERE  entries_fts MATCH ?
             AND  e.type = ?
-            AND  e.status = 'active'
+            AND  e.status IN ('active', 'consolidated')
             ${scopeClause}
           ORDER  BY f.rank
           LIMIT  50
@@ -243,7 +243,7 @@ export function searchByBM25(
           FROM   entries_fts f
           JOIN   entries e ON e.rowid = f.rowid
           WHERE  entries_fts MATCH ?
-            AND  e.status = 'active'
+            AND  e.status IN ('active', 'consolidated')
             ${scopeClause}
           ORDER  BY f.rank
           LIMIT  50
@@ -255,7 +255,7 @@ export function searchByBM25(
           FROM   entries_fts f
           JOIN   entries e ON e.rowid = f.rowid
           WHERE  entries_fts MATCH ?
-            AND  e.status = 'active'
+            AND  e.status IN ('active', 'consolidated')
             ${scopeClause}
           ORDER  BY f.rank
           LIMIT  50
@@ -318,7 +318,7 @@ export function searchByGraph(
       FROM   entries e
       LEFT   JOIN entry_files ef ON ef.entry_id = e.id
       LEFT   JOIN entry_tags  et ON et.entry_id = e.id
-      WHERE  e.status = 'active'
+      WHERE  e.status IN ('active', 'consolidated')
         AND  (
                LOWER(COALESCE(ef.file_path, '')) LIKE ?
             OR LOWER(COALESCE(et.tag, ''))       LIKE ?

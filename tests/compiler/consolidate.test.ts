@@ -725,7 +725,7 @@ describe("consolidate — fingerprint dedup source count merge", () => {
     expect(keptRow?.status).toBe("active");
     expect(keptRow?.source_count).toBe(5); // 3 + 2
 
-    expect(archivedRow?.status).toBe("archived");
+    expect(archivedRow?.status).toBe("consolidated");
   });
 });
 

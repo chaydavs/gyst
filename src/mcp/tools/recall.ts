@@ -74,6 +74,7 @@ interface EntryRow {
   content: string;
   confidence: number;
   scope: string;
+  status: string;
 }
 
 // FormattableEntry is imported from format-recall; EntryRow satisfies its shape.
@@ -130,10 +131,10 @@ function fetchEntries(
 
   if (developerId !== undefined) {
     sql = `
-      SELECT id, type, title, content, confidence, scope
+      SELECT id, type, title, content, confidence, scope, status
       FROM   entries
       WHERE  id IN (${placeholders})
-        AND  status = 'active'
+        AND  status IN ('active', 'consolidated')
         AND  (scope IN ('team', 'project')
               OR (scope = 'personal' AND developer_id = ?))
     `;
@@ -141,18 +142,18 @@ function fetchEntries(
   } else if (includeAllPersonal) {
     // Personal mode with no developer_id — single user, all entries are theirs.
     sql = `
-      SELECT id, type, title, content, confidence, scope
+      SELECT id, type, title, content, confidence, scope, status
       FROM   entries
       WHERE  id IN (${placeholders})
-        AND  status = 'active'
+        AND  status IN ('active', 'consolidated')
     `;
     params = [...ids];
   } else {
     sql = `
-      SELECT id, type, title, content, confidence, scope
+      SELECT id, type, title, content, confidence, scope, status
       FROM   entries
       WHERE  id IN (${placeholders})
-        AND  status = 'active'
+        AND  status IN ('active', 'consolidated')
         AND  scope IN ('team', 'project')
     `;
     params = [...ids];
@@ -290,6 +291,11 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
             // directory-match check happens at the conventions tool layer.
             // Simple heuristic: boost all conventions slightly when files given.
             boosted = Math.min(1.0, base + 0.05);
+          }
+          // Consolidated entries are merged team summaries — boost them above
+          // individual raw learnings so the distilled knowledge surfaces first.
+          if (e.status === "consolidated") {
+            boosted = Math.min(1.0, boosted + 0.10);
           }
           return [e.id, boosted] as const;
         }),

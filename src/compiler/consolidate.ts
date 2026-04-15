@@ -210,7 +210,7 @@ async function stage2Dedupe(db: Database): Promise<number> {
         );
         for (const entry of toArchive) {
           db.run(
-            "UPDATE entries SET status = 'archived', superseded_by = ? WHERE id = ?",
+            "UPDATE entries SET status = 'consolidated', superseded_by = ? WHERE id = ?",
             [kept.id, entry.id],
           );
           mergeCount += 1;
