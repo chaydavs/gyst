@@ -237,16 +237,26 @@ async function stage2Dedupe(db: Database): Promise<number> {
 
   if (vectorTableExists) {
     try {
+    // Fetch the last consolidation timestamp so we only scan entries that
+    // have been created or updated since the previous run (O(delta) not O(N)).
+    interface StateRow { last_run: string }
+    const stateRow = db
+      .query<StateRow, []>("SELECT last_run FROM consolidation_state WHERE id = 1")
+      .get();
+    const lastRun = stateRow?.last_run ?? "1970-01-01T00:00:00.000Z";
+
     interface ActiveVecRow { id: string; type: string; title: string; content: string }
     const activeEntries = db
-      .query<ActiveVecRow, []>(
+      .query<ActiveVecRow, [string, string]>(
         `SELECT e.id, e.type, e.title, e.content
          FROM entries e
          INNER JOIN entry_vectors v ON v.entry_id = e.id
          WHERE e.status = 'active'
-           AND e.type != 'ghost_knowledge'`,
+           AND e.type != 'ghost_knowledge'
+           AND (e.created_at > ? OR e.last_confirmed > ?)
+         LIMIT 200`,
       )
-      .all();
+      .all(lastRun, lastRun);
 
     // Track processed pairs to avoid O(n²) redundancy
     const processed = new Set<string>();
@@ -449,14 +459,9 @@ function stage3MergeClusters(db: Database): number {
           [summaryId, "consolidated-summary"],
         );
 
-        // Mark originals — use 'archived' as a safe fallback since the
-        // 'consolidated' status may not yet be in the CHECK constraint.
-        // The main session will update the CHECK constraint and this code
-        // should be changed to use 'consolidated' once that lands.
-        // See decisions/008 for the action item.
         for (const entry of clusterEntries) {
           db.run(
-            "UPDATE entries SET status = 'archived', superseded_by = ? WHERE id = ?",
+            "UPDATE entries SET status = 'consolidated', superseded_by = ? WHERE id = ?",
             [summaryId, entry.id],
           );
         }
@@ -650,6 +655,12 @@ export async function consolidate(
   const clusters = stage3MergeClusters(db);
   const archived = stage4Archive(db);
   const indexEntries = stage5Reindex(db, options.wikiDir);
+
+  // Stamp the run time so the next execution only processes new entries.
+  db.run(
+    "UPDATE consolidation_state SET last_run = ? WHERE id = 1",
+    [new Date().toISOString()],
+  );
 
   const durationMs = performance.now() - started;
 

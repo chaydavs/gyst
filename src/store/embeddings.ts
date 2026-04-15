@@ -304,11 +304,19 @@ export async function backfillVectors(db: Database): Promise<number> {
     return 0;
   }
 
-  logger.info("Backfilling vectors", { count: rows.length });
-  for (const row of rows) {
-    const text = `${row.title}\n\n${row.content}`;
-    await embedAndStore(db, row.id, text);
+  // Process in batches of 16 to parallelize transformer inference while
+  // keeping memory pressure predictable. Each batch fires 16 concurrent
+  // generateEmbedding calls; bun:sqlite serializes the DB writes after.
+  const BATCH_SIZE = 16;
+  logger.info("Backfilling vectors", { count: rows.length, batchSize: BATCH_SIZE });
+
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const batch = rows.slice(i, i + BATCH_SIZE);
+    await Promise.all(
+      batch.map((row) => embedAndStore(db, row.id, `${row.title}\n\n${row.content}`)),
+    );
   }
+
   logger.info("Backfill complete", { count: rows.length });
   return rows.length;
 }

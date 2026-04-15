@@ -129,23 +129,6 @@ function persistEntry(
         [entry.id, entry.now],
       );
 
-      // Sync FTS5 content table (triggers handle this automatically on INSERT
-      // but we do it explicitly for safety in case triggers are absent).
-      const row = db
-        .query<{ rowid: number }, [string]>(
-          "SELECT rowid FROM entries WHERE id = ?",
-        )
-        .get(entry.id);
-
-      if (row !== null) {
-        db.run(
-          `INSERT INTO entries_fts(rowid, title, content, error_signature)
-           SELECT rowid, title, content, error_signature
-           FROM   entries
-           WHERE  id = ?`,
-          [entry.id],
-        );
-      }
     })());
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

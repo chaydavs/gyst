@@ -99,7 +99,7 @@ export function entryToMarkdown(entry: KnowledgeEntry): string {
 /**
  * Writes a {@link KnowledgeEntry} to a markdown file inside `wikiDir`.
  *
- * File path: `{wikiDir}/{type}/{slug}.md`
+ * File path: `{wikiDir}/{type}/{slug}-{id[:8]}.md`
  *
  * Parent directories are created if they do not exist.
  *
@@ -116,7 +116,8 @@ export function writeEntry(entry: KnowledgeEntry, wikiDir: string): string {
     );
   }
 
-  const relativePath = join(entry.type, `${slug}.md`);
+  const shortId = entry.id.slice(0, 8);
+  const relativePath = join(entry.type, `${slug}-${shortId}.md`);
   const filePath = join(wikiDir, relativePath);
 
   const markdown = entryToMarkdown(entry);

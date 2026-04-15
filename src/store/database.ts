@@ -213,6 +213,19 @@ const SCHEMA_STATEMENTS: readonly string[] = [
   "CREATE INDEX IF NOT EXISTS idx_feedback_timestamp ON feedback(timestamp)",
 
   // ----- indexes -----
+  // ----- consolidation state -----
+  // Single-row table recording the last time the consolidation pipeline ran.
+  // stage2Dedupe uses this to skip entries that haven't changed since the
+  // last run, reducing O(N) transformer passes to O(new-entries-only).
+  `CREATE TABLE IF NOT EXISTS consolidation_state (
+    id         INTEGER PRIMARY KEY CHECK (id = 1),
+    last_run   TEXT    NOT NULL DEFAULT '1970-01-01T00:00:00.000Z'
+  )`,
+  // Ensure the sentinel row always exists.
+  `INSERT OR IGNORE INTO consolidation_state (id, last_run)
+   VALUES (1, '1970-01-01T00:00:00.000Z')`,
+
+  // ----- indexes -----
   "CREATE INDEX IF NOT EXISTS idx_entries_type        ON entries(type)",
   "CREATE INDEX IF NOT EXISTS idx_entries_status      ON entries(status)",
   "CREATE INDEX IF NOT EXISTS idx_entries_confidence  ON entries(confidence)",

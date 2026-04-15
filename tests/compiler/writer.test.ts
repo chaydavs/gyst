@@ -197,14 +197,15 @@ describe("entryToMarkdown", () => {
 // ---------------------------------------------------------------------------
 
 describe("writeEntry", () => {
-  test("creates a file in {wikiDir}/{type}/{slug}.md", () => {
+  test("creates a file in {wikiDir}/{type}/{slug}-{id[:8]}.md", () => {
     const entry = makeEntry({
       type: "learning",
       title: "Use strict equality always",
     });
     const filePath = writeEntry(entry, tmpDir);
+    const shortId = entry.id.slice(0, 8);
     expect(existsSync(filePath)).toBe(true);
-    expect(filePath).toContain(join(tmpDir, "learning", "use-strict-equality-always.md"));
+    expect(filePath).toContain(join(tmpDir, "learning", `use-strict-equality-always-${shortId}.md`));
   });
 
   test("returns the absolute path to the written file", () => {
@@ -265,7 +266,8 @@ describe("writeEntry", () => {
       title: "Null pointer access error",
     });
     const filePath = writeEntry(entry, tmpDir);
-    expect(filePath).toContain(join("error_pattern", "null-pointer-access-error.md"));
+    const shortId = entry.id.slice(0, 8);
+    expect(filePath).toContain(join("error_pattern", `null-pointer-access-error-${shortId}.md`));
   });
 
   test("handles special characters in title gracefully", () => {

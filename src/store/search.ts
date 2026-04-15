@@ -124,6 +124,7 @@ export function searchByFilePath(
       WHERE  file_path IN (${placeholders})
       GROUP  BY entry_id
       ORDER  BY match_count DESC
+      LIMIT  200
     `;
 
     const rows = db.query<{ entry_id: string; match_count: number }, string[]>(
@@ -218,6 +219,7 @@ export function searchByBM25(
             AND  e.status = 'active'
             ${scopeClause}
           ORDER  BY f.rank
+          LIMIT  50
         `;
         params = [tokenised, type, developerId];
       } else {
@@ -230,6 +232,7 @@ export function searchByBM25(
             AND  e.status = 'active'
             ${scopeClause}
           ORDER  BY f.rank
+          LIMIT  50
         `;
         params = [tokenised, type];
       }
@@ -243,6 +246,7 @@ export function searchByBM25(
             AND  e.status = 'active'
             ${scopeClause}
           ORDER  BY f.rank
+          LIMIT  50
         `;
         params = [tokenised, developerId];
       } else {
@@ -254,6 +258,7 @@ export function searchByBM25(
             AND  e.status = 'active'
             ${scopeClause}
           ORDER  BY f.rank
+          LIMIT  50
         `;
         params = [tokenised];
       }
@@ -318,6 +323,7 @@ export function searchByGraph(
                LOWER(COALESCE(ef.file_path, '')) LIKE ?
             OR LOWER(COALESCE(et.tag, ''))       LIKE ?
              )
+      LIMIT  200
     `;
 
     const seedRows = db

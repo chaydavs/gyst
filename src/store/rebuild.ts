@@ -61,7 +61,7 @@ const VALID_TYPES = new Set([
   "learning",
 ]);
 
-const VALID_STATUSES = new Set(["active", "stale", "conflicted", "archived"]);
+const VALID_STATUSES = new Set(["active", "stale", "conflicted", "archived", "consolidated"]);
 
 // ---------------------------------------------------------------------------
 // Public API
