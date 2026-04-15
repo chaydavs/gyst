@@ -41,6 +41,11 @@ interface ErrorPatternRow {
   confidence: number;
 }
 
+interface TopFileRow {
+  file_path: string;
+  entry_count: number;
+}
+
 // ---------------------------------------------------------------------------
 // Queries
 // ---------------------------------------------------------------------------
@@ -66,6 +71,14 @@ const ERROR_PATTERN_SQL = `
   WHERE type = 'error_pattern' AND status = 'active'
   ORDER BY created_at DESC
   LIMIT 1
+`;
+
+const TOP_FILES_SQL = `
+  SELECT file_path, COUNT(*) as entry_count
+  FROM entry_files
+  GROUP BY file_path
+  ORDER BY entry_count DESC
+  LIMIT 10
 `;
 
 // ---------------------------------------------------------------------------
@@ -99,12 +112,21 @@ export function generateSessionContext(opts: SessionContextOptions): string {
     .query<ErrorPatternRow, []>(ERROR_PATTERN_SQL)
     .all();
 
+  const topFileRows = db
+    .query<TopFileRow, []>(TOP_FILES_SQL)
+    .all();
+
   // Return empty string if all queries came back empty.
-  if (ghostRows.length === 0 && conventionRows.length === 0 && errorRows.length === 0) {
+  if (ghostRows.length === 0 && conventionRows.length === 0 && errorRows.length === 0 && topFileRows.length === 0) {
     return "";
   }
 
   const sections: string[] = ["# Gyst Context"];
+
+  if (topFileRows.length > 0) {
+    const lines = topFileRows.map((r) => `- ${r.file_path}`).join("\n");
+    sections.push(`## Already Indexed Files (Do NOT re-read)\n${lines}`);
+  }
 
   if (ghostRows.length > 0) {
     const lines = ghostRows.map((r) => `- ${r.title}`).join("\n");
