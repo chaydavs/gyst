@@ -469,4 +469,24 @@ program.command("inject").description("Alias for inject-context").option("--alwa
 program.command("serve").description("Start Gyst MCP server").action(serveAction);
 program.command("start").description("Alias for serve").action(serveAction);
 
+program
+  .command("export")
+  .description("Export all active knowledge entries to markdown files (derived from DB)")
+  .action(async () => {
+    try {
+      const config = loadConfig();
+      const db = initDatabase(config.dbPath);
+      const { exportToMarkdown } = await import("./export.js");
+      const result = await exportToMarkdown(db, config);
+      process.stdout.write(
+        `Exported ${result.exported} entries, skipped ${result.skipped} (already on disk).\n`,
+      );
+      db.close();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error("export failed", { error: msg });
+      process.exit(1);
+    }
+  });
+
 program.parse();
