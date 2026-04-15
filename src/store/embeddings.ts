@@ -24,7 +24,7 @@
  *     the semantic strategy as empty.
  */
 
-import type { Database } from "bun:sqlite";
+import type { Database, SQLQueryBindings } from "bun:sqlite";
 import * as sqliteVec from "sqlite-vec";
 
 import { logger } from "../utils/logger.js";
@@ -217,6 +217,7 @@ export async function searchByVector(
   query: string,
   limit: number = 20,
   developerId?: string,
+  constrainedIds?: string[],
 ): Promise<RankedResult[]> {
   if (!canLoadExtensions()) {
     return [];
@@ -236,6 +237,11 @@ export async function searchByVector(
         ? "AND (e.scope IN ('team', 'project') OR (e.scope = 'personal' AND e.developer_id = ?))"
         : "AND e.scope IN ('team', 'project')";
 
+    const constrainedClause =
+      constrainedIds && constrainedIds.length > 0
+        ? `AND v.entry_id IN (${constrainedIds.map(() => "?").join(", ")})`
+        : "";
+
     const sql = `
       SELECT v.entry_id AS entry_id, v.distance AS distance
       FROM   entry_vectors v
@@ -244,14 +250,18 @@ export async function searchByVector(
         AND  k = ?
         AND  e.status = 'active'
         ${scopeClause}
+        ${constrainedClause}
       ORDER BY v.distance
     `;
 
-    type Params = [Uint8Array, number] | [Uint8Array, number, string];
-    const params: Params =
-      developerId !== undefined
-        ? [blob, limit, developerId]
-        : [blob, limit];
+    type Params = SQLQueryBindings[];
+    const params: Params = [blob, limit];
+    if (developerId !== undefined) {
+      params.push(developerId);
+    }
+    if (constrainedIds && constrainedIds.length > 0) {
+      params.push(...constrainedIds);
+    }
 
     const rows = db.query<VectorRow, Params>(sql).all(...params);
 

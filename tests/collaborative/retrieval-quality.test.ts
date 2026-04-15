@@ -19,12 +19,13 @@ import { Database } from "bun:sqlite";
 import { initDatabase, insertEntry } from "../../src/store/database.js";
 import type { EntryRow } from "../../src/store/database.js";
 import {
-  searchByBM25,
   searchByFilePath,
   searchByGraph,
   reciprocalRankFusion,
 } from "../../src/store/search.js";
 import type { RankedResult } from "../../src/store/search.js";
+import { runHybridSearch } from "../../src/store/hybrid.js";
+import { initVectorStore, backfillVectors } from "../../src/store/embeddings.js";
 
 // ---------------------------------------------------------------------------
 // Database lifecycle
@@ -32,9 +33,11 @@ import type { RankedResult } from "../../src/store/search.js";
 
 let db: Database;
 
-beforeAll(() => {
+beforeAll(async () => {
   db = initDatabase(":memory:");
   seedAllEntries(db);
+  initVectorStore(db);
+  await backfillVectors(db);
 });
 
 afterAll(() => {
@@ -58,21 +61,15 @@ function daysAgo(n: number): string {
 /**
  * Hybrid search: BM25 + optional file-path + graph, fused via RRF(k=60).
  */
-function hybridSearch(
+async function hybridSearch(
   database: Database,
   query: string,
   files?: string[],
-): RankedResult[] {
-  const bm25Results = searchByBM25(database, query);
-  const graphResults = searchByGraph(database, query);
-  const lists: RankedResult[][] = [bm25Results, graphResults];
-
-  if (files !== undefined && files.length > 0) {
-    const fileResults = searchByFilePath(database, files);
-    lists.push(fileResults);
-  }
-
-  return reciprocalRankFusion(lists, 60);
+): Promise<RankedResult[]> {
+  return runHybridSearch(database, query, {
+    fileContext: files,
+    useGraphGuidedSearch: true,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -101,15 +98,16 @@ function mrrAtK(
 /**
  * Aggregates MRR@5 over a list of queries and their expected relevant IDs.
  */
-function groupMrr(
+async function groupMrr(
   queries: Array<{ query: string; relevantIds: string[] }>,
-  searcher: (q: string) => RankedResult[],
-): number {
+  searcher: (q: string) => Promise<RankedResult[]>,
+): Promise<number> {
   if (queries.length === 0) return 0;
-  const total = queries.reduce((sum, { query, relevantIds }) => {
-    const results = searcher(query);
-    return sum + mrrAtK(results, relevantIds);
-  }, 0);
+  let total = 0;
+  for (const { query, relevantIds } of queries) {
+    const results = await searcher(query);
+    total += mrrAtK(results, relevantIds);
+  }
   return total / queries.length;
 }
 
@@ -2029,25 +2027,25 @@ const ghostQueries: Array<{ query: string; relevantIds: string[] }> = [
 
 describe("CODE Retrieval Quality Benchmark", () => {
   describe("Group 1 — Direct queries (target MRR@5 ≥ 0.90)", () => {
-    test("direct query group meets MRR@5 ≥ 0.90", () => {
-      const mrr = groupMrr(directQueries, (q) => hybridSearch(db, q));
+    test("direct query group meets MRR@5 ≥ 0.90", async () => {
+      const mrr = await groupMrr(directQueries, (q) => hybridSearch(db, q));
       console.log(`[direct] MRR@5 = ${mrr.toFixed(4)}`);
       expect(mrr).toBeGreaterThanOrEqual(0.90);
     });
   });
 
   describe("Group 2 — Semantic queries (target MRR@5 ≥ 0.75)", () => {
-    test("semantic query group meets MRR@5 ≥ 0.75", () => {
-      const mrr = groupMrr(semanticQueries, (q) => hybridSearch(db, q));
+    test("semantic query group meets MRR@5 ≥ 0.75", async () => {
+      const mrr = await groupMrr(semanticQueries, (q) => hybridSearch(db, q));
       console.log(`[semantic] MRR@5 = ${mrr.toFixed(4)}`);
       expect(mrr).toBeGreaterThanOrEqual(0.75);
     });
   });
 
   describe("Group 3 — File-specific queries (target MRR@5 ≥ 0.85)", () => {
-    test("file-specific query group meets MRR@5 ≥ 0.85", () => {
-      const mrr = groupMrr(fileQueries, (q) =>
-        searchByFilePath(db, [q]),
+    test("file-specific query group meets MRR@5 ≥ 0.85", async () => {
+      const mrr = await groupMrr(fileQueries, (q) =>
+        Promise.resolve(searchByFilePath(db, [q])),
       );
       console.log(`[file-specific] MRR@5 = ${mrr.toFixed(4)}`);
       expect(mrr).toBeGreaterThanOrEqual(0.85);
@@ -2055,31 +2053,31 @@ describe("CODE Retrieval Quality Benchmark", () => {
   });
 
   describe("Group 4 — Team context queries (target MRR@5 ≥ 0.70)", () => {
-    test("team context query group meets MRR@5 ≥ 0.70", () => {
-      const mrr = groupMrr(teamContextQueries, (q) => hybridSearch(db, q));
+    test("team context query group meets MRR@5 ≥ 0.70", async () => {
+      const mrr = await groupMrr(teamContextQueries, (q) => hybridSearch(db, q));
       console.log(`[team-context] MRR@5 = ${mrr.toFixed(4)}`);
       expect(mrr).toBeGreaterThanOrEqual(0.70);
     });
   });
 
   describe("Group 5 — Cross-cutting queries (target MRR@5 ≥ 0.55)", () => {
-    test("cross-cutting query group meets MRR@5 ≥ 0.55", () => {
-      const mrr = groupMrr(crossCuttingQueries, (q) => hybridSearch(db, q));
+    test("cross-cutting query group meets MRR@5 ≥ 0.55", async () => {
+      const mrr = await groupMrr(crossCuttingQueries, (q) => hybridSearch(db, q));
       console.log(`[cross-cutting] MRR@5 = ${mrr.toFixed(4)}`);
       expect(mrr).toBeGreaterThanOrEqual(0.55);
     });
   });
 
   describe("Group 6 — Ghost knowledge queries (target MRR@5 ≥ 0.90)", () => {
-    test("ghost knowledge query group meets MRR@5 ≥ 0.90", () => {
-      const mrr = groupMrr(ghostQueries, (q) => hybridSearch(db, q));
+    test("ghost knowledge query group meets MRR@5 ≥ 0.90", async () => {
+      const mrr = await groupMrr(ghostQueries, (q) => hybridSearch(db, q));
       console.log(`[ghost] MRR@5 = ${mrr.toFixed(4)}`);
       expect(mrr).toBeGreaterThanOrEqual(0.90);
     });
   });
 
   describe("Overall aggregate (target MRR@5 ≥ 0.75 across all 30 queries)", () => {
-    test("overall MRR@5 across all 30 queries meets ≥ 0.75", () => {
+    test("overall MRR@5 across all 30 queries meets ≥ 0.75", async () => {
       const allGroups = [
         ...directQueries,
         ...semanticQueries,
@@ -2089,10 +2087,12 @@ describe("CODE Retrieval Quality Benchmark", () => {
       ];
 
       // Non-file groups use hybridSearch
-      const hybridMrr = allGroups.reduce((sum, { query, relevantIds }) => {
-        const results = hybridSearch(db, query);
-        return sum + mrrAtK(results, relevantIds);
-      }, 0) / allGroups.length;
+      let hybridTotalMrr = 0;
+      for (const { query, relevantIds } of allGroups) {
+        const results = await hybridSearch(db, query);
+        hybridTotalMrr += mrrAtK(results, relevantIds);
+      }
+      const hybridMrr = hybridTotalMrr / allGroups.length;
 
       // File group uses searchByFilePath
       const fileMrr = fileQueries.reduce((sum, { query, relevantIds }) => {

@@ -33,6 +33,7 @@ import { searchByVector } from "../../store/embeddings.js";
 import { loadConfig } from "../../utils/config.js";
 import { formatForContext } from "../../utils/format-recall.js";
 import { logger } from "../../utils/logger.js";
+import { emitEvent } from "../../store/events.js";
 
 // ---------------------------------------------------------------------------
 // Input schema
@@ -197,6 +198,8 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
     "Search team knowledge and return full entry content. Use before writing code to surface applicable team rules, errors, decisions, and conventions. Prefer search + get_entry for browsing multiple results (7× fewer tokens). Each result includes a gyst://entry/{id} citation URI.",
     RecallInput.shape,
     async (input: RecallInputType) => {
+      emitEvent(db, "tool_use", { tool: "recall", query: input.query });
+
       logger.info("recall tool called", {
         query: input.query,
         type: input.type,

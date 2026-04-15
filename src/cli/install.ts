@@ -210,6 +210,10 @@ export function mergeClaudeHooks(config: McpConfig): McpConfig {
   const gystSessionStart: HookEntry = {
     matcher: "auto",
     hooks: [
+      {
+        type: "command",
+        command: "gyst emit session_start 2>/dev/null || true"
+      },
       { 
         type: "command", 
         command: "gyst inject-context --always-on --graph-traverse" 
@@ -218,7 +222,7 @@ export function mergeClaudeHooks(config: McpConfig): McpConfig {
   };
   const gystPreCompact: HookEntry = {
     matcher: "auto",
-    hooks: [{ type: "command", command: "gyst harvest-session" }],
+    hooks: [{ type: "command", command: "gyst emit pre_compact 2>/dev/null || true" }],
   };
 
   const existingHooks =
@@ -239,6 +243,28 @@ export function mergeClaudeHooks(config: McpConfig): McpConfig {
       PreCompact: merge(existingHooks["PreCompact"], gystPreCompact),
     },
   };
+}
+
+/**
+ * Returns a new config with Gyst's Gemini CLI hooks merged into settings.json.
+ *
+ * @param config - Existing Gemini CLI settings.json content.
+ * @returns New config object with Gyst hooks injected.
+ */
+export function mergeGeminiHooks(config: McpConfig): McpConfig {
+  const hooks = (config.hooks as Record<string, string>) || {};
+  const newHooks = { ...hooks };
+
+  const GEMINI_HOOK_NAMES = [
+    "SessionStart", "SessionEnd", "Prompt", "ToolUse", "Error",
+    "PostCommit", "PostMerge"
+  ];
+
+  for (const h of GEMINI_HOOK_NAMES) {
+    newHooks[h] = `gyst emit ${h.toLowerCase()} 2>/dev/null || true`;
+  }
+
+  return { ...config, hooks: newHooks };
 }
 
 // ---------------------------------------------------------------------------
@@ -358,8 +384,8 @@ async function scanAndSaveConventions(db: Database, projectDir: string): Promise
 
 /** Lines we inject into git hooks. Idempotent — safe to call repeatedly. */
 const GIT_HOOKS: ReadonlyArray<{ file: string; line: string }> = [
-  { file: "post-commit", line: "gyst harvest-session 2>/dev/null || true" },
-  { file: "post-merge", line: "gyst rebuild 2>/dev/null || true" },
+  { file: "post-commit", line: "gyst emit commit 2>/dev/null || true" },
+  { file: "post-merge", line: "gyst emit pull 2>/dev/null || true" },
 ];
 
 /**
@@ -416,20 +442,27 @@ export function installGitHooks(projectDir: string = process.cwd()): {
 // Step 7 (interactive) — Hook registration
 // ---------------------------------------------------------------------------
 
-async function registerHooks(claudeTool: ToolInfo | undefined): Promise<boolean> {
-  if (!claudeTool?.detected) return false;
+async function registerHooks(tools: ToolInfo[]): Promise<void> {
+  const claude = tools.find((t) => t.name === "Claude Code");
+  if (claude?.detected) {
+    try {
+      const existing = readJsonConfig(claude.configPath);
+      writeJsonConfig(claude.configPath, mergeClaudeHooks(existing));
+      process.stdout.write("    Claude Code: SessionStart + PreCompact hooks ✓\n");
+    } catch (err) {
+      logger.warn("install: failed to write Claude Code hooks", { error: err });
+    }
+  }
 
-  try {
-    const existing = readJsonConfig(claudeTool.configPath);
-    writeJsonConfig(claudeTool.configPath, mergeClaudeHooks(existing));
-    process.stdout.write("    Claude Code: SessionStart context injection ✓\n");
-    process.stdout.write("    Claude Code: PreCompact session harvesting ✓\n");
-    return true;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    process.stdout.write(`    Claude Code hooks: failed (${msg})\n`);
-    logger.warn("install: failed to write Claude Code hooks", { error: msg });
-    return false;
+  const gemini = tools.find((t) => t.name === "Gemini CLI");
+  if (gemini?.detected) {
+    try {
+      const existing = readJsonConfig(gemini.configPath);
+      writeJsonConfig(gemini.configPath, mergeGeminiHooks(existing));
+      process.stdout.write("    Gemini CLI: Lifecycle hooks ✓\n");
+    } catch (err) {
+      logger.warn("install: failed to write Gemini CLI hooks", { error: err });
+    }
   }
 }
 
@@ -510,12 +543,9 @@ export async function runInstall(): Promise<void> {
     }
   }
 
-  // Step 7: Claude Code session hooks
-  const claudeTool = tools.find((t) => t.name === "Claude Code");
-  if (claudeTool?.detected) {
-    process.stdout.write("\n  ✓ Registering Claude Code session hooks...\n");
-    await registerHooks(claudeTool);
-  }
+  // Step 7: Tool-specific session hooks
+  process.stdout.write("\n  ✓ Registering session hooks...\n");
+  await registerHooks(tools);
 
   // Step 8: Agent instructions
   const configuredNames = detectedTools.map((t) => t.name).join(", ") || "none";

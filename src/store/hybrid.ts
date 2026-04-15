@@ -38,6 +38,7 @@ export interface HybridSearchOptions {
   readonly includeSemanticCandidateLimit?: number;
   readonly rrfK?: number;
   readonly disableStrategies?: readonly HybridStrategy[];
+  readonly useGraphGuidedSearch?: boolean;
 }
 
 export type HybridStrategy =
@@ -69,6 +70,7 @@ export async function runHybridSearch(
     includeSemanticCandidateLimit = 20,
     rrfK = 60,
     disableStrategies = [],
+    useGraphGuidedSearch = false,
   } = opts;
 
   const disabled = new Set<HybridStrategy>(disableStrategies);
@@ -88,10 +90,14 @@ export async function runHybridSearch(
     }
   }
 
+  let graphIds: string[] | undefined;
   if (!disabled.has("graph")) {
     const graphResults = searchByGraph(db, query);
     if (graphResults.length > 0) {
       rankedLists.push(graphResults);
+      if (useGraphGuidedSearch) {
+        graphIds = graphResults.map((r) => r.id);
+      }
     }
   }
 
@@ -109,9 +115,21 @@ export async function runHybridSearch(
         query,
         includeSemanticCandidateLimit,
         developerId,
+        graphIds,
       );
       if (vectorResults.length > 0) {
         rankedLists.push(vectorResults);
+      } else if (graphIds && graphIds.length > 0) {
+        // Fallback to global semantic search if constrained search yielded no results
+        const globalVectorResults = await searchByVector(
+          db,
+          query,
+          includeSemanticCandidateLimit,
+          developerId,
+        );
+        if (globalVectorResults.length > 0) {
+          rankedLists.push(globalVectorResults);
+        }
       }
     } catch (err) {
       logger.warn("runHybridSearch: semantic strategy failed", {

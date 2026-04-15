@@ -34,6 +34,7 @@ import {
 } from "../server/auth.js";
 import { initActivitySchema } from "../server/activity.js";
 import { getTeamMembers } from "../server/team.js";
+import { EventType, emitEvent } from "../store/events.js";
 
 const WIKI_SUBDIRS = [
   "error_pattern",
@@ -141,6 +142,27 @@ const searchAction = async (query: string, options: { type: string; max: string 
 
 const serveAction = async () => {
   await import("../mcp/server.js");
+};
+
+const emitAction = async (type: string, payload: string | undefined) => {
+  try {
+    const config = loadConfig();
+    const db = initDatabase(config.dbPath);
+    let parsedPayload = {};
+    if (payload) {
+      try {
+        parsedPayload = JSON.parse(payload);
+      } catch {
+        parsedPayload = { raw: payload };
+      }
+    }
+    emitEvent(db, type as EventType, parsedPayload);
+    db.close();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    process.stdout.write(`Error: ${message}\n`);
+    process.exit(1);
+  }
 };
 
 const setupAction = async () => {
@@ -289,6 +311,11 @@ program
     for (const v of violations) process.stdout.write(`  - [${v.rule}] ${v.message}\n`);
     process.exit(1);
   });
+
+program
+  .command("emit <type> [payload]")
+  .description("Emit a universal hook event")
+  .action(emitAction);
 
 program
   .command("heartbeat")

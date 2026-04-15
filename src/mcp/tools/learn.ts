@@ -24,6 +24,7 @@ import { fingerprintFile } from "../../compiler/style-fingerprint.js";
 import { embedAndStore } from "../../store/embeddings.js";
 import { loadConfig } from "../../utils/config.js";
 import { logger } from "../../utils/logger.js";
+import { emitEvent } from "../../store/events.js";
 import { DatabaseError, ValidationError } from "../../utils/errors.js";
 import type { ToolContext } from "../register-tools.js";
 
@@ -241,6 +242,8 @@ export function registerLearnTool(server: McpServer, ctx: ToolContext): void {
     "Record team knowledge: errors fixed, decisions made, conventions discovered. Use after solving a problem or making a significant architectural choice that the team should know about.",
     LearnInput.shape,
     async (input: LearnInputType) => {
+      emitEvent(db, "tool_use", { tool: "learn", type: input.type, title: input.title });
+
       logger.info("learn tool called", { type: input.type, title: input.title });
 
       // Validate input

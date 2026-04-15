@@ -233,6 +233,18 @@ const SCHEMA_STATEMENTS: readonly string[] = [
     WHERE error_signature IS NOT NULL`,
   "CREATE INDEX IF NOT EXISTS idx_entry_files_path    ON entry_files(file_path)",
   "CREATE INDEX IF NOT EXISTS idx_entry_tags_tag      ON entry_tags(tag)",
+
+  // ----- universal hook queue -----
+  `CREATE TABLE IF NOT EXISTS event_queue (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    type         TEXT    NOT NULL,
+    payload      TEXT    NOT NULL, -- JSON
+    status       TEXT    NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    error        TEXT,
+    created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+    processed_at TEXT
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_event_queue_status ON event_queue(status)",
 ];
 
 // ---------------------------------------------------------------------------
