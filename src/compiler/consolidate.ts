@@ -15,7 +15,7 @@
  * pinned at confidence 1.0 and must always surface.
  */
 
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, unlinkSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Database } from "bun:sqlite";
 import { logger } from "../utils/logger.js";
@@ -82,6 +82,29 @@ interface IndexRow {
   type: string;
   title: string;
   confidence: number;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Deletes the on-disk markdown file for an entry if one exists.
+ * Safe to call when markdown_path is null or the file is already gone.
+ *
+ * @param markdownPath - Absolute path to the markdown file, or null/undefined.
+ */
+function deleteMarkdownFile(markdownPath: string | null | undefined): void {
+  if (!markdownPath) return;
+  try {
+    if (existsSync(markdownPath)) {
+      unlinkSync(markdownPath);
+      logger.debug("Deleted markdown file", { path: markdownPath });
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn("Failed to delete markdown file", { path: markdownPath, error: msg });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -202,6 +225,16 @@ async function stage2Dedupe(db: Database): Promise<number> {
 
     const totalSourceCount = entries.reduce((sum, e) => sum + e.source_count, 0);
 
+    // Delete markdown files before the transaction so failures are recoverable
+    for (const entry of toArchive) {
+      const mdRow = db
+        .query<{ markdown_path: string | null }, [string]>(
+          "SELECT markdown_path FROM entries WHERE id = ?",
+        )
+        .get(entry.id);
+      deleteMarkdownFile(mdRow?.markdown_path ?? null);
+    }
+
     try {
       db.transaction(() => {
         db.run(
@@ -210,7 +243,7 @@ async function stage2Dedupe(db: Database): Promise<number> {
         );
         for (const entry of toArchive) {
           db.run(
-            "UPDATE entries SET status = 'consolidated', superseded_by = ? WHERE id = ?",
+            "UPDATE entries SET status = 'consolidated', superseded_by = ?, markdown_path = null WHERE id = ?",
             [kept.id, entry.id],
           );
           mergeCount += 1;
@@ -324,6 +357,13 @@ async function stage2Dedupe(db: Database): Promise<number> {
         const keptConf = keepId === entry.id ? entryRow : candidateRow;
         const archivedConf = keepId === entry.id ? candidateRow : entryRow;
 
+        const archiveMdRow = db
+          .query<{ markdown_path: string | null }, [string]>(
+            "SELECT markdown_path FROM entries WHERE id = ?",
+          )
+          .get(archiveId);
+        deleteMarkdownFile(archiveMdRow?.markdown_path ?? null);
+
         try {
           db.transaction(() => {
             db.run(
@@ -331,7 +371,7 @@ async function stage2Dedupe(db: Database): Promise<number> {
               [keptConf.source_count + archivedConf.source_count, keepId],
             );
             db.run(
-              "UPDATE entries SET status = 'archived', superseded_by = ? WHERE id = ?",
+              "UPDATE entries SET status = 'archived', superseded_by = ?, markdown_path = null WHERE id = ?",
               [keepId, archiveId],
             );
           })();
@@ -460,8 +500,14 @@ function stage3MergeClusters(db: Database): number {
         );
 
         for (const entry of clusterEntries) {
+          const clusterMdRow = db
+            .query<{ markdown_path: string | null }, [string]>(
+              "SELECT markdown_path FROM entries WHERE id = ?",
+            )
+            .get(entry.id);
+          deleteMarkdownFile(clusterMdRow?.markdown_path ?? null);
           db.run(
-            "UPDATE entries SET status = 'consolidated', superseded_by = ? WHERE id = ?",
+            "UPDATE entries SET status = 'consolidated', superseded_by = ?, markdown_path = null WHERE id = ?",
             [summaryId, entry.id],
           );
         }
@@ -493,20 +539,37 @@ function stage4Archive(db: Database): number {
   logger.info("consolidate: stage 4 — archive");
 
   try {
+    // Collect paths before changing status so we can delete files
+    const toArchive = db
+      .query<{ id: string; markdown_path: string | null }, []>(
+        `SELECT id, markdown_path FROM entries
+         WHERE status = 'active' AND confidence < 0.15 AND type != 'ghost_knowledge'`,
+      )
+      .all();
+
+    if (toArchive.length === 0) {
+      logger.info("consolidate: stage 4 complete", { archived: 0 });
+      return 0;
+    }
+
+    for (const row of toArchive) {
+      deleteMarkdownFile(row.markdown_path);
+    }
+
     const result = db.run(
       `UPDATE entries
-       SET status = 'archived'
+       SET status = 'archived', markdown_path = null
        WHERE status = 'active'
          AND confidence < 0.15
          AND type != 'ghost_knowledge'`,
     );
 
-    const archived = result.changes;
+    const archived = result.changes ?? 0;
     logger.info("consolidate: stage 4 complete", { archived });
     return archived;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    throw new DatabaseError(`Stage 4 archive failed: ${msg}`);
+    throw new DatabaseError(`stage4Archive failed: ${msg}`);
   }
 }
 

@@ -836,3 +836,69 @@ describe("consolidate — report shape", () => {
     expect(report.durationMs).toBeGreaterThan(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Markdown file deletion
+// ---------------------------------------------------------------------------
+
+import { writeFileSync, existsSync, mkdirSync } from "node:fs";
+
+describe("consolidate: markdown file deletion", () => {
+  test("stage4Archive deletes markdown file for archived entry", async () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "gyst-con-"));
+    const wikiDir = join(tmpDir, "gyst-wiki");
+    const mdDir = join(wikiDir, "learning");
+    mkdirSync(mdDir, { recursive: true });
+
+    const db = initDatabase(join(tmpDir, ".wiki.db"));
+    const mdFile = join(mdDir, "stale-entry-abc12345.md");
+    writeFileSync(mdFile, "# stale\n", "utf8");
+
+    db.run(
+      `INSERT INTO entries
+         (id, type, title, content, file_path, confidence, source_count,
+          source_tool, created_at, last_confirmed, status, scope, markdown_path)
+       VALUES ('stale-entry-abc12345', 'learning', 'Stale', 'body', null,
+               0.05, 1, 'test', datetime('now','-120 days'), datetime('now','-120 days'), 'active', 'team', ?)`,
+      [mdFile],
+    );
+    // Seed FTS5 for this entry to match the pattern used elsewhere in this file
+    db.run(
+      `INSERT INTO entries_fts (rowid, title, content)
+       SELECT rowid, title, content FROM entries WHERE id = 'stale-entry-abc12345'`,
+    );
+
+    await consolidate(db, { wikiDir });
+
+    expect(existsSync(mdFile)).toBe(false);
+    const row = db
+      .query<{ status: string }, []>(
+        "SELECT status FROM entries WHERE id = 'stale-entry-abc12345'",
+      )
+      .get();
+    expect(row?.status).toBe("archived");
+
+    rmSync(tmpDir, { recursive: true });
+    db.close();
+  });
+
+  test("stage4Archive is safe when markdown_path is null", async () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "gyst-con-null-"));
+    const db = initDatabase(join(tmpDir, ".wiki.db"));
+
+    db.run(
+      `INSERT INTO entries
+         (id, type, title, content, file_path, confidence, source_count,
+          source_tool, created_at, last_confirmed, status, scope)
+       VALUES ('no-md-abc12345', 'learning', 'No markdown', 'body',
+               null, 0.05, 1, 'test', datetime('now','-120 days'), datetime('now','-120 days'), 'active', 'team')`,
+    );
+
+    // Should not throw — resolves to a ConsolidationReport
+    const report = await consolidate(db, { wikiDir: join(tmpDir, "gyst-wiki") });
+    expect(typeof report.entriesArchived).toBe("number");
+
+    rmSync(tmpDir, { recursive: true });
+    db.close();
+  });
+});
