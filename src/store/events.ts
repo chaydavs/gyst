@@ -1,0 +1,77 @@
+import { Database } from "bun:sqlite";
+import { withRetry } from "./database.js";
+
+/** Valid universal hook event types */
+export type EventType =
+  | "session_start"
+  | "session_end"
+  | "prompt"
+  | "tool_use"
+  | "commit"
+  | "pull"
+  | "file_change"
+  | "error";
+
+/**
+ * Standardised event payload.
+ * Can contain any agent-specific metadata.
+ */
+export interface EventPayload {
+  agent?: string;
+  sessionId?: string;
+  developerId?: string;
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+/**
+ * Inserts an event into the fire-and-forget queue.
+ * This function is designed to be extremely fast (< 50ms) to avoid
+ * blocking CLI lifecycle hooks.
+ */
+export function emitEvent(
+  db: Database,
+  type: EventType,
+  payload: EventPayload,
+): void {
+  withRetry(() => {
+    db.run(
+      "INSERT INTO event_queue (type, payload) VALUES (?, ?)",
+      [type, JSON.stringify(payload)],
+    );
+  }, 3, 50); // Aggressive retry with short delay for hooks
+}
+
+/**
+ * Retrieves the next batch of pending events for processing.
+ */
+export function getPendingEvents(
+  db: Database,
+  limit: number = 50,
+): { id: number; type: EventType; payload: string }[] {
+  return db
+    .query<{ id: number; type: EventType; payload: string }, [number]>(
+      "SELECT id, type, payload FROM event_queue WHERE status = 'pending' ORDER BY id ASC LIMIT ?",
+    )
+    .all(limit);
+}
+
+/**
+ * Marks an event as completed.
+ */
+export function markEventCompleted(db: Database, id: number): void {
+  db.run(
+    "UPDATE event_queue SET status = 'completed', processed_at = datetime('now') WHERE id = ?",
+    [id],
+  );
+}
+
+/**
+ * Marks an event as failed with an error message.
+ */
+export function markEventFailed(db: Database, id: number, error: string): void {
+  db.run(
+    "UPDATE event_queue SET status = 'failed', error = ?, processed_at = datetime('now') WHERE id = ?",
+    [error, id],
+  );
+}

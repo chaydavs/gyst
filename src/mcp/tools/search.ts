@@ -24,6 +24,7 @@ import { fetchEntriesByIds } from "../../store/entries.js";
 import { loadConfig } from "../../utils/config.js";
 import { formatAge } from "../../utils/age.js";
 import { logger } from "../../utils/logger.js";
+import { emitEvent } from "../../store/events.js";
 
 // ---------------------------------------------------------------------------
 // Input schema
@@ -71,6 +72,8 @@ export function registerSearchTool(server: McpServer, ctx: ToolContext): void {
     "Search team knowledge base. Use for any question about past decisions, errors, conventions, or project history. Returns compact results (id, type, confidence, title) — call get_entry(id) for full content. 7× more token-efficient than recall for browsing multiple results.",
     SearchInput.shape,
     async (input: SearchInputType) => {
+      emitEvent(db, "tool_use", { tool: "search", query: input.query });
+
       logger.info("search tool called", {
         query: input.query,
         type: input.type,

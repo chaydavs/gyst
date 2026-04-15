@@ -18,6 +18,7 @@ import { rebuildFromMarkdown } from "../store/rebuild.js";
 import { loadConfig } from "../utils/config.js";
 import { logger } from "../utils/logger.js";
 import { registerAllTools } from "./register-tools.js";
+import { startEventProcessor } from "./events.js";
 
 /**
  * Recursively finds the maximum mtimeMs across all .md files under `dir`.
@@ -61,6 +62,9 @@ async function main(): Promise<void> {
 // Initialise database (synchronous — bun:sqlite)
 const db = initDatabase(config.dbPath);
 const globalDb = initDatabase(config.globalDbPath);
+
+// Start background event processor
+startEventProcessor(db);
 
 // Initialise semantic search (Strategy 5). Graceful if unavailable —
 // the rest of the server keeps running with BM25 + graph + temporal.
