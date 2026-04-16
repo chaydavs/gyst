@@ -131,7 +131,10 @@
       "Bash(awk NR>=146 && NR<=155 *)",
       "Bash(grep -n \"hook\" plugin/scripts/*.js)",
       "Bash(grep *)",
-      "Bash(gh api *)"
+      "Bash(gh api *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(bash -c '\\(bun test ./tests/collaborative/ || [ $? -eq 133 ]\\)')",
+      "Bash(echo \"wrapper exit=$?\")"
     ]
   }
 }

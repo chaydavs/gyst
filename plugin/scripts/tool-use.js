@@ -1,12 +1,15 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+/**
+ * Claude Code / Codex PostToolUse hook.
+ *
+ * Fire-and-forget event recording. Never blocks the agent.
+ */
+import { spawnSync } from "node:child_process";
+
 try {
-  const input = readFileSync(0, "utf8");
-  const result = execFileSync("bunx", ["gyst-mcp", "hook", "tool_use"], {
-    input, timeout: 4000, stdio: ["pipe", "pipe", "pipe"]
-  });
-  if (result.length > 0) process.stdout.write(result);
+  const gyst = process.env.GYST_BIN || "gyst";
+  spawnSync(gyst, ["emit", "tool_use"], { timeout: 2000, stdio: "ignore" });
+  process.stdout.write(JSON.stringify({ continue: true }));
 } catch {
-  process.exit(0); // never block the agent
+  process.stdout.write(JSON.stringify({ continue: true }));
 }
