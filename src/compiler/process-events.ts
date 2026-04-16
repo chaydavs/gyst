@@ -22,6 +22,7 @@ import {
 } from "../store/events.js";
 import { classifyEvent, type Classification } from "./classify-event.js";
 import { rerankWithGraphify } from "./classify-rerank.js";
+import { distillWithLLM, resetDistillBudget } from "./classify-distill.js";
 import { parseError } from "./parsers/error.js";
 import { extractContextFromPrompt } from "./parsers/prompt.js";
 import { parseAdr } from "./parsers/markdown-adr.js";
@@ -70,6 +71,9 @@ export async function processEvents(
   const threshold = options.signalThreshold ?? DEFAULT_THRESHOLD;
 
   const rows = getPendingEvents(db, limit);
+  // Reset the distill budget once per batch — it's a soft ceiling on how
+  // many Claude calls we're willing to spend per processEvents invocation.
+  resetDistillBudget();
   let entriesCreated = 0;
   let skipped = 0;
   let failed = 0;
@@ -89,7 +93,11 @@ export async function processEvents(
       const stage1 = classifyEvent({ type: row.type as string, payload });
       // Stage 2: graphify / entity-overlap rerank. Strictly a suppressor —
       // never amplifies, so applying it before the threshold gate is safe.
-      const verdict = rerankWithGraphify(db, stage1, payload);
+      const stage2 = rerankWithGraphify(db, stage1, payload);
+      // Stage 3: LLM distill. No-op unless ANTHROPIC_API_KEY is set AND the
+      // stage-2 signal is borderline. Budget-capped per batch. Fail-soft —
+      // any network/schema error returns the stage-2 verdict unchanged.
+      const verdict = await distillWithLLM(stage2, payload);
 
       if (verdict.signalStrength >= threshold && verdict.candidateType) {
         const created = createEntryFromEvent(db, row.type, payload, verdict);

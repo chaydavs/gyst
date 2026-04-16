@@ -54,6 +54,7 @@
     "recall": "bun run src/cli/index.ts recall",
     "eval": "bun run tests/eval/retrieval-eval.ts",
     "eval:tune": "bun run tests/eval/tune-weights.ts",
+    "eval:classifier": "bun run src/compiler/classify-eval.ts",
     "calibrate": "bun run scripts/calibrate-confidence.ts",
     "seed-wiki": "bun run scripts/seed-wiki.ts",
     "benchmark:longmemeval": "bun run tests/benchmark/longmemeval/run.ts",

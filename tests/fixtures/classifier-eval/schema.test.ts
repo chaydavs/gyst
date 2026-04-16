@@ -7,7 +7,10 @@
 import { test, expect } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { LabelRowSchema, type LabelRow } from "./schema.js";
+import {
+  LabelRowSchema,
+  type LabelRow,
+} from "../../../src/compiler/classifier-eval-schema.js";
 
 const FIXTURE_PATH = join(import.meta.dir, "labels.jsonl");
 

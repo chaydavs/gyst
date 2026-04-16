@@ -9,7 +9,9 @@ Consumed by:
 ## File layout
 
 - `labels.jsonl` — one labelled row per line. See schema below.
-- `schema.ts` — Zod schema; source of truth for row shape.
+- Schema lives at `src/compiler/classifier-eval-schema.ts` (must live under
+  `src/` so the in-repo eval harness can import it without tripping the
+  tsconfig `rootDir` boundary).
 
 ## Row schema
 
