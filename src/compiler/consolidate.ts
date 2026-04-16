@@ -21,8 +21,8 @@ import type { Database } from "bun:sqlite";
 import { logger } from "../utils/logger.js";
 import { DatabaseError } from "../utils/errors.js";
 import { calculateConfidence } from "../store/confidence.js";
-import { canLoadExtensions } from "../store/database.js";
-import { searchByVector } from "../store/embeddings.js";
+import { canLoadExtensions, initDatabase } from "../store/database.js";
+import { searchByVector, initVectorStore } from "../store/embeddings.js";
 import { loadConfig } from "../utils/config.js";
 
 // ---------------------------------------------------------------------------
@@ -675,6 +675,44 @@ function stage5Reindex(db: Database, wikiDirOverride?: string): number {
 }
 
 /**
+ * Deletes markdown files from disk for entries that have been archived
+ * or consolidated. This ensures the gyst-wiki directory reflects the
+ * active knowledge base and prevents non-active entries from being
+ * re-imported during the next rebuild.
+ *
+ * @param db - Open database connection.
+ * @param wikiDir - Path to the wiki directory.
+ * @returns Number of files deleted.
+ */
+function prunePhysicalFiles(db: Database, wikiDir: string): number {
+  logger.info("consolidate: pruning physical files");
+
+  const rows = db
+    .query<{ id: string }, []>(
+      `SELECT id FROM entries
+       WHERE status IN ('archived', 'consolidated')`,
+    )
+    .all();
+
+  let deleted = 0;
+  for (const row of rows) {
+    const relPath = `${row.id}.md`;
+    const fullPath = join(wikiDir, relPath);
+    if (existsSync(fullPath)) {
+      try {
+        unlinkSync(fullPath);
+        deleted += 1;
+      } catch (err) {
+        logger.warn("Failed to delete pruned wiki file", { path: fullPath, error: err });
+      }
+    }
+  }
+
+  logger.info("consolidate: pruning complete", { deleted });
+  return deleted;
+}
+
+/**
  * Stage 2.5 — strengthen co-retrieved links.
  *
  * Runs after dedupe, before merge, so fresh co-retrieval edges inform
@@ -712,12 +750,21 @@ export async function consolidate(
   const started = performance.now();
   logger.info("consolidate: starting pipeline");
 
+  // Enable semantic deduplication if extensions are available
+  if (canLoadExtensions()) {
+    initVectorStore(db);
+  }
+
   const decayed = stage1Decay(db);
   const duplicatesMerged = await stage2Dedupe(db);
   const linksStrengthened = await stage2_5StrengthenLinks(db);
   const clusters = stage3MergeClusters(db);
   const archived = stage4Archive(db);
-  const indexEntries = stage5Reindex(db, options.wikiDir);
+
+  const wikiDir = options.wikiDir ?? loadConfig().wikiDir;
+  prunePhysicalFiles(db, wikiDir);
+
+  const indexEntries = stage5Reindex(db, wikiDir);
 
   // Stamp the run time so the next execution only processes new entries.
   db.run(

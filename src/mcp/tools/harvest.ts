@@ -320,8 +320,21 @@ function filterNoise(transcript: string): string[] {
       continue;
     }
 
-    // Drop documentation-injection lines
+    // Drop lines referencing CLAUDE.md (documentation injection artifacts)
     if (/CLAUDE\.md/i.test(trimmed)) {
+      continue;
+    }
+
+    // Drop common terminal/noise patterns
+    if (
+      /^Done in/i.test(trimmed) ||
+      /^Verifying/i.test(trimmed) ||
+      /^Verification/i.test(trimmed) ||
+      /^Stress test/i.test(trimmed) ||
+      /^bun run/i.test(trimmed) ||
+      /^npm (run|test)/i.test(trimmed) ||
+      /^\[(info|debug|warn|error)\]/i.test(trimmed)
+    ) {
       continue;
     }
 
@@ -370,11 +383,11 @@ const CONVENTION_PATTERNS: readonly RegExp[] = [
 ];
 
 const LEARNING_PATTERNS: readonly RegExp[] = [
-  /turns out (.{5,150})/i,
-  /learned that (.{5,150})/i,
-  /discovered (.{5,150})/i,
-  /important:?\s+(.{5,150})/i,
-  /note:?\s+(.{5,150})/i,
+  /turns out (.{10,150})/i,
+  /learned that (.{10,150})/i,
+  /discovered (.{10,150})/i,
+  /important:?\s+(.{10,150})/i,
+  /note:?\s+(.{15,150})/i, // Stricter for "note" as it's common noise
 ];
 
 /**
