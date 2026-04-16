@@ -196,6 +196,17 @@
           <div class="stat-row"><span>Entries</span><span class="stat-val">${s.entries}</span></div>
           <div class="stat-row"><span>Relationships</span><span class="stat-val">${s.relationships}</span></div>
           <div class="stat-row"><span>Co-retrievals</span><span class="stat-val">${s.coRetrievals}</span></div>
+          <div class="type-legend">
+            <h2 style="margin-top:16px">Structural (adjacent)</h2>
+            <div class="stat-row">
+              <span><span class="legend-dot" style="background:${STRUCTURAL_COLOR}"></span>Nodes</span>
+              <span class="stat-val">${s.structuralNodes ?? 0}</span>
+            </div>
+            <div class="stat-row">
+              <span><span class="legend-dot" style="background:${STRUCTURAL_COLOR};opacity:0.5"></span>Edges</span>
+              <span class="stat-val">${s.structuralEdges ?? 0}</span>
+            </div>
+          </div>
           <div class="type-legend"><h2 style="margin-top:16px">By Scope</h2>${scopeLegend}</div>
           <div class="type-legend"><h2 style="margin-top:16px">By Type</h2>${typeLegend}</div>
         `;
@@ -297,9 +308,12 @@
     function renderGraph(data) {
       if (data) {
         rawGraph = data;
-        filterGraph(currentScope);
       }
-      
+      // Always re-filter against the current scope — otherwise clicking a
+      // scope/layer button won't change the view because only the first
+      // render (with data) would apply the filter.
+      filterGraph(currentScope);
+
       canvas.innerHTML = '';
       if (!currentGraph.nodes.length) {
         canvas.innerHTML = '<div style="color:var(--muted);display:flex;align-items:center;justify-content:center;height:100%;font-size:14px">No entries for the selected scope.</div>';

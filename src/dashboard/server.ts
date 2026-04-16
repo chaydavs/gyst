@@ -108,6 +108,16 @@ function buildStats(db: Database): Record<string, unknown> {
     )
     .get();
 
+  // Adjacent structural index (graphify AST) — reported separately so the
+  // dashboard can surface both layers without conflating their scales.
+  const structural = db
+    .query<{ nodes: number; edges: number }, []>(
+      `SELECT
+        (SELECT COUNT(*) FROM structural_nodes) AS nodes,
+        (SELECT COUNT(*) FROM structural_edges) AS edges`,
+    )
+    .get();
+
   const byTypeRows = db
     .query<TypeRow, []>(
       "SELECT type, COUNT(*) AS n FROM entries WHERE status='active' GROUP BY type",
@@ -130,7 +140,13 @@ function buildStats(db: Database): Record<string, unknown> {
     byScope[r.scope] = r.n;
   }
 
-  return { ...counts, byType, byScope };
+  return {
+    ...counts,
+    structuralNodes: structural?.nodes ?? 0,
+    structuralEdges: structural?.edges ?? 0,
+    byType,
+    byScope,
+  };
 }
 
 /**
