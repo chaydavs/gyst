@@ -138,8 +138,8 @@ function buildStats(db: Database): Record<string, unknown> {
  */
 function getRecentSessions(db: Database, limit: number = 20): any[] {
   return db
-    .query("SELECT * FROM sessions ORDER BY started_at DESC LIMIT ?", [limit])
-    .all();
+    .query("SELECT * FROM sessions ORDER BY started_at DESC LIMIT ?")
+    .all(limit);
 }
 
 /**
@@ -147,8 +147,8 @@ function getRecentSessions(db: Database, limit: number = 20): any[] {
  */
 function getRecentEvents(db: Database, limit: number = 100): any[] {
   return db
-    .query("SELECT * FROM event_queue ORDER BY created_at DESC LIMIT ?", [limit])
-    .all();
+    .query("SELECT * FROM event_queue ORDER BY created_at DESC LIMIT ?")
+    .all(limit);
 }
 
 /**
@@ -157,12 +157,12 @@ function getRecentEvents(db: Database, limit: number = 100): any[] {
 function getEntriesByScope(db: Database, scope?: string, limit: number = 100): any[] {
   if (scope) {
     return db
-      .query("SELECT * FROM entries WHERE scope = ? AND status = 'active' ORDER BY created_at DESC LIMIT ?", [scope, limit])
-      .all();
+      .query("SELECT * FROM entries WHERE scope = ? AND status = 'active' ORDER BY created_at DESC LIMIT ?")
+      .all(scope, limit);
   }
   return db
-    .query("SELECT * FROM entries WHERE status = 'active' ORDER BY created_at DESC LIMIT ?", [limit])
-    .all();
+    .query("SELECT * FROM entries WHERE status = 'active' ORDER BY created_at DESC LIMIT ?")
+    .all(limit);
 }
 
 // ---------------------------------------------------------------------------

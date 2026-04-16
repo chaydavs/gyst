@@ -120,7 +120,7 @@ function deriveTitle(eventType: string, payload: Record<string, unknown>): strin
   return oneLine.length <= 100 ? oneLine : `${oneLine.slice(0, 97)}...`;
 }
 
-function deriveContent(eventType: string, payload: Record<string, unknown>): string {
+function deriveContent(_eventType: string, payload: Record<string, unknown>): string {
   const text = typeof payload.text === "string" ? payload.text : "";
   if (text.length > 0) return text;
   const msg = typeof payload.message === "string" ? payload.message : "";

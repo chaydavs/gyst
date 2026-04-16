@@ -121,7 +121,6 @@ To be effective, you must follow these behavioral rules:
 export function instrumentServer(server: McpServer, db: Database): void {
   const original = server.tool.bind(server) as typeof server.tool;
 
-  // @ts-expect-error — re-typing the method to preserve all overload shapes.
   server.tool = (...args: unknown[]) => {
     const name = args[0] as string;
     const last = args[args.length - 1];
