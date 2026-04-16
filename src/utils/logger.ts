@@ -25,8 +25,31 @@ interface LogEntry {
   readonly context?: Record<string, unknown>;
 }
 
+/**
+ * Resolve the startup log level.
+ *
+ * Precedence (first match wins):
+ *   1. GYST_LOG_LEVEL env var ("debug" | "info" | "warn" | "error")
+ *   2. GYST_DEBUG=1 → "debug"
+ *   3. --verbose flag in argv → "info"
+ *   4. CLI invocation (argv[0] ends with "cli") → "warn" (keeps UX quiet)
+ *   5. Default → "info"
+ */
+function resolveInitialLevel(): LogLevel {
+  const envLevel = process.env["GYST_LOG_LEVEL"];
+  if (envLevel === "debug" || envLevel === "info" || envLevel === "warn" || envLevel === "error") {
+    return envLevel;
+  }
+  if (process.env["GYST_DEBUG"] === "1") return "debug";
+  if (Array.isArray(process.argv) && process.argv.includes("--verbose")) return "info";
+
+  const entry = process.argv[1] || "";
+  const isCli = /cli(?:\.js|\.ts)?$/i.test(entry) || /\/gyst$/i.test(entry);
+  return isCli ? "warn" : "info";
+}
+
 class Logger {
-  private level: LogLevel = "info";
+  private level: LogLevel = resolveInitialLevel();
 
   /**
    * Change the minimum log level at runtime.
