@@ -14,6 +14,10 @@ import { parseError } from "../compiler/parsers/error.js";
 import { extractContextFromPrompt } from "../compiler/parsers/prompt.js";
 import { insertEntry, canLoadExtensions } from "../store/database.js";
 import { embedAndStore } from "../store/embeddings.js";
+import {
+  maybeRunNightlyDistill,
+  triggerSessionDistill,
+} from "../compiler/distill-scheduler.js";
 
 /**
  * Starts the background event processing loop.
@@ -47,6 +51,10 @@ export function startEventProcessor(db: Database): void {
       const msg = err instanceof Error ? err.message : String(err);
       logger.error("Event processor batch failed", { error: msg });
     }
+
+    // Nightly distillation gate — cheap call, real work only every 24h.
+    // Runs after the batch so a burst of events doesn't delay their promotion.
+    await maybeRunNightlyDistill(db);
   };
 
   // Run immediately then poll
@@ -69,6 +77,13 @@ async function handleEvent(
     case "pre_compact":
       logger.info(`Event [${type}]: Triggering auto-harvest`);
       await runHarvestSession();
+      // Session-scoped distill — fires only if this session actually
+      // completed events and an LLM is configured; otherwise dormant.
+      if (type === "session_end") {
+        const sessionId =
+          typeof payload?.sessionId === "string" ? payload.sessionId : null;
+        await triggerSessionDistill(db, sessionId);
+      }
       break;
 
     case "commit": {

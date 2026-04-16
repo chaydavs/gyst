@@ -41,10 +41,15 @@ export async function distillEvents(
   // secondary check. For Phase 2, we'll select completed events and 
   // mark them as distilled in the metadata or a new status.
   
+  // Select completed events that haven't been distilled yet.
+  // `error = 'distilled'` is written by a prior run (below) to flag idempotency.
+  // Without the second clause, every nightly pass would re-hammer the LLM API
+  // over the same events — see Phase C.3 scheduling.
   let query = `
-    SELECT id, type, payload, session_id 
-    FROM event_queue 
+    SELECT id, type, payload, session_id
+    FROM event_queue
     WHERE status = 'completed'
+      AND (error IS NULL OR error != 'distilled')
   `;
   const params: any[] = [];
 
