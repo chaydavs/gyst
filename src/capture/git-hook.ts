@@ -14,6 +14,7 @@ import { initDatabase } from "../store/database.js";
 import { logger } from "../utils/logger.js";
 import { stripSensitiveData } from "../compiler/security.js";
 import { loadConfig } from "../utils/config.js";
+import { parseLatestCommit } from "../compiler/parsers/commit.js";
 
 // ---------------------------------------------------------------------------
 // AI authorship detection
@@ -79,33 +80,45 @@ export async function captureCommit(): Promise<void> {
     diff = { changed: 0, insertions: 0, deletions: 0, files: [] };
   }
 
-  // 3. Check for AI authorship markers in commit message
+  // 3. Try structured Conventional Commits parse first.
+  // This turns `fix:` → error_pattern, `feat:`/`refactor:` → decision.
+  // Without it every commit becomes a low-signal `learning`, and
+  // the decisions/ + patterns/ folders stay empty forever.
+  const parsed = await parseLatestCommit(process.cwd());
+
+  // 4. Decide whether to capture.
+  // Structured parse wins: if Conventional Commits matched, we always capture.
+  // Otherwise fall back to AI-authored / significance heuristics.
   const isAiAuthored = detectAiAuthorship(latest.message);
   const totalLinesChanged = diff.insertions + diff.deletions;
   const isSignificant = totalLinesChanged >= SIGNIFICANT_CHANGE_THRESHOLD;
 
-  if (!isAiAuthored && !isSignificant) {
-    logger.debug("captureCommit: commit not AI-authored and not significant — skipping", {
+  if (!parsed && !isAiAuthored && !isSignificant) {
+    logger.debug("captureCommit: no conventional-commit match, not AI-authored, not significant — skipping", {
       hash: latest.hash,
       totalLinesChanged,
     });
     return;
   }
 
-  // 4. Strip sensitive data from commit message
+  // 5. Strip sensitive data from commit message
   const safeMessage = stripSensitiveData(latest.message);
-
-  // 5. Derive affected file paths from diff summary
   const changedFiles = diff.files.map((f) => f.file);
 
-  // 6. Store in database as a learning entry
+  // 6. Build entry. Prefer the parser's type/title when available.
+  const entryType = parsed?.type ?? "learning";
+  const entryTitle = parsed?.title ?? (safeMessage.split("\n")[0]?.trim() || latest.hash);
+  const tags: string[] = [];
+  if (parsed) tags.push(`commit:${entryType}`);
+  if (isAiAuthored) tags.push("ai-authored");
+  if (!parsed && isSignificant) tags.push("significant-change");
+
   const config = loadConfig();
   const db = await initDatabase(config.dbPath);
 
   try {
     const { addManualEntry } = await import("../capture/manual.js");
 
-    const title = safeMessage.split("\n")[0]?.trim() ?? latest.hash;
     const content = [
       `Commit: ${latest.hash}`,
       `Author: ${latest.author_name}`,
@@ -121,16 +134,18 @@ export async function captureCommit(): Promise<void> {
       .trim();
 
     const entryId = await addManualEntry(db, {
-      type: "learning",
-      title,
+      type: entryType,
+      title: entryTitle,
       content,
-      files: changedFiles,
-      tags: isAiAuthored ? ["ai-authored"] : ["significant-change"],
+      files: changedFiles.length > 0 ? changedFiles : parsed?.files ?? [],
+      tags,
     });
 
     logger.info("captureCommit: entry stored", {
       entryId,
       hash: latest.hash,
+      entryType,
+      viaParser: parsed !== null,
       isAiAuthored,
       totalLinesChanged,
     });

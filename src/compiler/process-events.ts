@@ -20,6 +20,8 @@ import {
   type EventType,
 } from "../store/events.js";
 import { classifyEvent, type Classification } from "./classify-event.js";
+import { parseError } from "./parsers/error.js";
+import { extractContextFromPrompt } from "./parsers/prompt.js";
 
 export interface ProcessOptions {
   readonly limit?: number;
@@ -52,12 +54,19 @@ export async function processEvents(
 
   for (const row of rows) {
     try {
-      const payload = JSON.parse(row.payload) as Record<string, unknown>;
+      const rawPayload = JSON.parse(row.payload) as Record<string, unknown>;
+      const payload = enrichPayload(row.type as string, rawPayload);
+      // Thread the queue-row session_id into the payload so downstream
+      // entry creation can attach it to metadata for dashboard grouping.
+      if (row.session_id && !payload.sessionId) {
+        payload.sessionId = row.session_id;
+      }
       const verdict = classifyEvent({ type: row.type as string, payload });
 
       if (verdict.signalStrength >= threshold && verdict.candidateType) {
-        createEntryFromEvent(db, row.type, payload, verdict);
-        entriesCreated += 1;
+        const created = createEntryFromEvent(db, row.type, payload, verdict);
+        if (created) entriesCreated += 1;
+        else skipped += 1;
       } else {
         skipped += 1;
       }
@@ -77,12 +86,64 @@ export async function processEvents(
   return { processed: rows.length, entriesCreated, skipped, failed };
 }
 
+/**
+ * Parser-based payload enrichment. Runs BEFORE classify so the verdict can
+ * consider structured fields. Keeps the classifier itself pure.
+ *
+ * - tool_use: parseError() adds error.type/fingerprint/file/line when the
+ *   raw error text is structured, enabling fingerprint dedupe downstream.
+ * - prompt: extractContextFromPrompt() adds files[] + symbols[] so the
+ *   classifier (future C.1 rebalance) can weight code-grounded prompts higher.
+ */
+function enrichPayload(
+  eventType: string,
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  if (eventType === "tool_use") {
+    const error = typeof payload.error === "string" ? payload.error : "";
+    if (error.length > 0) {
+      const parsed = parseError(error);
+      if (parsed) {
+        return {
+          ...payload,
+          parsedError: {
+            type: parsed.type,
+            message: parsed.message,
+            file: parsed.file ?? null,
+            line: parsed.line ?? null,
+            fingerprint: parsed.fingerprint,
+          },
+        };
+      }
+    }
+    return payload;
+  }
+  if (eventType === "prompt") {
+    const text = typeof payload.text === "string" ? payload.text : "";
+    if (text.length > 0) {
+      const ctx = extractContextFromPrompt(text);
+      return { ...payload, promptContext: ctx };
+    }
+    return payload;
+  }
+  return payload;
+}
+
+/**
+ * Creates a new entry row from the classified event.
+ * Returns false when dedupe suppressed creation (error_pattern fingerprint hit).
+ *
+ * Phase D.1: fingerprint dedupe — on error_pattern with a known fingerprint,
+ * increment source_count + bump last_confirmed instead of inserting.
+ * Phase D.2: session_id is carried into metadata JSON so the dashboard can
+ * group entries per session.
+ */
 function createEntryFromEvent(
   db: Database,
   eventType: EventType | string,
   payload: Record<string, unknown>,
   verdict: Classification,
-): void {
+): boolean {
   const id = randomUUID();
   const now = new Date().toISOString();
   const scope = verdict.scopeHint === "uncertain" ? "personal" : verdict.scopeHint;
@@ -92,24 +153,78 @@ function createEntryFromEvent(
   const developerId =
     typeof payload.developerId === "string" ? payload.developerId : null;
 
+  // Fingerprint dedupe for error_pattern — avoids the "same tsc error
+  // writes a new row every session" problem that would otherwise swamp
+  // the KB with duplicates.
+  const parsedError = (payload.parsedError ?? null) as
+    | { fingerprint: string; type: string; file: string | null }
+    | null;
+  const errorSignature =
+    verdict.candidateType === "error_pattern" && parsedError
+      ? parsedError.fingerprint
+      : null;
+
+  if (errorSignature) {
+    const existing = db
+      .query<{ id: string; source_count: number }, [string]>(
+        "SELECT id, source_count FROM entries WHERE error_signature = ? AND status = 'active' LIMIT 1",
+      )
+      .get(errorSignature);
+    if (existing) {
+      db.run(
+        "UPDATE entries SET source_count = source_count + 1, last_confirmed = ? WHERE id = ?",
+        [now, existing.id],
+      );
+      logger.debug("process-events: deduped error_pattern", {
+        fingerprint: errorSignature,
+        existingId: existing.id,
+      });
+      return false;
+    }
+  }
+
+  const metadata = buildMetadata(payload);
+  const metadataJson = metadata ? JSON.stringify(metadata) : null;
+  const filePath =
+    parsedError?.file ??
+    (typeof payload.cwd === "string" ? null : null);
+
   db.run(
     `INSERT INTO entries
-       (id, type, title, content, confidence, source_count, source_tool,
-        created_at, last_confirmed, status, scope, developer_id)
-     VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, 'active', ?, ?)`,
+       (id, type, title, content, file_path, error_signature, confidence, source_count, source_tool,
+        created_at, last_confirmed, status, scope, developer_id, metadata)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, 'active', ?, ?, ?)`,
     [
       id,
       verdict.candidateType!,
       title,
       content,
+      filePath,
+      errorSignature,
       verdict.signalStrength,
       `event:${eventType}`,
       now,
       now,
       scope,
       developerId,
+      metadataJson,
     ],
   );
+  return true;
+}
+
+function buildMetadata(payload: Record<string, unknown>): Record<string, unknown> | null {
+  const meta: Record<string, unknown> = {};
+  if (typeof payload.sessionId === "string" && payload.sessionId.length > 0) {
+    meta.sessionId = payload.sessionId;
+  }
+  if (payload.promptContext && typeof payload.promptContext === "object") {
+    meta.promptContext = payload.promptContext;
+  }
+  if (payload.parsedError && typeof payload.parsedError === "object") {
+    meta.parsedError = payload.parsedError;
+  }
+  return Object.keys(meta).length > 0 ? meta : null;
 }
 
 function deriveTitle(eventType: string, payload: Record<string, unknown>): string {

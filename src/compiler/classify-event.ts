@@ -64,7 +64,21 @@ function anyMatch(patterns: readonly RegExp[], text: string): boolean {
   return false;
 }
 
-function classifyPrompt(text: string): Classification {
+interface PromptContext {
+  readonly files: readonly string[];
+  readonly symbols: readonly string[];
+}
+
+function readPromptContext(payload: Record<string, unknown>): PromptContext {
+  const raw = payload.promptContext;
+  if (!raw || typeof raw !== "object") return { files: [], symbols: [] };
+  const obj = raw as { files?: unknown; symbols?: unknown };
+  const files = Array.isArray(obj.files) ? obj.files.filter((f): f is string => typeof f === "string") : [];
+  const symbols = Array.isArray(obj.symbols) ? obj.symbols.filter((s): s is string => typeof s === "string") : [];
+  return { files, symbols };
+}
+
+function classifyPrompt(text: string, ctx: PromptContext): Classification {
   const trimmed = text.trim();
   if (trimmed.length === 0) {
     return { signalStrength: 0, scopeHint: "uncertain", candidateType: null };
@@ -76,17 +90,30 @@ function classifyPrompt(text: string): Classification {
   const hasTeamSignal = anyMatch(TEAM_SIGNAL_PATTERNS, trimmed);
   const isConvention = anyMatch(CONVENTION_PATTERNS, trimmed);
   const isDecision = anyMatch(DECISION_PATTERNS, trimmed);
+  // Code-grounded prompts reference actual files or symbols; they carry
+  // more durable signal than bare natural-language chatter of the same length.
+  const codeGrounded = ctx.files.length > 0 || ctx.symbols.length > 0;
 
-  if (isConvention) {
+  // Convention requires team signal AND a convention pattern (tightens from
+  // the prior single-OR which was the source of convention-folder bloat).
+  if (isConvention && hasTeamSignal) {
     return { signalStrength: 0.85, scopeHint: "team", candidateType: "convention" };
   }
   if (isDecision && hasTeamSignal) {
     return { signalStrength: 0.8, scopeHint: "team", candidateType: "decision" };
   }
+  // Loosen decisions: an explicit decision phrase alone (rationale / chose / because)
+  // is enough to qualify as a decision candidate when the prompt is non-trivial.
+  if (isDecision && trimmed.length > 40) {
+    return { signalStrength: 0.65, scopeHint: "uncertain", candidateType: "decision" };
+  }
   if (hasTeamSignal) {
     return { signalStrength: 0.7, scopeHint: "team", candidateType: "learning" };
   }
-  if (trimmed.length > 80) {
+  if (codeGrounded && trimmed.length > 40) {
+    return { signalStrength: 0.55, scopeHint: "uncertain", candidateType: "learning" };
+  }
+  if (trimmed.length > 120) {
     return { signalStrength: 0.4, scopeHint: "uncertain", candidateType: "learning" };
   }
   return { signalStrength: 0.2, scopeHint: "personal", candidateType: null };
@@ -122,7 +149,7 @@ export function classifyEvent(ev: RawEvent): Classification {
   switch (ev.type) {
     case "prompt": {
       const text = typeof payload.text === "string" ? payload.text : "";
-      return classifyPrompt(text);
+      return classifyPrompt(text, readPromptContext(payload));
     }
     case "tool_use":
       return classifyToolUse(payload);

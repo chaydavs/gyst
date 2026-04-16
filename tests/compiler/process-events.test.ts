@@ -60,6 +60,52 @@ describe("processEvents", () => {
     expect(completedCount.count).toBe(2);
   });
 
+  test("error_pattern dedupe: same fingerprint increments source_count instead of duplicating", async () => {
+    // Two tool_use events carrying the same TypeScript error. After processing,
+    // we want one entry with source_count=2, not two separate rows.
+    const tscError = "src/foo.ts:12:34 - error TS2322: Type 'string' is not assignable to type 'number'.";
+    emitEvent(db, "tool_use", { tool: "Bash", error: tscError });
+    emitEvent(db, "tool_use", { tool: "Bash", error: tscError });
+
+    const report = await processEvents(db);
+    expect(report.processed).toBe(2);
+    expect(report.entriesCreated).toBe(1);
+    expect(report.skipped).toBe(1);
+
+    const entries = db.query("SELECT * FROM entries WHERE type = 'error_pattern'").all() as any[];
+    expect(entries.length).toBe(1);
+    expect(entries[0].source_count).toBe(2);
+    expect(entries[0].error_signature).toBeTruthy();
+  });
+
+  test("session_id from event_queue is threaded into entries.metadata", async () => {
+    emitEvent(db, "prompt", {
+      text: "we always use camelCase for identifiers",
+      sessionId: "sess-abc-123",
+    });
+    await processEvents(db);
+
+    const entry = db.query("SELECT metadata FROM entries LIMIT 1").get() as any;
+    expect(entry).toBeTruthy();
+    expect(entry.metadata).toBeTruthy();
+    const meta = JSON.parse(entry.metadata);
+    expect(meta.sessionId).toBe("sess-abc-123");
+  });
+
+  test("prompt enrichment: extracted files + symbols attached to metadata", async () => {
+    emitEvent(db, "prompt", {
+      text: "debugging auth flow in src/auth/middleware.ts where `handleSessionTimeout` misfires",
+    });
+    await processEvents(db);
+
+    const entry = db.query("SELECT metadata FROM entries LIMIT 1").get() as any;
+    expect(entry).toBeTruthy();
+    const meta = JSON.parse(entry.metadata);
+    expect(meta.promptContext).toBeDefined();
+    expect(meta.promptContext.files).toContain("src/auth/middleware.ts");
+    expect(meta.promptContext.symbols).toContain("handleSessionTimeout");
+  });
+
   test("handles processing failures by marking events as failed", async () => {
     // Insert a malformed payload manually to trigger an error in JSON.parse or similar
     db.run(

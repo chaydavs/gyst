@@ -46,14 +46,18 @@ export function emitEvent(
 
 /**
  * Retrieves the next batch of pending events for processing.
+ * Includes session_id so downstream promotion can group entries per session.
  */
 export function getPendingEvents(
   db: Database,
   limit: number = 50,
-): { id: number; type: EventType; payload: string }[] {
+): { id: number; type: EventType; payload: string; session_id: string | null }[] {
   return db
-    .query<{ id: number; type: EventType; payload: string }, [number]>(
-      "SELECT id, type, payload FROM event_queue WHERE status = 'pending' ORDER BY id ASC LIMIT ?",
+    .query<
+      { id: number; type: EventType; payload: string; session_id: string | null },
+      [number]
+    >(
+      "SELECT id, type, payload, session_id FROM event_queue WHERE status = 'pending' ORDER BY id ASC LIMIT ?",
     )
     .all(limit);
 }
