@@ -125,7 +125,7 @@ From this point, knowledge grows automatically:
 ```bash
 gyst score          # uniformity score — how consistent is your codebase? (0–100)
 gyst onboard        # generate a markdown onboarding doc from everything Gyst knows
-gyst check src/api/auth.ts  # check a file against stored conventions
+gyst audit src/api/auth.ts  # fail if a file violates stored conventions
 ```
 
 ---
