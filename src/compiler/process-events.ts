@@ -17,6 +17,7 @@ import {
   getPendingEvents,
   markEventCompleted,
   markEventFailed,
+  normaliseHookPayload,
   type EventType,
 } from "../store/events.js";
 import { classifyEvent, type Classification } from "./classify-event.js";
@@ -57,7 +58,10 @@ export async function processEvents(
   for (const row of rows) {
     try {
       const rawPayload = JSON.parse(row.payload) as Record<string, unknown>;
-      const payload = enrichPayload(row.type as string, rawPayload);
+      // Defence-in-depth: rescue payloads written before the CLI-level
+      // normaliser was added (or by external agents that bypass `gyst emit`).
+      const normalised = normaliseHookPayload(row.type as string, rawPayload);
+      const payload = enrichPayload(row.type as string, normalised);
       // Thread the queue-row session_id into the payload so downstream
       // entry creation can attach it to metadata for dashboard grouping.
       if (row.session_id && !payload.sessionId) {

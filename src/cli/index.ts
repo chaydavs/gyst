@@ -34,7 +34,7 @@ import {
 } from "../server/auth.js";
 import { initActivitySchema } from "../server/activity.js";
 import { getTeamMembers } from "../server/team.js";
-import { EventType, emitEvent } from "../store/events.js";
+import { EventType, emitEvent, normaliseHookPayload } from "../store/events.js";
 
 const WIKI_SUBDIRS = [
   "error_pattern",
@@ -177,7 +177,8 @@ const emitAction = async (type: string, payload: string | undefined) => {
       // No positional payload — try stdin (hook scripts pipe Claude Code JSON here).
       parsedPayload = readStdinPayloadSync();
     }
-    emitEvent(db, type as EventType, parsedPayload);
+    const normalised = normaliseHookPayload(type, parsedPayload);
+    emitEvent(db, type as EventType, normalised);
     db.close();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

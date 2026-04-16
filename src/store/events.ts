@@ -83,3 +83,52 @@ export function markEventFailed(db: Database, id: number, error: string): void {
     [error, id],
   );
 }
+
+/**
+ * Normalises a raw Claude Code hook JSON into the payload shape that
+ * classify-event.ts and emitEvent expect. Claude Code uses snake_case
+ * (session_id, prompt, tool_name, tool_response) while the internal
+ * pipeline reads camelCase (sessionId, text, tool, error). This function
+ * bridges both naming conventions so direct-hook configs AND plugin
+ * scripts both produce the same canonical payload.
+ *
+ * Pure function. Idempotent — calling it twice yields the same result.
+ */
+export function normaliseHookPayload(
+  type: string,
+  raw: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...raw };
+  if (typeof raw.session_id === "string" && typeof raw.sessionId !== "string") {
+    out.sessionId = raw.session_id;
+  }
+  if (type === "prompt") {
+    if (typeof raw.prompt === "string" && typeof raw.text !== "string") {
+      out.text = raw.prompt;
+    }
+  }
+  if (type === "tool_use") {
+    if (typeof raw.tool_name === "string" && typeof raw.tool !== "string") {
+      out.tool = raw.tool_name;
+    }
+    if (typeof raw.error !== "string") {
+      const resp = raw.tool_response;
+      if (resp && typeof resp === "object") {
+        const r = resp as {
+          is_error?: unknown;
+          content?: unknown;
+          error?: unknown;
+          stderr?: unknown;
+        };
+        if (r.is_error === true && typeof r.content === "string") {
+          out.error = r.content;
+        } else if (typeof r.error === "string") {
+          out.error = r.error;
+        } else if (typeof r.stderr === "string" && r.stderr.length > 0) {
+          out.error = r.stderr;
+        }
+      }
+    }
+  }
+  return out;
+}
