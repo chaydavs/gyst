@@ -38,6 +38,11 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 *.db-journal
 *.db-wal
 
+# Test-generated wiki artifacts (convention detector outputs with hash suffixes)
+# See memory/feedback_ship_cleanup.md — tests write real markdown into gyst-wiki/
+# and the 8-char hash suffix uniquely identifies the generated files.
+gyst-wiki/**/*-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].md
+
 # LongMemEval dataset (277MB — re-downloaded by run.ts)
 tests/benchmark/longmemeval/data/
 
