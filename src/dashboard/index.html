@@ -104,9 +104,10 @@
     
     <div class="scope-group">
       <button class="scope-btn active" data-scope="all">All</button>
+      <button class="scope-btn" data-scope="curated">Curated</button>
       <button class="scope-btn" data-scope="team">Team</button>
       <button class="scope-btn" data-scope="personal">Personal</button>
-      <button class="scope-btn" data-scope="project">Structural</button>
+      <button class="scope-btn" data-scope="structural">Structural</button>
     </div>
 
     <input id="search" type="text" placeholder="Search entries…" autocomplete="off" />
@@ -140,7 +141,14 @@
       learning:        '#7ee787',
     };
     const DEFAULT_COLOR = '#58a6ff';
-    const nodeColor = (node) => SCOPE_COLORS[node.scope] ?? NODE_COLORS[node.type] ?? DEFAULT_COLOR;
+    // Structural (graphify AST) nodes get a distinct muted colour so the
+    // scarce curated layer still pops visually. Fill is low-saturation grey-blue;
+    // radius is also smaller (see renderGraph below).
+    const STRUCTURAL_COLOR = '#6e7681';
+    const nodeColor = (node) => {
+      if (node.layer === 'structural') return STRUCTURAL_COLOR;
+      return SCOPE_COLORS[node.scope] ?? NODE_COLORS[node.type] ?? DEFAULT_COLOR;
+    };
 
     // ─── State ────────────────────────────────────────────────────────────────
     let currentView = 'graph';
@@ -197,25 +205,48 @@
     }
 
     // ─── Details panel ────────────────────────────────────────────────────────
+    // NOTE: uses innerHTML, but every interpolated user-controlled value is
+    // routed through escHtml/escAttr to prevent XSS. Colours come from static
+    // constants (SCOPE_COLORS, NODE_COLORS, STRUCTURAL_COLOR).
     function showDetails(node) {
+      const isStructural = node.layer === 'structural';
+      const typeColor = isStructural ? STRUCTURAL_COLOR : (NODE_COLORS[node.type] ?? DEFAULT_COLOR);
+      const scopeColor = SCOPE_COLORS[node.scope] ?? DEFAULT_COLOR;
+      const layerColor = isStructural ? STRUCTURAL_COLOR : '#58a6ff';
+      const layerLabel = isStructural ? 'structural' : 'curated';
+
+      const contentSection = node.content
+        ? '<div class="detail-section"><div class="detail-label">Content</div>'
+          + '<div class="detail-content" style="white-space: pre-wrap; background: var(--bg); padding: 8px; border-radius: 4px; border: 1px solid var(--border); font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto;">'
+          + escHtml(node.content) + '</div></div>'
+        : '';
+      const filePathSection = node.filePath
+        ? '<div class="detail-section"><div class="detail-label">File</div>'
+          + '<div class="detail-content" style="font-family: monospace; font-size: 12px">'
+          + escHtml(node.filePath) + '</div></div>'
+        : '';
+      const confidenceSection = isStructural
+        ? ''
+        : '<div class="detail-section"><div class="detail-label">Confidence</div>'
+          + '<div class="detail-content">' + (node.confidence * 100).toFixed(0) + '%</div></div>';
+
       details.innerHTML = `
         <h2>${escHtml(node.title)}</h2>
         <div class="detail-section">
+          <div class="detail-label">Layer</div>
+          <div class="detail-content"><span class="tag" style="background:${layerColor}22; color:${layerColor}">${layerLabel}</span></div>
+        </div>
+        <div class="detail-section">
           <div class="detail-label">Type</div>
-          <div class="detail-content"><span class="tag" style="background:${NODE_COLORS[node.type]}22; color:${NODE_COLORS[node.type]}">${node.type}</span></div>
+          <div class="detail-content"><span class="tag" style="background:${typeColor}22; color:${typeColor}">${escHtml(node.type)}</span></div>
         </div>
         <div class="detail-section">
           <div class="detail-label">Scope</div>
-          <div class="detail-content"><span class="tag" style="background:${SCOPE_COLORS[node.scope]}22; color:${SCOPE_COLORS[node.scope]}">${node.scope}</span></div>
+          <div class="detail-content"><span class="tag" style="background:${scopeColor}22; color:${scopeColor}">${escHtml(node.scope)}</span></div>
         </div>
-        <div class="detail-section">
-          <div class="detail-label">Content</div>
-          <div class="detail-content" style="white-space: pre-wrap; background: var(--bg); padding: 8px; border-radius: 4px; border: 1px solid var(--border); font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto;">${escHtml(node.content)}</div>
-        </div>
-        <div class="detail-section">
-          <div class="detail-label">Confidence</div>
-          <div class="detail-content">${(node.confidence * 100).toFixed(0)}%</div>
-        </div>
+        ${filePathSection}
+        ${contentSection}
+        ${confidenceSection}
         <div class="detail-section">
           <div class="detail-label">Connections</div>
           <div class="detail-content" id="neighbors-count">Loading…</div>
@@ -241,19 +272,26 @@
     }
 
     // ─── Graph view ───────────────────────────────────────────────────────────
-    function filterGraph(scope) {
-      if (scope === 'all') {
+    // `filter` may be a scope value (team/personal) OR a layer value
+    // (curated/structural). 'all' is the no-op.
+    function filterGraph(filter) {
+      if (filter === 'all') {
         currentGraph = { ...rawGraph };
-      } else {
-        const filteredNodes = rawGraph.nodes.filter(n => n.scope === scope);
-        const nodeIds = new Set(filteredNodes.map(n => n.id));
-        const filteredEdges = rawGraph.edges.filter(e => {
-          const s = typeof e.source === 'string' ? e.source : e.source.id;
-          const t = typeof e.target === 'string' ? e.target : e.target.id;
-          return nodeIds.has(s) && nodeIds.has(t);
-        });
-        currentGraph = { nodes: filteredNodes, edges: filteredEdges };
+        return;
       }
+      const isLayerFilter = filter === 'structural' || filter === 'curated';
+      const filteredNodes = rawGraph.nodes.filter(n =>
+        isLayerFilter
+          ? (n.layer ?? 'curated') === filter
+          : n.scope === filter,
+      );
+      const nodeIds = new Set(filteredNodes.map(n => n.id));
+      const filteredEdges = rawGraph.edges.filter(e => {
+        const s = typeof e.source === 'string' ? e.source : e.source.id;
+        const t = typeof e.target === 'string' ? e.target : e.target.id;
+        return nodeIds.has(s) && nodeIds.has(t);
+      });
+      currentGraph = { nodes: filteredNodes, edges: filteredEdges };
     }
 
     function renderGraph(data) {
@@ -302,15 +340,22 @@
         .force('center', d3.forceCenter(w / 2, h / 2))
         .force('collide',d3.forceCollide(20));
 
-      // Links
+      // Links — structural edges are dashed + dimmer so the curated graph
+      // is the visual centrepiece.
       const link = g.append('g').selectAll('line').data(edges).join('line')
-        .attr('stroke', '#30363d')
+        .attr('stroke', d => d.layer === 'structural' ? '#484f58' : '#30363d')
+        .attr('stroke-opacity', d => d.layer === 'structural' ? 0.5 : 1.0)
+        .attr('stroke-dasharray', d => d.layer === 'structural' ? '3,3' : null)
         .attr('stroke-width', d => Math.max(1, (d.strength || 1)))
         .attr('marker-end', 'url(#arrow)');
 
       // Node groups
       const node = g.append('g').selectAll('g').data(nodes).join('g')
-        .attr('class', d => d.type === 'ghost_knowledge' ? 'node node-ghost' : 'node')
+        .attr('class', d => {
+          if (d.type === 'ghost_knowledge') return 'node node-ghost';
+          if (d.layer === 'structural') return 'node node-structural';
+          return 'node';
+        })
         .attr('cursor', 'pointer')
         .call(d3.drag()
           .on('start', (evt, d) => { if (!evt.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
@@ -322,10 +367,11 @@
         .on('mouseout', hideTooltip);
 
       node.append('circle')
-        .attr('r', 10)
+        .attr('r', d => d.layer === 'structural' ? 6 : 10)
         .attr('fill', d => nodeColor(d))
         .attr('stroke', '#0d1117')
-        .attr('stroke-width', 1.5);
+        .attr('stroke-width', 1.5)
+        .attr('opacity', d => d.layer === 'structural' ? 0.75 : 1.0);
 
       node.append('text')
         .attr('dy', 22)

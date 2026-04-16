@@ -15,6 +15,7 @@ import {
   getClusters,
   findPath,
   getHubs,
+  getFullGraph,
   recordCoRetrieval,
   strengthenCoRetrievedLinks,
 } from "../../src/store/graph.js";
@@ -257,5 +258,84 @@ describe("getHubs", () => {
 
     // e2 should rank higher (smaller index = higher rank)
     expect(e2Pos).toBeLessThan(e5Pos);
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe("getFullGraph two-layer output", () => {
+  test("returns curated + structural nodes tagged by layer", () => {
+    const fresh = initDatabase(":memory:");
+    const now = new Date().toISOString();
+
+    // Curated layer: 1 active entry
+    fresh.run(
+      `INSERT INTO entries
+         (id, type, title, content, confidence, scope, status, created_at, last_confirmed)
+       VALUES ('c1','learning','curated 1','body',0.9,'team','active',?,?)`,
+      [now, now],
+    );
+    // Structural layer: 2 AST-derived nodes + 1 edge
+    fresh.run(
+      `INSERT INTO structural_nodes
+         (id, label, file_path, file_type, source_location, norm_label, created_at, last_seen)
+       VALUES
+         ('s1','foo()','src/a.ts','code',NULL,'foo',?,?),
+         ('s2','bar()','src/b.ts','code',NULL,'bar',?,?)`,
+      [now, now, now, now],
+    );
+    fresh.run(
+      `INSERT INTO structural_edges (source_id, target_id, relation, weight)
+       VALUES ('s1','s2','calls',0.8)`,
+    );
+
+    const graph = getFullGraph(fresh);
+
+    const curated = graph.nodes.filter((n) => n.layer === "curated");
+    const structural = graph.nodes.filter((n) => n.layer === "structural");
+    expect(curated.length).toBe(1);
+    expect(structural.length).toBe(2);
+
+    // Structural nodes carry their file path for dashboard drill-down
+    const s1 = structural.find((n) => n.id === "s1");
+    expect(s1?.filePath).toBe("src/a.ts");
+
+    // Structural edges are tagged and carry the graphify relation
+    const structuralEdges = graph.edges.filter((e) => e.layer === "structural");
+    expect(structuralEdges.length).toBe(1);
+    expect(structuralEdges[0]?.type).toBe("calls");
+
+    fresh.close();
+  });
+
+  test("curated layer gets the node budget first", () => {
+    const fresh = initDatabase(":memory:");
+    const now = new Date().toISOString();
+
+    // Seed 3 curated entries and 10 structural nodes
+    for (let i = 0; i < 3; i++) {
+      fresh.run(
+        `INSERT INTO entries
+           (id, type, title, content, confidence, scope, status, created_at, last_confirmed)
+         VALUES (?,?,?,?,?,?,?,?,?)`,
+        [`c${i}`, "learning", `curated ${i}`, "", 0.9, "team", "active", now, now],
+      );
+    }
+    for (let i = 0; i < 10; i++) {
+      fresh.run(
+        `INSERT INTO structural_nodes
+           (id, label, file_path, file_type, source_location, norm_label, created_at, last_seen)
+         VALUES (?,?,?,?,?,?,?,?)`,
+        [`s${i}`, `sym${i}`, `src/f${i}.ts`, "code", null, null, now, now],
+      );
+    }
+
+    // maxNodes=5 → curated (3) fills first, structural takes remaining 2
+    const graph = getFullGraph(fresh, 5);
+    const curated = graph.nodes.filter((n) => n.layer === "curated");
+    const structural = graph.nodes.filter((n) => n.layer === "structural");
+    expect(curated.length).toBe(3);
+    expect(structural.length).toBe(2);
+
+    fresh.close();
   });
 });

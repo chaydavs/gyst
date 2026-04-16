@@ -16,7 +16,13 @@ import { logger } from "../utils/logger.js";
 // Public interfaces
 // ---------------------------------------------------------------------------
 
-/** A node in the knowledge graph, representing a single knowledge entry. */
+/**
+ * A node in the knowledge graph.
+ *
+ * `layer` distinguishes curated (human/LLM-authored) entries from
+ * structural (graphify AST-derived) nodes. Consumers can filter or
+ * colour-code by layer. Defaults to 'curated' for backward compat.
+ */
 export interface GraphNode {
   id: string;
   type: string;
@@ -24,15 +30,18 @@ export interface GraphNode {
   content: string;
   confidence: number;
   scope: string;
+  layer?: "curated" | "structural";
+  filePath?: string | null;
 }
 
-/** A directed edge between two knowledge entries. */
+/** A directed edge between two nodes. */
 export interface GraphEdge {
   source: string;
   target: string;
   /** Relationship type from DB, or 'co_retrieved' for co-retrieval edges. */
   type: string;
   strength: number;
+  layer?: "curated" | "structural";
 }
 
 /** A subgraph consisting of a set of nodes and the edges between them. */
@@ -482,6 +491,9 @@ export function getFullGraph(
   db: Database,
   maxNodes = 500,
 ): Subgraph {
+  // Curated layer first — it's the scarce, high-value signal. Structural
+  // fills remaining budget so large graphify imports can't crowd curated
+  // entries out of the view.
   const entryRows = db
     .query<EntryRow, [number]>(
       `SELECT id, type, title, content, confidence, scope
@@ -491,42 +503,107 @@ export function getFullGraph(
     )
     .all(maxNodes);
 
-  if (entryRows.length === 0) {
+  const curatedRemaining = Math.max(0, maxNodes - entryRows.length);
+  const structuralRows =
+    curatedRemaining > 0
+      ? db
+          .query<
+            { id: string; label: string; file_path: string; file_type: string | null },
+            [number]
+          >(
+            `SELECT id, label, file_path, file_type
+             FROM structural_nodes
+             ORDER BY last_seen DESC
+             LIMIT ?`,
+          )
+          .all(curatedRemaining)
+      : [];
+
+  if (entryRows.length === 0 && structuralRows.length === 0) {
     return EMPTY_SUBGRAPH;
   }
 
-  const nodeIds = entryRows.map((e) => e.id);
-  const idSet = new Set(nodeIds);
-  const placeholders = nodeIds.map(() => "?").join(", ");
-
-  const relRows = db
-    .query<RelRow, string[]>(
-      `SELECT source_id, target_id, type, strength
-       FROM relationships
-       WHERE source_id IN (${placeholders}) OR target_id IN (${placeholders})`,
-    )
-    .all(...nodeIds, ...nodeIds);
-
-  const nodes: GraphNode[] = entryRows.map((e) => ({
+  const curatedNodes: GraphNode[] = entryRows.map((e) => ({
     id: e.id,
     type: e.type,
     title: e.title,
     content: e.content,
     confidence: e.confidence,
     scope: e.scope,
+    layer: "curated",
   }));
 
-  // Only include edges where both endpoints are in our node set
-  const edges: GraphEdge[] = relRows
-    .filter((r) => idSet.has(r.source_id) && idSet.has(r.target_id))
-    .map((r) => ({
-      source: r.source_id,
-      target: r.target_id,
-      type: r.type,
-      strength: r.strength,
-    }));
+  const structuralNodes: GraphNode[] = structuralRows.map((r) => ({
+    id: r.id,
+    type: r.file_type ?? "structural",
+    title: r.label,
+    content: "",
+    confidence: 1.0,
+    scope: "project",
+    layer: "structural",
+    filePath: r.file_path,
+  }));
 
-  logger.debug("getFullGraph", { nodes: nodes.length, edges: edges.length });
+  const nodes = [...curatedNodes, ...structuralNodes];
+  const nodeIds = nodes.map((n) => n.id);
+  const idSet = new Set(nodeIds);
+
+  const edges: GraphEdge[] = [];
+
+  if (entryRows.length > 0) {
+    const curatedIds = entryRows.map((e) => e.id);
+    const placeholders = curatedIds.map(() => "?").join(", ");
+    const relRows = db
+      .query<RelRow, string[]>(
+        `SELECT source_id, target_id, type, strength
+         FROM relationships
+         WHERE source_id IN (${placeholders}) OR target_id IN (${placeholders})`,
+      )
+      .all(...curatedIds, ...curatedIds);
+
+    for (const r of relRows) {
+      if (idSet.has(r.source_id) && idSet.has(r.target_id)) {
+        edges.push({
+          source: r.source_id,
+          target: r.target_id,
+          type: r.type,
+          strength: r.strength,
+          layer: "curated",
+        });
+      }
+    }
+  }
+
+  if (structuralRows.length > 0) {
+    const structuralIds = structuralRows.map((r) => r.id);
+    const placeholders = structuralIds.map(() => "?").join(", ");
+    const edgeRows = db
+      .query<
+        { source_id: string; target_id: string; relation: string; weight: number },
+        string[]
+      >(
+        `SELECT source_id, target_id, relation, weight
+         FROM structural_edges
+         WHERE source_id IN (${placeholders}) AND target_id IN (${placeholders})`,
+      )
+      .all(...structuralIds, ...structuralIds);
+
+    for (const r of edgeRows) {
+      edges.push({
+        source: r.source_id,
+        target: r.target_id,
+        type: r.relation,
+        strength: r.weight,
+        layer: "structural",
+      });
+    }
+  }
+
+  logger.debug("getFullGraph", {
+    curatedNodes: curatedNodes.length,
+    structuralNodes: structuralNodes.length,
+    edges: edges.length,
+  });
 
   return { nodes, edges };
 }
