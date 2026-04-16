@@ -255,6 +255,11 @@
         : `<div class="detail-section"><div class="detail-label">Confidence</div>
              <div class="detail-content">${(node.confidence * 100).toFixed(0)}%</div></div>`;
 
+      // Classifier "Why?" trail — read from entries.metadata.classifier.
+      // Missing for hand-authored entries; renders a neutral fallback.
+      const classifier = parseClassifierTrail(node.metadata);
+      const whyBlock = renderWhyBlock(classifier, isStructural);
+
       canvas.innerHTML = `
         <button class="back-btn" onclick="renderGraph()">\u2190 Back</button>
         <div class="detail-view">
@@ -274,6 +279,7 @@
           ${filePathBlock}
           ${contentBlock}
           ${confidenceBlock}
+          ${whyBlock}
           <div class="detail-section">
             <div class="detail-label">Connections</div>
             <div class="detail-content">${deg} edge(s) in current view</div>
@@ -281,6 +287,64 @@
           <button class="cta" onclick="drillInto('${escAttr(node.id)}')">Explore neighbors</button>
         </div>
       `;
+    }
+
+    // Friendly names for classifier rule IDs — keep in sync with the
+    // RULE_IDS / RERANK_RULE_IDS maps in src/compiler/.
+    const RULE_LABELS = {
+      'prompt-low-signal': 'prompt too short to carry durable knowledge',
+      'prompt-team-signal': 'matched a team-intent phrase ("we use", "always", …)',
+      'prompt-convention-pattern': 'matched a naming/convention pattern',
+      'prompt-decision-pattern': 'matched a decision phrase ("because", "chose", …)',
+      'prompt-decision-long': 'long-form decision prose',
+      'prompt-learning-code-grounded': 'references real files or symbols',
+      'prompt-learning-long': 'long free-form prose',
+      'tool-use-error': 'tool invocation failed with an error',
+      'commit-chore-style': 'commit message tagged chore/style/wip',
+      'commit-meaningful': 'commit message carries non-chore signal',
+      'md-change-generic': 'generic markdown edit',
+      'plan-adr-path': 'file lives under decisions/ (ADR)',
+      'plan-doc': 'planning / PRD document',
+      'event-unknown-type': 'unknown event type',
+      'prompt-empty': 'empty prompt',
+      'commit-empty': 'empty commit message',
+      'event-non-carrier': 'lifecycle event (session_start/end/pre_compact/pull)',
+      'graph-duplicate-cluster': 'graph: ≥2 existing entries already cover this entity',
+      'graph-suppress-bloat': 'graph: ≥5 existing entries — suppressed as bloat',
+      'graph-novel': 'graph: novel territory — no overlap',
+    };
+
+    function parseClassifierTrail(metadata) {
+      if (!metadata) return null;
+      try {
+        const parsed = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+        return parsed && typeof parsed === 'object' ? (parsed.classifier ?? null) : null;
+      } catch (_err) {
+        return null;
+      }
+    }
+
+    function renderWhyBlock(classifier, isStructural) {
+      if (isStructural) return '';
+      if (!classifier || !Array.isArray(classifier.ruleIds) || classifier.ruleIds.length === 0) {
+        return `<div class="detail-section">
+          <div class="detail-label">Why?</div>
+          <div class="detail-content">Classified by defaults — no classifier rule fired.</div>
+        </div>`;
+      }
+      const items = classifier.ruleIds
+        .map((id) => `<li><code style="font-size:11px;color:#cccccc">${escHtml(id)}</code> — ${escHtml(RULE_LABELS[id] ?? 'unknown rule')}</li>`)
+        .join('');
+      const signal = typeof classifier.signalStrength === 'number'
+        ? `<div style="font-size:11px;color:var(--muted);margin-top:8px">Signal strength: ${(classifier.signalStrength * 100).toFixed(0)}%</div>`
+        : '';
+      const reasoning = classifier.reasoning
+        ? `<div class="detail-body" style="margin-top:10px">${escHtml(classifier.reasoning)}</div>`
+        : '';
+      return `<div class="detail-section">
+        <div class="detail-label">Why?</div>
+        <div class="detail-content"><ul style="padding-left:18px;margin:0">${items}</ul>${signal}${reasoning}</div>
+      </div>`;
     }
 
     function escHtml(str) {

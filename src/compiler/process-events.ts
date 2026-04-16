@@ -21,6 +21,7 @@ import {
   type EventType,
 } from "../store/events.js";
 import { classifyEvent, type Classification } from "./classify-event.js";
+import { rerankWithGraphify } from "./classify-rerank.js";
 import { parseError } from "./parsers/error.js";
 import { extractContextFromPrompt } from "./parsers/prompt.js";
 import { parseAdr } from "./parsers/markdown-adr.js";
@@ -85,7 +86,10 @@ export async function processEvents(
       if (row.session_id && !payload.sessionId) {
         payload.sessionId = row.session_id;
       }
-      const verdict = classifyEvent({ type: row.type as string, payload });
+      const stage1 = classifyEvent({ type: row.type as string, payload });
+      // Stage 2: graphify / entity-overlap rerank. Strictly a suppressor —
+      // never amplifies, so applying it before the threshold gate is safe.
+      const verdict = rerankWithGraphify(db, stage1, payload);
 
       if (verdict.signalStrength >= threshold && verdict.candidateType) {
         const created = createEntryFromEvent(db, row.type, payload, verdict);
@@ -228,7 +232,20 @@ function createEntryFromEvent(
   }
 
   const metadata = buildMetadata(payload);
-  const metadataJson = metadata ? JSON.stringify(metadata) : null;
+  // Attach the classifier's verdict trail so the dashboard "Why?" view can
+  // reconstruct why this entry exists. Only stored when at least one rule
+  // fired — noise-free for hand-authored entries that never touched this path.
+  const verdictTrail =
+    verdict.ruleIds.length > 0 || verdict.reasoning
+      ? {
+          ruleIds: [...verdict.ruleIds],
+          signalStrength: verdict.signalStrength,
+          ...(verdict.reasoning ? { reasoning: verdict.reasoning } : {}),
+        }
+      : null;
+  const metadataWithTrail =
+    verdictTrail ? { ...(metadata ?? {}), classifier: verdictTrail } : metadata;
+  const metadataJson = metadataWithTrail ? JSON.stringify(metadataWithTrail) : null;
   const filePath =
     parsedError?.file ??
     (typeof payload.cwd === "string" ? null : null);
