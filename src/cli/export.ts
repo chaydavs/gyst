@@ -69,17 +69,15 @@ export async function exportToMarkdown(
       const tags = db
         .query<{ tag: string }, [string]>(
           "SELECT tag FROM entry_tags WHERE entry_id = ?",
-          [row.id],
         )
-        .all()
+        .all(row.id)
         .map((r) => r.tag);
 
       const files = db
         .query<{ file_path: string }, [string]>(
           "SELECT file_path FROM entry_files WHERE entry_id = ?",
-          [row.id],
         )
-        .all()
+        .all(row.id)
         .map((r) => r.file_path);
 
       const validScope = z
@@ -100,6 +98,7 @@ export async function exportToMarkdown(
           sourceTool: row.source_tool ?? undefined,
           createdAt: row.created_at,
           lastConfirmed: row.last_confirmed,
+          status: "active",
           scope: validScope,
         },
         config.wikiDir,

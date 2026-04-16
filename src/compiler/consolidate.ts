@@ -21,7 +21,7 @@ import type { Database } from "bun:sqlite";
 import { logger } from "../utils/logger.js";
 import { DatabaseError } from "../utils/errors.js";
 import { calculateConfidence } from "../store/confidence.js";
-import { canLoadExtensions, initDatabase } from "../store/database.js";
+import { canLoadExtensions } from "../store/database.js";
 import { searchByVector, initVectorStore } from "../store/embeddings.js";
 import { loadConfig } from "../utils/config.js";
 
