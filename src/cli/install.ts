@@ -272,23 +272,66 @@ export function mergeClaudeHooks(config: McpConfig): McpConfig {
 /**
  * Returns a new config with Gyst's Gemini CLI hooks merged into settings.json.
  *
+ * Gemini CLI's schema is identical to Claude Code's: each event maps to an
+ * ARRAY of `{matcher, hooks: [{name, type, command, timeout}]}` entries.
+ * Valid Gemini events: SessionStart, SessionEnd, BeforeAgent, AfterAgent,
+ * BeforeTool, AfterTool. Writing strings (as an older revision of this
+ * function did) crashes Gemini with "Expected array, received string".
+ *
+ * Existing Gyst-owned entries are filtered out before merging to keep the
+ * merge idempotent. Other plugins' entries (claude-mem, user-authored) are
+ * preserved.
+ *
  * @param config - Existing Gemini CLI settings.json content.
  * @returns New config object with Gyst hooks injected.
  */
 export function mergeGeminiHooks(config: McpConfig): McpConfig {
-  const hooks = (config.hooks as Record<string, string>) || {};
-  const newHooks = { ...hooks };
+  type GeminiHookEntry = {
+    matcher: string;
+    hooks: { name?: string; type: string; command: string; timeout?: number }[];
+  };
 
-  const GEMINI_HOOK_NAMES = [
-    "SessionStart", "SessionEnd", "Prompt", "ToolUse", "Error",
-    "PostCommit", "PostMerge"
-  ];
+  const VALID_GEMINI_EVENTS = new Set([
+    "SessionStart", "SessionEnd", "BeforeAgent", "AfterAgent",
+    "BeforeTool", "AfterTool",
+  ]);
 
-  for (const h of GEMINI_HOOK_NAMES) {
-    newHooks[h] = `gyst emit ${h.toLowerCase()} 2>/dev/null || true`;
+  const entry = (cmd: string): GeminiHookEntry => ({
+    matcher: "*",
+    hooks: [
+      { name: "gyst", type: "command", command: cmd, timeout: 2000 },
+    ],
+  });
+
+  const gystEntries: Record<string, GeminiHookEntry> = {
+    SessionStart: entry("gyst emit session_start 2>/dev/null || true"),
+    SessionEnd:   entry("gyst emit session_end 2>/dev/null || true"),
+    AfterTool:    entry("gyst emit tool_use 2>/dev/null || true"),
+  };
+
+  const raw = (config.hooks as Record<string, unknown>) || {};
+  const out: Record<string, GeminiHookEntry[]> = {};
+
+  // Copy through any existing arrays, dropping prior Gyst-owned entries and
+  // any invalid event names the older merge may have written (Prompt,
+  // ToolUse, Error, PostCommit, PostMerge).
+  for (const [event, value] of Object.entries(raw)) {
+    if (!VALID_GEMINI_EVENTS.has(event)) continue;
+    if (!Array.isArray(value)) continue;
+    const kept = (value as GeminiHookEntry[]).filter(
+      (h) => !h.hooks?.some((cmd) =>
+        cmd?.name === "gyst" || cmd?.command?.startsWith("gyst "),
+      ),
+    );
+    if (kept.length > 0) out[event] = kept;
   }
 
-  return { ...config, hooks: newHooks };
+  // Merge Gyst entries on top.
+  for (const [event, gyst] of Object.entries(gystEntries)) {
+    out[event] = [...(out[event] ?? []), gyst];
+  }
+
+  return { ...config, hooks: out };
 }
 
 // ---------------------------------------------------------------------------
