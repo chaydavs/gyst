@@ -1,7 +1,7 @@
 {
   "name": "gyst-mcp",
-  "version": "0.1.8",
-  "description": "Team knowledge compiler for AI coding agents. Shared memory across Claude Code, Cursor, Codex, and self-hosted LLMs via MCP.",
+  "version": "0.1.9",
+  "description": "Persistent memory for AI native teams. Shared memory across Claude Code, Cursor, Codex, and self-hosted LLMs via MCP. ",
   "type": "module",
   "main": "./dist/server.js",
   "bin": {
