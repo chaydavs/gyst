@@ -31,10 +31,10 @@ export type IntentBoostTable = {
  * Values are additive deltas capped at 1.0.
  */
 export const INTENT_BOOSTS: IntentBoostTable = {
-  debugging:    { error_pattern: 0.15, learning: 0.08 },
-  writing_code: { convention: 0.10, decision: 0.08 },
-  conventions:  { convention: 0.15 },
-  history:      { decision: 0.12, ghost_knowledge: 0.15 },
+  debugging:    { error_pattern: 0.20, learning: 0.10, ghost_knowledge: 0.10 },
+  writing_code: { convention: 0.12, decision: 0.10, ghost_knowledge: 0.05 },
+  conventions:  { convention: 0.18, ghost_knowledge: 0.15 },
+  history:      { decision: 0.15, ghost_knowledge: 0.25 },
   general:      {},
 };
 
@@ -44,9 +44,9 @@ export const INTENT_BOOSTS: IntentBoostTable = {
 
 /** First-match-wins ordered [regex, intent] pairs. */
 const INTENT_PATTERNS: ReadonlyArray<readonly [RegExp, QueryIntent]> = [
-  [/\b(fix|error|bug|failing|broken|crash|exception|throws|TypeError|undefined is not)\b/i, "debugging"],
-  [/\b(naming|style|format|convention|lint|standard|consistent|pattern)\b/i, "conventions"],
-  [/\b(why|who|when|history|changelog|decided|decision|rationale|motivation|policy|guidance|rule|protocol)\b/i, "history"],
+  [/\b(fix|error|bug|fail|failed|broken|crash|exception|throws|refused|timeout|expired|exhausted|invalid|TypeError|undefined is not)\b/i, "debugging"],
+  [/\b(naming|style|format|convention|lint|standard|consistent|pattern|policy|rule|guidance|protocol)\b/i, "conventions"],
+  [/\b(why|who|when|history|changelog|decided|decision|rationale|motivation)\b/i, "history"],
   [/\b(write|create|add|implement|build|generate|scaffold|new)\b/i, "writing_code"],
 ] as const;
 

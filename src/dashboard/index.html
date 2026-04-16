@@ -13,6 +13,9 @@
       --muted: #8b949e;
       --border: #30363d;
       --accent: #58a6ff;
+      --team: #58a6ff;
+      --personal: #d2a8ff;
+      --project: #7ee787;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: var(--bg); color: var(--text); font-family: -apple-system, system-ui, sans-serif; display: grid; grid-template-rows: 48px 1fr; grid-template-columns: 220px 1fr 280px; height: 100vh; overflow: hidden; }
@@ -22,6 +25,11 @@
     nav h1 { font-size: 16px; font-weight: 700; color: var(--accent); margin-right: 8px; }
     nav button { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: border-color 0.15s, color 0.15s; }
     nav button.active, nav button:hover { border-color: var(--accent); color: var(--text); }
+    
+    .scope-group { display: flex; background: var(--bg); padding: 2px; border-radius: 8px; border: 1px solid var(--border); margin-left: 8px; }
+    .scope-btn { border: none; background: transparent; padding: 4px 10px; border-radius: 6px; }
+    .scope-btn.active { background: var(--panel); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+
     nav input#search { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 4px 10px; border-radius: 6px; font-size: 13px; width: 180px; margin-left: auto; }
     nav input#search:focus { outline: none; border-color: var(--accent); }
     nav #export-png, nav #export-json { margin-left: 4px; }
@@ -66,6 +74,13 @@
     <button class="view-btn active" data-view="graph">Graph</button>
     <button class="view-btn" data-view="files">Files</button>
     <button class="view-btn" data-view="timeline">Timeline</button>
+    
+    <div class="scope-group">
+      <button class="scope-btn active" data-scope="all">All</button>
+      <button class="scope-btn" data-scope="team">Team</button>
+      <button class="scope-btn" data-scope="personal">Personal</button>
+    </div>
+
     <input id="search" type="text" placeholder="Search entries…" autocomplete="off" />
     <button id="export-png">Export PNG</button>
     <button id="export-json">Export JSON</button>
@@ -84,6 +99,11 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
   <script>
     // ─── Constants ────────────────────────────────────────────────────────────
+    const SCOPE_COLORS = {
+      team:     '#58a6ff',
+      personal: '#d2a8ff',
+      project:  '#7ee787',
+    };
     const NODE_COLORS = {
       ghost_knowledge: '#ff7b72',
       convention:      '#d2a8ff',
@@ -92,10 +112,12 @@
       learning:        '#7ee787',
     };
     const DEFAULT_COLOR = '#58a6ff';
-    const nodeColor = (type) => NODE_COLORS[type] ?? DEFAULT_COLOR;
+    const nodeColor = (node) => SCOPE_COLORS[node.scope] ?? NODE_COLORS[node.type] ?? DEFAULT_COLOR;
 
     // ─── State ────────────────────────────────────────────────────────────────
     let currentView = 'graph';
+    let currentScope = 'all';
+    let rawGraph = { nodes: [], edges: [] };
     let currentGraph = { nodes: [], edges: [] };
     let simulation = null;
 
@@ -117,18 +139,28 @@
     async function loadStats() {
       try {
         const s = await fetch('/api/stats').then(r => r.json());
+        const scopeLegend = Object.entries(s.byScope || {})
+          .map(([scope, n]) =>
+            `<div class="stat-row">
+               <span><span class="legend-dot" style="background:${SCOPE_COLORS[scope] || DEFAULT_COLOR}"></span>${scope}</span>
+               <span class="stat-val">${n}</span>
+             </div>`
+          ).join('');
+        
         const typeLegend = Object.entries(s.byType || {})
           .sort((a, b) => b[1] - a[1])
           .map(([type, n]) =>
             `<div class="stat-row">
-               <span><span class="legend-dot" style="background:${nodeColor(type)}"></span>${type}</span>
+               <span><span class="legend-dot" style="background:${NODE_COLORS[type] || DEFAULT_COLOR}"></span>${type}</span>
                <span class="stat-val">${n}</span>
              </div>`
           ).join('');
+
         $('#stats-content').innerHTML = `
           <div class="stat-row"><span>Entries</span><span class="stat-val">${s.entries}</span></div>
           <div class="stat-row"><span>Relationships</span><span class="stat-val">${s.relationships}</span></div>
           <div class="stat-row"><span>Co-retrievals</span><span class="stat-val">${s.coRetrievals}</span></div>
+          <div class="type-legend"><h2 style="margin-top:16px">By Scope</h2>${scopeLegend}</div>
           <div class="type-legend"><h2 style="margin-top:16px">By Type</h2>${typeLegend}</div>
         `;
       } catch (e) {
@@ -138,20 +170,23 @@
 
     // ─── Details panel ────────────────────────────────────────────────────────
     function showDetails(node) {
-      console.log('Clicked node data:', node);
       details.innerHTML = `
         <h2>${escHtml(node.title)}</h2>
         <div class="detail-section">
           <div class="detail-label">Type</div>
-          <div class="detail-content"><span class="tag" style="color:${nodeColor(node.type)}">${node.type}</span></div>
+          <div class="detail-content"><span class="tag" style="background:${NODE_COLORS[node.type]}22; color:${NODE_COLORS[node.type]}">${node.type}</span></div>
+        </div>
+        <div class="detail-section">
+          <div class="detail-label">Scope</div>
+          <div class="detail-content"><span class="tag" style="background:${SCOPE_COLORS[node.scope]}22; color:${SCOPE_COLORS[node.scope]}">${node.scope}</span></div>
         </div>
         <div class="detail-section">
           <div class="detail-label">Content</div>
           <div class="detail-content" style="white-space: pre-wrap; background: var(--bg); padding: 8px; border-radius: 4px; border: 1px solid var(--border); font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto;">${escHtml(node.content)}</div>
         </div>
         <div class="detail-section">
-          <div class="detail-label">Scope / Confidence</div>
-          <div class="detail-content">${node.scope} · ${(node.confidence * 100).toFixed(0)}%</div>
+          <div class="detail-label">Confidence</div>
+          <div class="detail-content">${(node.confidence * 100).toFixed(0)}%</div>
         </div>
         <div class="detail-section">
           <div class="detail-label">Connections</div>
@@ -178,11 +213,30 @@
     }
 
     // ─── Graph view ───────────────────────────────────────────────────────────
+    function filterGraph(scope) {
+      if (scope === 'all') {
+        currentGraph = { ...rawGraph };
+      } else {
+        const filteredNodes = rawGraph.nodes.filter(n => n.scope === scope);
+        const nodeIds = new Set(filteredNodes.map(n => n.id));
+        const filteredEdges = rawGraph.edges.filter(e => {
+          const s = typeof e.source === 'string' ? e.source : e.source.id;
+          const t = typeof e.target === 'string' ? e.target : e.target.id;
+          return nodeIds.has(s) && nodeIds.has(t);
+        });
+        currentGraph = { nodes: filteredNodes, edges: filteredEdges };
+      }
+    }
+
     function renderGraph(data) {
-      currentGraph = data;
+      if (data) {
+        rawGraph = data;
+        filterGraph(currentScope);
+      }
+      
       canvas.innerHTML = '';
-      if (!data.nodes.length) {
-        canvas.innerHTML = '<div style="color:var(--muted);display:flex;align-items:center;justify-content:center;height:100%;font-size:14px">No entries yet. Use the <code>learn</code> tool to add knowledge.</div>';
+      if (!currentGraph.nodes.length) {
+        canvas.innerHTML = '<div style="color:var(--muted);display:flex;align-items:center;justify-content:center;height:100%;font-size:14px">No entries for the selected scope.</div>';
         return;
       }
 
@@ -206,9 +260,9 @@
         .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', '#30363d');
 
       // Nodes/edges must be plain objects for D3
-      const nodes = data.nodes.map(n => ({ ...n }));
+      const nodes = currentGraph.nodes.map(n => ({ ...n }));
       const nodeById = new Map(nodes.map(n => [n.id, n]));
-      const edges = (data.edges || []).map(e => ({
+      const edges = (currentGraph.edges || []).map(e => ({
         ...e,
         source: typeof e.source === 'string' ? e.source : e.source.id,
         target: typeof e.target === 'string' ? e.target : e.target.id,
@@ -241,7 +295,7 @@
 
       node.append('circle')
         .attr('r', 10)
-        .attr('fill', d => nodeColor(d.type))
+        .attr('fill', d => nodeColor(d))
         .attr('stroke', '#0d1117')
         .attr('stroke-width', 1.5);
 
@@ -268,24 +322,31 @@
     // ─── Files view (treemap) ─────────────────────────────────────────────────
     async function renderFiles() {
       canvas.innerHTML = '<div style="color:var(--muted);display:flex;align-items:center;justify-content:center;height:100%">Loading file map\u2026</div>';
-      let data;
-      try {
-        data = await fetch('/api/graph').then(r => r.json());
-      } catch (e) {
-        canvas.innerHTML = '<div style="color:var(--muted);padding:24px">Failed to load file data.</div>';
-        return;
-      }
-
-      // Build hierarchy: root → dir → file
-      const fileMap = new Map();
-      (data.nodes || []).forEach(node => {
-        const dir = node.type;
-        const existing = fileMap.get(dir) || { name: dir, children: [], value: 0 };
-        existing.children.push({ name: node.title, value: 1, nodeId: node.id, type: node.type });
-        fileMap.set(dir, existing);
+      
+      filterGraph(currentScope);
+      
+      // Build hierarchy: root → scope → type → entry
+      const scopeMap = new Map();
+      (currentGraph.nodes || []).forEach(node => {
+        const scope = node.scope;
+        const type = node.type;
+        
+        if (!scopeMap.has(scope)) scopeMap.set(scope, new Map());
+        const typeMap = scopeMap.get(scope);
+        
+        if (!typeMap.has(type)) typeMap.set(type, { name: type, children: [], value: 0 });
+        const typeData = typeMap.get(type);
+        
+        typeData.children.push({ name: node.title, value: 1, nodeId: node.id, type: node.type, scope: node.scope });
       });
 
-      const hierarchyData = { name: 'root', children: Array.from(fileMap.values()) };
+      const hierarchyData = { 
+        name: 'root', 
+        children: Array.from(scopeMap.entries()).map(([scope, types]) => ({
+          name: scope,
+          children: Array.from(types.values())
+        }))
+      };
 
       canvas.innerHTML = '';
       const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -299,7 +360,7 @@
         .join('rect')
         .attr('x', d => d.x0).attr('y', d => d.y0)
         .attr('width', d => d.x1 - d.x0).attr('height', d => d.y1 - d.y0)
-        .attr('fill', d => nodeColor(d.data.type || 'learning'))
+        .attr('fill', d => nodeColor(d.data))
         .attr('opacity', 0.75)
         .attr('stroke', '#0d1117')
         .attr('stroke-width', 1)
@@ -400,12 +461,25 @@
       btn.addEventListener('click', async () => {
         setView(btn.dataset.view);
         if (currentView === 'graph') {
-          const g = await fetch('/api/graph').then(r => r.json());
-          renderGraph(g);
+          renderGraph();
         } else if (currentView === 'files') {
           await renderFiles();
         } else if (currentView === 'timeline') {
           await renderTimeline();
+        }
+      });
+    });
+
+    document.querySelectorAll('.scope-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        document.querySelectorAll('.scope-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentScope = btn.dataset.scope;
+        
+        if (currentView === 'graph') {
+          renderGraph();
+        } else if (currentView === 'files') {
+          await renderFiles();
         }
       });
     });

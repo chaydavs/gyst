@@ -18,6 +18,13 @@ export interface SessionContextOptions {
   readonly db: Database;
   readonly projectDir: string;
   readonly maxTokens?: number; // default 500
+  readonly developerId?: string;
+  readonly globalDb?: Database;
+}
+
+export interface SessionContextResult {
+  readonly agentContext: string;
+  readonly userSummary: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -44,6 +51,11 @@ interface ErrorPatternRow {
 interface TopFileRow {
   file_path: string;
   entry_count: number;
+}
+
+interface PersonalEntryRow {
+  title: string;
+  type: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,6 +93,14 @@ const TOP_FILES_SQL = `
   LIMIT 10
 `;
 
+const PERSONAL_ENTRIES_SQL = `
+  SELECT title, type FROM entries
+  WHERE scope = 'personal' AND status = 'active'
+    AND developer_id = ?
+  ORDER BY last_confirmed DESC
+  LIMIT 3
+`;
+
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
@@ -95,10 +115,10 @@ const TOP_FILES_SQL = `
  *
  * @param opts - Options including the database connection, project directory,
  *               and optional token budget (default 500).
- * @returns Markdown-formatted context string, or empty string if no data found.
+ * @returns Object containing agent context string and user summary string.
  */
-export function generateSessionContext(opts: SessionContextOptions): string {
-  const { db, projectDir, maxTokens = 500 } = opts;
+export function generateSessionContext(opts: SessionContextOptions): SessionContextResult {
+  const { db, projectDir, maxTokens = 500, developerId, globalDb } = opts;
 
   const ghostRows = db
     .query<GhostKnowledgeRow, []>(GHOST_KNOWLEDGE_SQL)
@@ -116,33 +136,71 @@ export function generateSessionContext(opts: SessionContextOptions): string {
     .query<TopFileRow, []>(TOP_FILES_SQL)
     .all();
 
-  // Return empty string if all queries came back empty.
-  if (ghostRows.length === 0 && conventionRows.length === 0 && errorRows.length === 0 && topFileRows.length === 0) {
-    return "";
+  const personalRows: PersonalEntryRow[] = [];
+  if (developerId) {
+    personalRows.push(...db.query<PersonalEntryRow, [string]>(PERSONAL_ENTRIES_SQL).all(developerId));
+    if (globalDb) {
+      personalRows.push(...globalDb.query<PersonalEntryRow, [string]>(PERSONAL_ENTRIES_SQL).all(developerId));
+    }
   }
 
-  const sections: string[] = ["# Gyst Context"];
+  // 1. Build Agent Context (Markdown for LLM)
+  const agentSections: string[] = ["# Gyst Context"];
 
   if (topFileRows.length > 0) {
     const lines = topFileRows.map((r) => `- ${r.file_path}`).join("\n");
-    sections.push(`## Already Indexed Files (Do NOT re-read)\n${lines}`);
+    agentSections.push(`## Already Indexed Files (Do NOT re-read)\n${lines}`);
   }
 
   if (ghostRows.length > 0) {
     const lines = ghostRows.map((r) => `- ${r.title}`).join("\n");
-    sections.push(`## Team Rules\n${lines}`);
+    agentSections.push(`## Team Rules\n${lines}`);
+  }
+
+  if (personalRows.length > 0) {
+    const lines = personalRows.map((r) => `- ${r.title} (${r.type})`).join("\n");
+    agentSections.push(`## Your Recent Personal Memories\n${lines}`);
   }
 
   if (conventionRows.length > 0) {
     const lines = conventionRows.map((r) => `- ${r.title}`).join("\n");
-    sections.push(`## Conventions (${projectDir})\n${lines}`);
+    agentSections.push(`## Conventions (${projectDir})\n${lines}`);
   }
 
   if (errorRows.length > 0) {
     const r = errorRows[0];
-    sections.push(`## Recent Error Pattern\n- ${r.title} (confidence: ${r.confidence.toFixed(2)})`);
+    agentSections.push(`## Recent Error Pattern\n- ${r.title} (confidence: ${r.confidence.toFixed(2)})`);
   }
 
-  const text = sections.join("\n");
-  return truncateToTokenBudget(text, maxTokens);
+  const agentText = truncateToTokenBudget(agentSections.join("\n"), maxTokens);
+
+  // 2. Build User Summary (Human-friendly notification)
+  const summaryLines: string[] = ["🧠 Gyst Memory Active"];
+  summaryLines.push("---------------------------------");
+  
+  if (ghostRows.length > 0) {
+    summaryLines.push(`🚩 Team Rules: ${ghostRows.length} active`);
+  }
+  
+  if (personalRows.length > 0) {
+    summaryLines.push(`👤 Personal Memories: ${personalRows.length} loaded`);
+  }
+
+  if (conventionRows.length > 0) {
+    summaryLines.push(`📏 Conventions: ${conventionRows.length} for current path`);
+  }
+
+  if (errorRows.length > 0) {
+    summaryLines.push(`🕒 Recent Fix: "${errorRows[0].title}"`);
+  }
+
+  if (summaryLines.length === 2) {
+    // If only header and line, it was empty
+    return { agentContext: "", userSummary: "" };
+  }
+
+  return {
+    agentContext: agentText,
+    userSummary: summaryLines.join("\n")
+  };
 }

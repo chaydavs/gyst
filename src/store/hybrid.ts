@@ -17,8 +17,9 @@
  *
  * Post-fusion steps:
  *   1. Type-aware boosting (conventions, consolidated entries)
- *   2. Intent-aware boosting (via applyIntentBoost)
- *   3. Final sort by boosted score
+ *   2. Scope-aware boosting (personal memory prioritization)
+ *   3. Intent-aware boosting (via applyIntentBoost)
+ *   4. Final sort by boosted score
  */
 
 import type { Database } from "bun:sqlite";
@@ -109,13 +110,7 @@ export async function runHybridSearch(
   if (!disabled.has("temporal")) {
     const temporalResults = searchByTemporal(db, query);
     if (temporalResults.length > 0) {
-      // For debugging/history intents, double-weight temporal results
-      if (intent === "debugging" || intent === "history") {
-        rankedLists.push(temporalResults);
-        rankedLists.push(temporalResults);
-      } else {
-        rankedLists.push(temporalResults);
-      }
+      rankedLists.push(temporalResults);
     }
   }
 
@@ -160,15 +155,15 @@ export async function runHybridSearch(
   const topIds = rawFused.slice(0, 50).map((r) => r.id);
   const placeholders = topIds.map(() => "?").join(", ");
   const entries = db
-    .query<{ id: string; type: string; status: string }, string[]>(
-      `SELECT id, type, status FROM entries WHERE id IN (${placeholders})`,
+    .query<{ id: string; type: string; status: string; scope: string; developer_id: string | null }, string[]>(
+      `SELECT id, type, status, scope, developer_id FROM entries WHERE id IN (${placeholders})`,
     )
     .all(...topIds);
 
   const entryMap = new Map(entries.map((e) => [e.id, e]));
   const scoreMap = new Map(rawFused.map((r) => [r.id, r.score]));
 
-  // 8. Apply type-aware and intent-aware boosts
+  // 8. Apply type-aware, scope-aware, and intent-aware boosts
   const boostedScores = new Map(
     topIds.flatMap((id) => {
       const e = entryMap.get(id);
@@ -176,10 +171,11 @@ export async function runHybridSearch(
       const base = scoreMap.get(id) ?? 0;
       let boosted = base;
       
-      // Mandatory rules get moderate fixed boost
-      if (e.type === "ghost_knowledge") {
-        boosted = Math.min(1.0, boosted + 0.10);
+      // Personal prioritization: your knowledge surfaces slightly higher
+      if (developerId && e.scope === "personal" && e.developer_id === developerId) {
+        boosted = Math.min(1.0, boosted + 0.05);
       }
+
       // Relevancy boost for conventions when file context is present
       if (e.type === "convention" && fileContext.length > 0) {
         boosted = Math.min(1.0, boosted + 0.05);

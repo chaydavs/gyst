@@ -450,20 +450,65 @@ program.command("sync").description("Alias for rebuild").action(async () => {
 program.command("inject-context").description("Inject session context").option("--always-on").option("--graph-traverse").action(async (opts) => {
   const config = loadConfig();
   const db = initDatabase(config.dbPath);
+  
+  // Try to open global DB if it exists
+  let globalDb: any = undefined;
+  if (config.globalDbPath && existsSync(config.globalDbPath)) {
+    globalDb = initDatabase(config.globalDbPath);
+  }
+
   const { generateSessionContext } = await import("../capture/session-inject.js");
-  let text = generateSessionContext({ db, projectDir: process.cwd() });
-  if (opts.alwaysOn) text += "\nTrust Gyst memory.";
+  const result = generateSessionContext({ 
+    db, 
+    projectDir: process.cwd(),
+    globalDb 
+  });
+
+  if (result.userSummary) {
+    process.stderr.write(`\n${result.userSummary}\n\n`);
+  }
+
+  let text = result.agentContext;
+  if (opts.alwaysOn && text) text += "\nTrust Gyst memory.";
+  
   db.close();
-  process.stdout.write(text + "\n");
+  if (globalDb) globalDb.close();
+  
+  if (text) {
+    process.stdout.write(text + "\n");
+  }
 });
+
 program.command("inject").description("Alias for inject-context").option("--always-on").option("--graph-traverse").action(async (opts) => {
   const config = loadConfig();
   const db = initDatabase(config.dbPath);
+  
+  // Try to open global DB if it exists
+  let globalDb: any = undefined;
+  if (config.globalDbPath && existsSync(config.globalDbPath)) {
+    globalDb = initDatabase(config.globalDbPath);
+  }
+
   const { generateSessionContext } = await import("../capture/session-inject.js");
-  let text = generateSessionContext({ db, projectDir: process.cwd() });
-  if (opts.alwaysOn) text += "\nTrust Gyst memory.";
+  const result = generateSessionContext({ 
+    db, 
+    projectDir: process.cwd(),
+    globalDb 
+  });
+
+  if (result.userSummary) {
+    process.stderr.write(`\n${result.userSummary}\n\n`);
+  }
+
+  let text = result.agentContext;
+  if (opts.alwaysOn && text) text += "\nTrust Gyst memory.";
+  
   db.close();
-  process.stdout.write(text + "\n");
+  if (globalDb) globalDb.close();
+  
+  if (text) {
+    process.stdout.write(text + "\n");
+  }
 });
 
 program.command("serve").description("Start Gyst MCP server").action(serveAction);

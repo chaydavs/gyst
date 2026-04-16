@@ -154,11 +154,11 @@ describe("applyIntentBoost", () => {
     expect(result.size).toBe(0);
   });
 
-  test("debugging: error_pattern entry gets +0.15 boost", () => {
+  test("debugging: error_pattern entry gets +0.20 boost", () => {
     const entries = [makeEntry("e1", "error_pattern")];
     const scores: ReadonlyMap<string, number> = new Map([["e1", 0.50]]);
     const result = applyIntentBoost(entries, scores, "debugging");
-    expect(result.get("e1")).toBeCloseTo(0.65);
+    expect(result.get("e1")).toBeCloseTo(0.70);
   });
 
   test("debugging: convention entry gets no boost", () => {
@@ -168,18 +168,18 @@ describe("applyIntentBoost", () => {
     expect(result.get("e2")).toBeCloseTo(0.50);
   });
 
-  test("debugging: learning entry gets +0.08 boost", () => {
+  test("debugging: learning entry gets +0.10 boost", () => {
     const entries = [makeEntry("e3", "learning")];
     const scores: ReadonlyMap<string, number> = new Map([["e3", 0.40]]);
     const result = applyIntentBoost(entries, scores, "debugging");
-    expect(result.get("e3")).toBeCloseTo(0.48);
+    expect(result.get("e3")).toBeCloseTo(0.50);
   });
 
-  test("writing_code: convention entry gets +0.10 boost", () => {
+  test("writing_code: convention entry gets +0.12 boost", () => {
     const entries = [makeEntry("e4", "convention")];
     const scores: ReadonlyMap<string, number> = new Map([["e4", 0.60]]);
     const result = applyIntentBoost(entries, scores, "writing_code");
-    expect(result.get("e4")).toBeCloseTo(0.70);
+    expect(result.get("e4")).toBeCloseTo(0.72);
   });
 
   test("writing_code: error_pattern entry gets no boost", () => {
@@ -206,7 +206,7 @@ describe("applyIntentBoost", () => {
     expect(result.get("g3")).toBeCloseTo(0.30);
   });
 
-  test("score capped at 1.0 (base=0.9 + boost=0.15 → 1.0, not 1.05)", () => {
+  test("score capped at 1.0 (base=0.9 + boost=0.20 → 1.0, not 1.10)", () => {
     const entries = [makeEntry("cap1", "error_pattern")];
     const scores: ReadonlyMap<string, number> = new Map([["cap1", 0.90]]);
     const result = applyIntentBoost(entries, scores, "debugging");
@@ -217,7 +217,7 @@ describe("applyIntentBoost", () => {
     const entries = [makeEntry("new1", "error_pattern")];
     const scores: ReadonlyMap<string, number> = new Map(); // entry absent
     const result = applyIntentBoost(entries, scores, "debugging");
-    expect(result.get("new1")).toBeCloseTo(0.15);
+    expect(result.get("new1")).toBeCloseTo(0.20);
   });
 
   test("result map is a new Map — input scores are not mutated", () => {
@@ -228,18 +228,18 @@ describe("applyIntentBoost", () => {
     expect(original.get("m1")).toBe(scoresBefore); // still 0.40
   });
 
-  test("history: decision entry gets +0.12 boost", () => {
+  test("history: decision entry gets +0.15 boost", () => {
     const entries = [makeEntry("h1", "decision")];
     const scores: ReadonlyMap<string, number> = new Map([["h1", 0.50]]);
     const result = applyIntentBoost(entries, scores, "history");
-    expect(result.get("h1")).toBeCloseTo(0.62);
+    expect(result.get("h1")).toBeCloseTo(0.65);
   });
 
-  test("history: ghost_knowledge entry gets +0.15 boost", () => {
+  test("history: ghost_knowledge entry gets +0.25 boost", () => {
     const entries = [makeEntry("h2", "ghost_knowledge")];
     const scores: ReadonlyMap<string, number> = new Map([["h2", 0.50]]);
     const result = applyIntentBoost(entries, scores, "history");
-    expect(result.get("h2")).toBeCloseTo(0.65);
+    expect(result.get("h2")).toBeCloseTo(0.75);
   });
 
   test("multiple entries in one call — each boosted independently", () => {
@@ -254,8 +254,8 @@ describe("applyIntentBoost", () => {
       ["m3", 0.50],
     ]);
     const result = applyIntentBoost(entries, scores, "debugging");
-    expect(result.get("m1")).toBeCloseTo(0.65);
-    expect(result.get("m2")).toBeCloseTo(0.58);
+    expect(result.get("m1")).toBeCloseTo(0.70);
+    expect(result.get("m2")).toBeCloseTo(0.60);
     expect(result.get("m3")).toBeCloseTo(0.50);
   });
 
