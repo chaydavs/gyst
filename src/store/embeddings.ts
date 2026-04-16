@@ -69,6 +69,41 @@ async function getExtractor(): Promise<Extractor> {
 }
 
 /**
+ * Releases the ONNX pipeline's native resources and clears the cached
+ * extractor promise. Intended for test `afterAll` hooks and graceful
+ * shutdown paths — production code that runs until process exit does
+ * not need to call this.
+ *
+ * Why it exists: @huggingface/transformers holds ONNX sessions, worker
+ * threads, and WASM memory outside the JS heap. If those are still
+ * live when Bun tears down, its C++ runtime can throw during destructor
+ * ordering, producing SIGTRAP (exit code 133) AFTER all tests pass.
+ *
+ * Design decisions (intentionally left to the caller to implement):
+ *   1. What to do when `extractorPromise === null` (never loaded)?
+ *   2. Await the in-flight promise, or bail if loading is still pending?
+ *   3. Null out `extractorPromise` so a later call re-initializes?
+ *   4. Should `.dispose()` errors bubble up, or be logged and swallowed
+ *      so teardown never fails a green test run?
+ *
+ * The Pipeline returned by transformers v3 exposes an async `dispose()`
+ * method — you'll need to cast through `unknown` because our `Extractor`
+ * type only describes the call signature, not the full pipeline object.
+ */
+export async function disposeExtractor(): Promise<void> {
+  if (extractorPromise === null) return;
+  try {
+    const extractor = await extractorPromise;
+    await (extractor as unknown as { dispose: () => Promise<void> }).dispose();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn("disposeExtractor failed", { error: msg });
+  } finally {
+    extractorPromise = null;
+  }
+}
+
+/**
  * Produces a 384-dimensional embedding for arbitrary text.
  *
  * The returned Float32Array is normalised to unit length so that the

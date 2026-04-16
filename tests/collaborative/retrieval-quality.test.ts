@@ -25,7 +25,7 @@ import {
 } from "../../src/store/search.js";
 import type { RankedResult } from "../../src/store/search.js";
 import { runHybridSearch } from "../../src/store/hybrid.js";
-import { initVectorStore, backfillVectors } from "../../src/store/embeddings.js";
+import { initVectorStore, backfillVectors, disposeExtractor } from "../../src/store/embeddings.js";
 
 // ---------------------------------------------------------------------------
 // Database lifecycle
@@ -40,8 +40,9 @@ beforeAll(async () => {
   await backfillVectors(db);
 });
 
-afterAll(() => {
+afterAll(async () => {
   db.close();
+  await disposeExtractor();
 });
 
 // ---------------------------------------------------------------------------
