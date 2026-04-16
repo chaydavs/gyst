@@ -160,7 +160,7 @@ The knowledge base lives in your git repo (zero infrastructure) or on a shared H
 | `check` | Run all violation detectors against a file |
 | `failures` | Match a known error pattern by signature or keywords |
 | `score` | Team knowledge uniformity score (0–100) |
-| `graph` | Query the relationship graph (neighbors, shortest path, similar) |
+| `graph` | Query the relationship graph — curated edges plus a structural (AST) sidecar |
 | `feedback` | Rate an entry helpful/unhelpful — adjusts confidence ±0.02/0.05 |
 | `harvest` | Extract knowledge from a session transcript |
 | `activity` | Recent team activity log |
@@ -209,6 +209,7 @@ gyst dashboard   # launch the D3-powered knowledge graph at localhost:4242
 - **Cluster Analysis:** See how your team's knowledge is grouping by domain (e.g., Auth, Payments, Infra).
 - **Friction Heatmap:** Identify the files that trigger the most recall hits to find your technical debt "hotspots."
 - **Live Graph:** Nodes are knowledge entries; edges are relationships. Click any node to read the full entry. Filter by type or confidence.
+- **Structural Sidecar (graphify):** A second layer of AST-derived nodes (functions, classes, files) renders alongside curated entries — dashed edges and muted colors so the two scales never conflate. Toggle `Curated` / `Structural` / `All` to focus each layer independently. Recall results surface the matching structural context as a post-ranked sidecar; it never pollutes BM25 or RRF scoring.
 
 ### Convention Detection
 
