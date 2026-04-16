@@ -219,7 +219,7 @@ function main(): void {
   }
   const db = openEvalDb(args.dbPath);
   const outcomes = evaluateRows(db, rows);
-  console.log(renderReport(outcomes, args.topMisclass));
+  process.stdout.write(renderReport(outcomes, args.topMisclass) + "\n");
   db.close();
   const bloat = computeBloatScore(outcomes);
   process.exit(bloat > 0.05 ? 1 : 0);

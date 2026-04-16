@@ -131,11 +131,13 @@ describe("storeDetectedConventions", () => {
   });
 
   test("mixed confidence: only above-threshold entries are stored", async () => {
+    // Distinct patterns so consolidateConventions (keyed on category::pattern)
+    // doesn't collapse them — this test exercises the confidence filter alone.
     const conventions: DetectedConvention[] = [
-      makeConvention({ confidence: 0.9 }),
-      makeConvention({ confidence: 0.3 }),  // below threshold
-      makeConvention({ confidence: 0.7 }),
-      makeConvention({ confidence: 0.1 }),  // below threshold
+      makeConvention({ confidence: 0.9, pattern: "camelCase functions" }),
+      makeConvention({ confidence: 0.3, pattern: "snake_case constants" }),  // below threshold
+      makeConvention({ confidence: 0.7, pattern: "PascalCase types" }),
+      makeConvention({ confidence: 0.1, pattern: "kebab-case files" }),  // below threshold
     ];
     const count = await storeDetectedConventions(db, conventions);
     expect(count).toBe(2);
