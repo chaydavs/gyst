@@ -114,7 +114,23 @@
       "Bash(gyst setup:*)",
       "Bash(sed -n '195,215p' tests/compiler/writer.test.ts)",
       "Bash(sed -n '260,275p' tests/compiler/writer.test.ts)",
-      "Bash(gh pr:*)"
+      "Bash(gh pr:*)",
+      "mcp__plugin_claude-mem_mcp-search__smart_unfold",
+      "Bash(sed -n '69,77p' /Users/chaitanyadavuluri/Desktop/SustainableMemory/.worktrees/feat/database-first/src/cli/export.ts)",
+      "Bash(sed -n '77,85p' /Users/chaitanyadavuluri/Desktop/SustainableMemory/.worktrees/feat/database-first/src/cli/export.ts)",
+      "Bash(awk NR>=107 && NR<=130 *)",
+      "Bash(awk NR>=280 && NR<=380 *)",
+      "Bash(awk NR>=380 && NR<=420 *)",
+      "Bash(awk NR>=490 && NR<=530 *)",
+      "Bash(awk NR>=260 && NR<=280 *)",
+      "Bash(awk NR>=108 && NR<=150 *)",
+      "Bash(awk NR>=334 && NR<=345 *)",
+      "Bash(awk NR>=220 && NR<=260 *)",
+      "Bash(awk NR>=138 && NR<=185 *)",
+      "Bash(awk NR>=469 && NR<=492 *)",
+      "Bash(awk NR>=146 && NR<=155 *)",
+      "Bash(grep -n \"hook\" plugin/scripts/*.js)",
+      "Bash(grep *)"
     ]
   }
 }
