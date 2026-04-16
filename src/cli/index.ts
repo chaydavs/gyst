@@ -461,6 +461,32 @@ program.command("process-events").description("Promote high-signal events to kno
   }
 });
 
+program
+  .command("distill")
+  .description("Deactivate Stage 2 distillation over completed events using an LLM")
+  .option("-l, --limit <limit>", "Max events to process", "100")
+  .option("-s, --session <id>", "Only distill specific session")
+  .action(async (opts) => {
+    try {
+      const config = loadConfig();
+      const db = initDatabase(config.dbPath);
+      const { distillEvents } = await import("../compiler/distill.js");
+      const report = await distillEvents(db, {
+        limit: parseInt(opts.limit, 10),
+        sessionId: opts.session,
+      });
+      db.close();
+      process.stdout.write(`Distillation complete:\n`);
+      process.stdout.write(`  Sessions: ${report.sessionsProcessed}\n`);
+      process.stdout.write(`  Events:   ${report.eventsProcessed}\n`);
+      process.stdout.write(`  Entries:  ${report.entriesCreated}\n`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stdout.write(`Error: ${message}\n`);
+      process.exit(1);
+    }
+  });
+
 program.command("harvest-session").description("Harvest from Claude Code").action(async () => {
   const { runHarvestSession } = await import("./harvest.js");
   await runHarvestSession();

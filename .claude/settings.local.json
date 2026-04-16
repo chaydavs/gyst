@@ -134,7 +134,21 @@
       "Bash(gh api *)",
       "Bash(echo \"exit=$?\")",
       "Bash(bash -c '\\(bun test ./tests/collaborative/ || [ $? -eq 133 ]\\)')",
-      "Bash(echo \"wrapper exit=$?\")"
+      "Bash(echo \"wrapper exit=$?\")",
+      "Bash(npm ls *)",
+      "Bash(/Users/chaitanyadavuluri/Desktop/SustainableMemory/dist/cli.js add *)",
+      "Bash(echo \"---exit=$?\")",
+      "Bash(/Users/chaitanyadavuluri/Desktop/SustainableMemory/dist/cli.js crete *)",
+      "Bash(/Users/chaitanyadavuluri/Desktop/SustainableMemory/dist/cli.js create-team *)",
+      "Bash(/Users/chaitanyadavuluri/Desktop/SustainableMemory/dist/cli.js create *)",
+      "Bash(/Users/chaitanyadavuluri/Desktop/SustainableMemory/dist/cli.js install *)",
+      "Bash(/Users/chaitanyadavuluri/Desktop/SustainableMemory/dist/cli.js inject-context *)",
+      "Bash(GYST_BIN=/Users/chaitanyadavuluri/Desktop/SustainableMemory/dist/cli.js node /Users/chaitanyadavuluri/Desktop/SustainableMemory/plugin/scripts/session-start.js)",
+      "Bash(npm config *)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "gyst"
+  ],
+  "enableAllProjectMcpServers": true
 }

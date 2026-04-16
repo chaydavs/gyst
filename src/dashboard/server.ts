@@ -133,6 +133,38 @@ function buildStats(db: Database): Record<string, unknown> {
   return { ...counts, byType, byScope };
 }
 
+/**
+ * Fetches recent capture sessions.
+ */
+function getRecentSessions(db: Database, limit: number = 20): any[] {
+  return db
+    .query("SELECT * FROM sessions ORDER BY started_at DESC LIMIT ?", [limit])
+    .all();
+}
+
+/**
+ * Fetches recent events from the queue.
+ */
+function getRecentEvents(db: Database, limit: number = 100): any[] {
+  return db
+    .query("SELECT * FROM event_queue ORDER BY created_at DESC LIMIT ?", [limit])
+    .all();
+}
+
+/**
+ * Fetches curated entries with optional scope filtering.
+ */
+function getEntriesByScope(db: Database, scope?: string, limit: number = 100): any[] {
+  if (scope) {
+    return db
+      .query("SELECT * FROM entries WHERE scope = ? AND status = 'active' ORDER BY created_at DESC LIMIT ?", [scope, limit])
+      .all();
+  }
+  return db
+    .query("SELECT * FROM entries WHERE status = 'active' ORDER BY created_at DESC LIMIT ?", [limit])
+    .all();
+}
+
 // ---------------------------------------------------------------------------
 // Route regex helpers
 // ---------------------------------------------------------------------------
@@ -259,6 +291,31 @@ export async function startDashboardServer(
                 const hoursParam = url.searchParams.get("hours");
                 const hours = hoursParam !== null ? parseInt(hoursParam, 10) || 24 : 24;
                 const data = getRecentActivity(db, "local", hours);
+                logAccess(requestId, method, path, start, 200);
+                return jsonResponse(data, 200, requestId);
+              }
+
+              if (path === "/api/events") {
+                const limitParam = url.searchParams.get("limit");
+                const limit = limitParam !== null ? parseInt(limitParam, 10) || 100 : 100;
+                const data = getRecentEvents(db, limit);
+                logAccess(requestId, method, path, start, 200);
+                return jsonResponse(data, 200, requestId);
+              }
+
+              if (path === "/api/entries") {
+                const scope = url.searchParams.get("scope") || undefined;
+                const limitParam = url.searchParams.get("limit");
+                const limit = limitParam !== null ? parseInt(limitParam, 10) || 100 : 100;
+                const data = getEntriesByScope(db, scope, limit);
+                logAccess(requestId, method, path, start, 200);
+                return jsonResponse(data, 200, requestId);
+              }
+
+              if (path === "/api/sessions") {
+                const limitParam = url.searchParams.get("limit");
+                const limit = limitParam !== null ? parseInt(limitParam, 10) || 20 : 20;
+                const data = getRecentSessions(db, limit);
                 logAccess(requestId, method, path, start, 200);
                 return jsonResponse(data, 200, requestId);
               }

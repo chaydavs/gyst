@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "gyst": {
+      "command": "bunx",
+      "args": [
+        "gyst-mcp",
+        "serve"
+      ]
+    }
+  }
+}

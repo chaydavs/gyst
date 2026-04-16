@@ -54,11 +54,17 @@ export function loadConfig(projectDir?: string): Config {
   const dir = projectDir ?? process.cwd();
   const filePath = join(dir, CONFIG_FILE_NAME);
 
+  const envDbPath = process.env["GYST_DB_PATH"];
+  const envWikiDir = process.env["GYST_WIKI_DIR"];
+
+  let defaults: any = {};
+  if (envDbPath) defaults.dbPath = envDbPath;
+  if (envWikiDir) defaults.wikiDir = envWikiDir;
+
   if (!existsSync(filePath)) {
     logger.debug("Config file not found, using defaults", { filePath });
-    const result = ConfigSchema.safeParse({});
+    const result = ConfigSchema.safeParse(defaults);
     if (!result.success) {
-      // Should never happen since all fields have defaults, but be safe.
       throw new ValidationError(
         `Default config failed validation: ${result.error.message}`,
       );
@@ -66,7 +72,7 @@ export function loadConfig(projectDir?: string): Config {
     return result.data;
   }
 
-  let raw: unknown;
+  let raw: any;
   try {
     const text = readFileSync(filePath, "utf-8");
     raw = JSON.parse(text);
@@ -74,6 +80,10 @@ export function loadConfig(projectDir?: string): Config {
     const msg = err instanceof Error ? err.message : String(err);
     throw new ValidationError(`Failed to parse config file at ${filePath}: ${msg}`);
   }
+
+  // Environment variables take precedence over config file
+  if (envDbPath) raw.dbPath = envDbPath;
+  if (envWikiDir) raw.wikiDir = envWikiDir;
 
   const result = ConfigSchema.safeParse(raw);
   if (!result.success) {

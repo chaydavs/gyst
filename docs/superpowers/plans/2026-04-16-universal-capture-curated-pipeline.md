@@ -40,6 +40,8 @@
 These six tasks touch disjoint files and may be run concurrently by independent subagents:
 
 | Agent | Task | Primary file |
+
+
 |---|---|---|
 | A | Task 1 (Claude+Codex hooks) | `src/cli/install.ts` |
 | B | Task 2 (MCP dispatcher) | `src/mcp/register-tools.ts` |
