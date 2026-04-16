@@ -345,15 +345,26 @@ export function initDatabase(path: string = ".gyst/wiki.db"): Database {
   }
 
   try {
-    // Apply connection pragmas
+    // Set busy_timeout FIRST so every subsequent pragma/DDL benefits from
+    // the C-library-level wait. Without this, a concurrent init in another
+    // process (MCP server + dashboard + CLI hook) can race the WAL switch
+    // and surface "database is locked" before any retry kicks in.
+    db.run("PRAGMA busy_timeout = 5000;");
+
+    // Apply remaining connection pragmas
     for (const pragma of PRAGMAS) {
       db.run(pragma);
     }
 
-    // Apply schema idempotently
-    for (const statement of SCHEMA_STATEMENTS) {
-      db.run(statement);
-    }
+    // Apply schema idempotently. Wrapped in withRetry because concurrent
+    // `initDatabase` calls (e.g. from hook + dashboard in the same second)
+    // can still trip SQLITE_BUSY on the first CREATE TABLE despite the
+    // busy_timeout, especially on slower filesystems.
+    withRetry(() => {
+      for (const statement of SCHEMA_STATEMENTS) {
+        db.run(statement);
+      }
+    });
 
     // Migration: add strength column to relationships for existing DBs.
     // SQLite does not support ADD COLUMN IF NOT EXISTS — ignore the error
