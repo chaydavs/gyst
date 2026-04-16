@@ -319,10 +319,14 @@ program
 
 program
   .command("heartbeat")
-  .description("Start the MCP server (Alias for serve)")
+  .description("Start Gyst MCP server (Alias for serve)")
   .action(serveAction);
 
-program.command("setup").description("Initialize Gyst").action(setupAction);
+program
+  .command("install")
+  .alias("setup")
+  .description("First-time setup (detects tools, registers MCP, initializes)")
+  .action(setupAction);
 
 program.command("recall <query>").description("Search memory").option("-t, --type <type>", "Filter", "all").option("-n, --max <max>", "Limit", "5").action(searchAction);
 program.command("search <query>").description("Alias for recall").option("-t, --type <type>", "Filter", "all").option("-n, --max <max>", "Limit", "5").action(searchAction);
@@ -462,7 +466,7 @@ program.command("inject").description("Alias for inject-context").option("--alwa
   process.stdout.write(text + "\n");
 });
 
-program.command("serve").description("Start MCP server").action(serveAction);
+program.command("serve").description("Start Gyst MCP server").action(serveAction);
 program.command("start").description("Alias for serve").action(serveAction);
 
 program.parse();

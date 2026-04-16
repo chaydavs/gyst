@@ -21,8 +21,8 @@ import { ValidationError } from "../utils/errors.js";
 export const KnowledgeEntrySchema = z.object({
   id: z.string(),
   type: z.enum(["error_pattern", "convention", "decision", "learning", "ghost_knowledge"]),
-  title: z.string().min(2).max(200),
-  content: z.string().min(2).max(5000),
+  title: z.string().min(5).max(200),
+  content: z.string().min(10).max(5000),
   files: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
   errorType: z.string().optional(),
@@ -57,9 +57,9 @@ export const LearnInputSchema = z.object({
   /** One of the five canonical knowledge types. */
   type: z.enum(["error_pattern", "convention", "decision", "learning", "ghost_knowledge"]),
   /** Short human-readable title for the entry. */
-  title: z.string().min(2).max(200),
+  title: z.string().min(5).max(200),
   /** Full description, explanation, or fix instructions. */
-  content: z.string().min(2).max(5000),
+  content: z.string().min(10).max(5000),
   /** Source files related to this entry. */
   files: z.array(z.string()).optional().default([]),
   /** Free-form tags for categorisation. */
