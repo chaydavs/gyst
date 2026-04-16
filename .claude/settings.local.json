@@ -144,11 +144,30 @@
       "Bash(/Users/chaitanyadavuluri/Desktop/SustainableMemory/dist/cli.js install *)",
       "Bash(/Users/chaitanyadavuluri/Desktop/SustainableMemory/dist/cli.js inject-context *)",
       "Bash(GYST_BIN=/Users/chaitanyadavuluri/Desktop/SustainableMemory/dist/cli.js node /Users/chaitanyadavuluri/Desktop/SustainableMemory/plugin/scripts/session-start.js)",
-      "Bash(npm config *)"
+      "Bash(npm config *)",
+      "mcp__gyst__status",
+      "mcp__gyst__activity",
+      "Bash(sqlite3 .gyst/gyst.db \"SELECT type, COUNT\\(*\\) FROM entries GROUP BY type\")",
+      "Bash(sqlite3 *)",
+      "Bash(find gyst-wiki *)",
+      "Bash(GYST_DB_PATH=/tmp/gyst-dashboard-test.db bun *)",
+      "Bash(curl -s http://localhost:37788/api/stats)",
+      "Bash(curl -s http://localhost:37788/api/graph)",
+      "mcp__plugin_playwright_playwright__browser_navigate",
+      "mcp__plugin_playwright_playwright__browser_evaluate",
+      "Bash(curl -s http://localhost:37788/)",
+      "mcp__gyst__learn",
+      "mcp__gyst__recall",
+      "Bash(env)",
+      "Bash(tar -xz)",
+      "Bash(xargs -0 rm -f)",
+      "Bash(kill 3275)",
+      "Bash(lsof -iTCP:37788 -sTCP:LISTEN)",
+      "Bash(kill 3288)"
     ]
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "gyst"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }
