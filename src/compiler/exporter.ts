@@ -52,8 +52,18 @@ export function exportWiki(db: Database, wikiDir?: string): number {
     try {
       // Map DB row to KnowledgeEntry expected by writeEntry
       // Note: we fetch tags/files separately for a clean map
-      const tags = db.query<{tag: string}, [string]>("SELECT tag FROM entry_tags WHERE entry_id = ?", [row.id]).all().map(t => t.tag);
-      const files = db.query<{file_path: string}, [string]>("SELECT file_path FROM entry_files WHERE entry_id = ?", [row.id]).all().map(f => f.file_path);
+      const tags = db
+        .query<{ tag: string }, [string]>(
+          "SELECT tag FROM entry_tags WHERE entry_id = ?",
+        )
+        .all(row.id)
+        .map((t) => t.tag);
+      const files = db
+        .query<{ file_path: string }, [string]>(
+          "SELECT file_path FROM entry_files WHERE entry_id = ?",
+        )
+        .all(row.id)
+        .map((f) => f.file_path);
 
       writeEntry({
         id: row.id,

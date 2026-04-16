@@ -696,7 +696,7 @@ function stage5Reindex(db: Database, wikiDirOverride?: string): number {
  * @param wikiDir - Path to the wiki directory.
  * @returns Number of files deleted.
  */
-function prunePhysicalFiles(db: Database, wikiDir: string): number {
+function prunePhysicalFiles(db: Database, _wikiDir: string): number {
   logger.info("consolidate: pruning physical files");
 
   const rows = db
@@ -711,7 +711,11 @@ function prunePhysicalFiles(db: Database, wikiDir: string): number {
   for (const row of rows) {
     // We need to check the actual markdown_path if stored, or derive it.
     // Let's check the markdown_path column first.
-    const pathRow = db.query<{ markdown_path: string | null }, [string]>("SELECT markdown_path FROM entries WHERE id = ?", [row.id]).get();
+    const pathRow = db
+      .query<{ markdown_path: string | null }, [string]>(
+        "SELECT markdown_path FROM entries WHERE id = ?",
+      )
+      .get(row.id);
     const fullPath = pathRow?.markdown_path;
 
     if (fullPath && existsSync(fullPath)) {
