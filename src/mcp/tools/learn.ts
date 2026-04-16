@@ -33,7 +33,7 @@ import type { ToolContext } from "../register-tools.js";
 // ---------------------------------------------------------------------------
 
 const LearnInput = z.object({
-  type: z.enum(["error_pattern", "convention", "decision", "learning"]),
+  type: z.enum(["error_pattern", "convention", "decision", "learning", "ghost_knowledge"]),
   title: z.string().min(5).max(200),
   content: z.string().min(10).max(5000),
   files: z.array(z.string()).optional().default([]),

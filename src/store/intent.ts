@@ -34,7 +34,7 @@ export const INTENT_BOOSTS: IntentBoostTable = {
   debugging:    { error_pattern: 0.15, learning: 0.08 },
   writing_code: { convention: 0.10, decision: 0.08 },
   conventions:  { convention: 0.15 },
-  history:      { decision: 0.12, ghost_knowledge: 0.05 },
+  history:      { decision: 0.12, ghost_knowledge: 0.15 },
   general:      {},
 };
 
