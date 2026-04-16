@@ -154,15 +154,17 @@ describe("mergeClaudeHooks", () => {
     expect(sessionStart.length).toBeGreaterThan(0);
     const last = sessionStart[sessionStart.length - 1]!;
     expect(last.matcher).toBe("auto");
-    expect(last.hooks[0]!.command).toBe("gyst inject-context --always-on --graph-traverse");
+    const commands = last.hooks.map((h) => h.command);
+    expect(commands).toContain("gyst inject-context --always-on --graph-traverse");
+    expect(commands.some((c) => c.startsWith("gyst emit session_start"))).toBe(true);
   });
 
-  test("PreCompact hook has correct gyst harvest-session command", () => {
+  test("PreCompact hook emits pre_compact event", () => {
     const result = mergeClaudeHooks({});
     const hooks = result.hooks as Record<string, { matcher: string; hooks: { type: string; command: string }[] }[]>;
     const preCompact = hooks["PreCompact"]!;
     const last = preCompact[preCompact.length - 1]!;
-    expect(last.hooks[0]!.command).toBe("gyst harvest-session");
+    expect(last.hooks[0]!.command).toContain("gyst emit pre_compact");
   });
 
   test("preserves existing non-gyst hooks", () => {
@@ -285,15 +287,15 @@ describe("installGitHooks", () => {
     expect(result.skipped).toHaveLength(0);
   });
 
-  test("post-commit hook contains harvest-session command", () => {
+  test("post-commit hook emits commit event", () => {
     const content = readFileSync(join(gitTmp, ".git", "hooks", "post-commit"), "utf-8");
-    expect(content).toContain("gyst harvest-session");
+    expect(content).toContain("gyst emit commit");
     expect(content).toContain("#!/bin/sh");
   });
 
-  test("post-merge hook contains rebuild command", () => {
+  test("post-merge hook emits pull event", () => {
     const content = readFileSync(join(gitTmp, ".git", "hooks", "post-merge"), "utf-8");
-    expect(content).toContain("gyst rebuild");
+    expect(content).toContain("gyst emit pull");
   });
 
   test("is idempotent — second call skips already-present gyst hooks", () => {
@@ -315,7 +317,7 @@ describe("installGitHooks", () => {
 
     const content = readFileSync(hookPath, "utf-8");
     expect(content).toContain("echo existing");
-    expect(content).toContain("gyst harvest-session");
+    expect(content).toContain("gyst emit commit");
     rmSync(appendDir, { recursive: true, force: true });
   });
 });
