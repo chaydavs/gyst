@@ -58,15 +58,19 @@ export function transformGraphify(db: Database, outputDir: string = "graphify-ou
   db.transaction(() => {
     // 1. Import Nodes
     for (const node of data.nodes) {
+      // Add 'metadata' column update to store suppressExport: true
+      const metadata = JSON.stringify({ suppressExport: true, graphifyId: node.id });
+      
       db.run(
         `INSERT INTO entries (
           id, type, title, content, file_path, confidence, 
-          created_at, last_confirmed, status, scope, source_tool
-        ) VALUES (?, 'structural', ?, ?, ?, ?, ?, ?, 'active', 'project', 'graphify')
+          created_at, last_confirmed, status, scope, source_tool, metadata
+        ) VALUES (?, 'structural', ?, ?, ?, ?, ?, ?, 'active', 'project', 'graphify', ?)
         ON CONFLICT(id) DO UPDATE SET
           last_confirmed = excluded.last_confirmed,
           title = excluded.title,
-          file_path = excluded.file_path`,
+          file_path = excluded.file_path,
+          metadata = excluded.metadata`,
         [
           node.id,
           node.label,
@@ -75,6 +79,7 @@ export function transformGraphify(db: Database, outputDir: string = "graphify-ou
           1.0, // AST extraction is 100% confident
           now,
           now,
+          metadata
         ]
       );
 

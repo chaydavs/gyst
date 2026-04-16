@@ -20,7 +20,7 @@ const ConfigSchema = z.object({
   /** Directory where wiki markdown files are stored. */
   wikiDir: z.string().default("gyst-wiki"),
   /** Path to the SQLite database file. */
-  dbPath: z.string().default("gyst-wiki/.wiki.db"),
+  dbPath: z.string().default(".gyst/wiki.db"),
   /** Path to the global personal database. */
   globalDbPath: z.string().default(join(homedir(), ".gyst", "global.db")),
   /** Maximum number of tokens to include in a recall response. */

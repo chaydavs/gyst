@@ -20,7 +20,7 @@ import { ValidationError } from "../utils/errors.js";
 /** Zod schema for a compiled knowledge entry. */
 export const KnowledgeEntrySchema = z.object({
   id: z.string(),
-  type: z.enum(["error_pattern", "convention", "decision", "learning", "ghost_knowledge"]),
+  type: z.enum(["error_pattern", "convention", "decision", "learning", "ghost_knowledge", "structural"]),
   title: z.string().min(5).max(200),
   content: z.string().min(10).max(5000),
   files: z.array(z.string()).default([]),
@@ -39,6 +39,7 @@ export const KnowledgeEntrySchema = z.object({
     .default("active"),
   scope: z.enum(["personal", "team", "project"]).default("team"),
   developerId: z.string().optional(),
+  metadata: z.string().optional(),
 });
 
 /** A compiled knowledge entry produced by the extraction pipeline. */
@@ -55,7 +56,7 @@ export type KnowledgeEntry = z.infer<typeof KnowledgeEntrySchema>;
  */
 export const LearnInputSchema = z.object({
   /** One of the five canonical knowledge types. */
-  type: z.enum(["error_pattern", "convention", "decision", "learning", "ghost_knowledge"]),
+  type: z.enum(["error_pattern", "convention", "decision", "learning", "ghost_knowledge", "structural"]),
   /** Short human-readable title for the entry. */
   title: z.string().min(5).max(200),
   /** Full description, explanation, or fix instructions. */

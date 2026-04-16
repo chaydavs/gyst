@@ -24,6 +24,7 @@ import { calculateConfidence } from "../store/confidence.js";
 import { canLoadExtensions } from "../store/database.js";
 import { searchByVector, initVectorStore } from "../store/embeddings.js";
 import { loadConfig } from "../utils/config.js";
+import { exportWiki } from "./exporter.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -82,6 +83,7 @@ interface IndexRow {
   type: string;
   title: string;
   confidence: number;
+  metadata?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -627,7 +629,7 @@ function stage5Reindex(db: Database, wikiDirOverride?: string): number {
 
   const indexRows = db
     .query<IndexRow, []>(
-      `SELECT id, type, title, confidence
+      `SELECT id, type, title, confidence, metadata
        FROM entries
        WHERE status = 'active'
        ORDER BY type, confidence DESC`,
@@ -637,6 +639,16 @@ function stage5Reindex(db: Database, wikiDirOverride?: string): number {
   // Group by type
   const byType = new Map<string, IndexRow[]>();
   for (const row of indexRows) {
+    // Skip structural/suppressed entries in index.md
+    if (row.metadata) {
+      try {
+        const meta = JSON.parse(row.metadata);
+        if (meta.suppressExport) continue;
+      } catch {
+        // invalid JSON — keep it just in case
+      }
+    }
+    
     const existing = byType.get(row.type) ?? [];
     byType.set(row.type, [...existing, row]);
   }
@@ -688,20 +700,26 @@ function prunePhysicalFiles(db: Database, wikiDir: string): number {
   logger.info("consolidate: pruning physical files");
 
   const rows = db
-    .query<{ id: string }, []>(
-      `SELECT id FROM entries
-       WHERE status IN ('archived', 'consolidated')`,
+    .query<{ id: string; metadata: string | null }, []>(
+      `SELECT id, metadata FROM entries
+       WHERE status IN ('archived', 'consolidated')
+          OR (metadata LIKE '%"suppressExport":true%')`,
     )
     .all();
 
   let deleted = 0;
   for (const row of rows) {
-    const relPath = `${row.id}.md`;
-    const fullPath = join(wikiDir, relPath);
-    if (existsSync(fullPath)) {
+    // We need to check the actual markdown_path if stored, or derive it.
+    // Let's check the markdown_path column first.
+    const pathRow = db.query<{ markdown_path: string | null }, [string]>("SELECT markdown_path FROM entries WHERE id = ?", [row.id]).get();
+    const fullPath = pathRow?.markdown_path;
+
+    if (fullPath && existsSync(fullPath)) {
       try {
         unlinkSync(fullPath);
         deleted += 1;
+        // Clear the path in DB since the file is gone
+        db.run("UPDATE entries SET markdown_path = NULL WHERE id = ?", [row.id]);
       } catch (err) {
         logger.warn("Failed to delete pruned wiki file", { path: fullPath, error: err });
       }
@@ -765,6 +783,7 @@ export async function consolidate(
   prunePhysicalFiles(db, wikiDir);
 
   const indexEntries = stage5Reindex(db, wikiDir);
+  exportWiki(db, wikiDir);
 
   // Stamp the run time so the next execution only processes new entries.
   db.run(

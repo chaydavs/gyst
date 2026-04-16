@@ -18,7 +18,7 @@ import {
   getHubs,
   findPath,
 } from "../store/graph.js";
-import { getRecentActivity } from "../server/activity.js";
+import { getRecentActivity, initActivitySchema } from "../server/activity.js";
 
 // ---------------------------------------------------------------------------
 // Public interfaces
@@ -186,6 +186,9 @@ export async function startDashboardServer(
   options: DashboardServerOptions,
 ): Promise<DashboardServerHandle> {
   const { db } = options;
+  
+  // Ensure activity log table exists before serving API
+  initActivitySchema(db);
 
   const tryStart = (port: number): any => {
     try {

@@ -103,6 +103,12 @@ const PRAGMAS = [
 
 /** Individual DDL statements — one per CREATE TABLE / INDEX / TRIGGER */
 const SCHEMA_STATEMENTS: readonly string[] = [
+  // ----- system -----
+  `CREATE TABLE IF NOT EXISTS system_config (
+    key   TEXT NOT NULL PRIMARY KEY,
+    value TEXT
+  )`,
+
   // ----- tables -----
   `CREATE TABLE IF NOT EXISTS entries (
     id               TEXT    NOT NULL PRIMARY KEY,
@@ -121,7 +127,9 @@ const SCHEMA_STATEMENTS: readonly string[] = [
                             CHECK (status IN ('active','stale','conflicted','archived','consolidated')),
     scope            TEXT    NOT NULL DEFAULT 'team'
                             CHECK (scope IN ('personal','team','project')),
-    developer_id     TEXT
+    developer_id     TEXT,
+    metadata         TEXT,
+    markdown_path    TEXT
   )`,
 
   `CREATE TABLE IF NOT EXISTS entry_files (
@@ -327,6 +335,33 @@ export function initDatabase(path: string = "gyst-wiki/.wiki.db"): Database {
       // Column already exists — safe to ignore.
     }
 
+    // Migration: Update entries table to support 'structural' type
+    const entrySchema = db.query("SELECT sql FROM sqlite_master WHERE name='entries'").get() as { sql: string };
+    if (entrySchema && !entrySchema.sql.includes("'structural'")) {
+      logger.info("Migrating entries table to support 'structural' type");
+      db.transaction(() => {
+        db.run("CREATE TABLE entries_new AS SELECT * FROM entries");
+        db.run("DROP TABLE entries");
+        db.run(SCHEMA_STATEMENTS[0]); // Re-create with new schema
+        db.run("INSERT INTO entries SELECT * FROM entries_new");
+        db.run("DROP TABLE entries_new");
+      })();
+    }
+
+    // Migration: Update relationships table to support 'imports_from' and 'calls'
+    const relSchema = db.query("SELECT sql FROM sqlite_master WHERE name='relationships'").get() as { sql: string };
+    if (relSchema && !relSchema.sql.includes("'imports_from'")) {
+      logger.info("Migrating relationships table to support new Graphify types");
+      db.transaction(() => {
+        db.run("CREATE TABLE relationships_new AS SELECT * FROM relationships");
+        db.run("DROP TABLE relationships");
+        db.run(SCHEMA_STATEMENTS[3]); // Re-create with new schema
+        db.run(`INSERT INTO relationships (source_id, target_id, type, strength)
+                SELECT source_id, target_id, type, strength FROM relationships_new`);
+        db.run("DROP TABLE relationships_new");
+      })();
+    }
+
     // Migration: add markdown_path column to entries for existing DBs.
     try {
       db.run("ALTER TABLE entries ADD COLUMN markdown_path TEXT");
@@ -429,6 +464,7 @@ export interface EntryRow {
   readonly scope?: "personal" | "team" | "project";
   readonly developerId?: string;
   readonly metadata?: string;
+  readonly markdown_path?: string;
 }
 
 /**
@@ -446,24 +482,25 @@ export function insertEntry(db: Database, entry: EntryRow): void {
       `INSERT INTO entries
         (id, type, title, content, file_path, error_signature,
          confidence, source_count, source_tool, created_at, last_confirmed, status,
-         scope, developer_id, metadata)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         scope, developer_id, metadata, markdown_path)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         entry.id,
         entry.type,
         entry.title,
         entry.content,
-        entry.files[0] ?? null,
-        entry.errorSignature ?? null,
+        entry.file_path,
+        entry.errorSignature,
         entry.confidence,
         entry.sourceCount,
-        entry.sourceTool ?? null,
+        entry.sourceTool,
         entry.createdAt ?? now,
         entry.lastConfirmed ?? now,
         entry.status ?? "active",
         entry.scope ?? "team",
-        entry.developerId ?? null,
-        entry.metadata ?? null,
+        entry.developerId,
+        entry.metadata,
+        entry.markdown_path,
       ],
     );
 
