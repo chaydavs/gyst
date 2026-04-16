@@ -32,6 +32,13 @@ export interface GraphNode {
   scope: string;
   layer?: "curated" | "structural";
   filePath?: string | null;
+  /**
+   * Raw JSON string from entries.metadata. The dashboard parses the
+   * `classifier` sub-object to render the "Why?" trail. Absent for
+   * structural nodes and for legacy curated entries written before the
+   * classifier trail landed (2026-04-16).
+   */
+  metadata?: string | null;
 }
 
 /** A directed edge between two nodes. */
@@ -74,6 +81,7 @@ interface EntryRow {
   content: string;
   confidence: number;
   scope: string;
+  metadata: string | null;
 }
 
 interface RelRow {
@@ -496,7 +504,7 @@ export function getFullGraph(
   // entries out of the view.
   const entryRows = db
     .query<EntryRow, [number]>(
-      `SELECT id, type, title, content, confidence, scope
+      `SELECT id, type, title, content, confidence, scope, metadata
        FROM entries WHERE status = 'active'
        ORDER BY confidence DESC
        LIMIT ?`,
@@ -531,6 +539,7 @@ export function getFullGraph(
     confidence: e.confidence,
     scope: e.scope,
     layer: "curated",
+    metadata: e.metadata,
   }));
 
   const structuralNodes: GraphNode[] = structuralRows.map((r) => ({

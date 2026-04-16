@@ -398,6 +398,13 @@ const team = program.command("team").description("Team management");
 team.command("create <name>").description("Create team").action(createTeamAction);
 team.command("invite").description("Invite member").action(inviteTeamAction);
 team.command("members").description("List members").action(membersTeamAction);
+team
+  .command("init")
+  .description("Opt into team mode — future entries can land in the team layer")
+  .action(async () => {
+    const { initTeamModeAction } = await import("./team-init.js");
+    await initTeamModeAction();
+  });
 
 program
   .command("create [keyword] [nameParts...]")

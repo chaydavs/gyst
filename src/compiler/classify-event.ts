@@ -21,6 +21,18 @@ export interface Classification {
   readonly signalStrength: number;
   readonly scopeHint: ScopeHint;
   readonly candidateType: EntryType | null;
+  /**
+   * Stable identifiers for every rule that contributed to this verdict.
+   * Empty when no rule fired (e.g. low-signal prompts).
+   * Surfaced on the dashboard "Why?" affordance so users can audit
+   * classification decisions.
+   */
+  readonly ruleIds: readonly string[];
+  /**
+   * Free-form reasoning string — only populated when the optional Stage 3
+   * LLM distill runs. Remains absent for pure rule verdicts.
+   */
+  readonly reasoning?: string;
 }
 
 const TEAM_SIGNAL_PATTERNS: readonly RegExp[] = [
@@ -64,6 +76,31 @@ function anyMatch(patterns: readonly RegExp[], text: string): boolean {
   return false;
 }
 
+/**
+ * Stable rule identifiers surfaced alongside every verdict.
+ * Renaming these is a breaking change for the dashboard's "Why?" view —
+ * update the friendly-name map in the dashboard in lockstep.
+ */
+const RULE_IDS = {
+  LOW_SIGNAL_PROMPT: "prompt-low-signal",
+  TEAM_SIGNAL: "prompt-team-signal",
+  CONVENTION_PATTERN: "prompt-convention-pattern",
+  DECISION_PATTERN: "prompt-decision-pattern",
+  DECISION_LONG: "prompt-decision-long",
+  LEARNING_CODE_GROUNDED: "prompt-learning-code-grounded",
+  LEARNING_LONG_TEXT: "prompt-learning-long",
+  TOOL_USE_ERROR: "tool-use-error",
+  COMMIT_CHORE: "commit-chore-style",
+  COMMIT_MEANINGFUL: "commit-meaningful",
+  MD_CHANGE_GENERIC: "md-change-generic",
+  ADR_PATH: "plan-adr-path",
+  PLAN_DOC: "plan-doc",
+  UNKNOWN_TYPE: "event-unknown-type",
+  EMPTY_PROMPT: "prompt-empty",
+  EMPTY_COMMIT: "commit-empty",
+  NON_CARRIER_EVENT: "event-non-carrier",
+} as const;
+
 interface PromptContext {
   readonly files: readonly string[];
   readonly symbols: readonly string[];
@@ -81,10 +118,20 @@ function readPromptContext(payload: Record<string, unknown>): PromptContext {
 function classifyPrompt(text: string, ctx: PromptContext): Classification {
   const trimmed = text.trim();
   if (trimmed.length === 0) {
-    return { signalStrength: 0, scopeHint: "uncertain", candidateType: null };
+    return {
+      signalStrength: 0,
+      scopeHint: "uncertain",
+      candidateType: null,
+      ruleIds: [RULE_IDS.EMPTY_PROMPT],
+    };
   }
   if (anyMatch(LOW_SIGNAL_PROMPTS, trimmed)) {
-    return { signalStrength: 0.1, scopeHint: "personal", candidateType: null };
+    return {
+      signalStrength: 0.1,
+      scopeHint: "personal",
+      candidateType: null,
+      ruleIds: [RULE_IDS.LOW_SIGNAL_PROMPT],
+    };
   }
 
   const hasTeamSignal = anyMatch(TEAM_SIGNAL_PATTERNS, trimmed);
@@ -94,29 +141,73 @@ function classifyPrompt(text: string, ctx: PromptContext): Classification {
   // more durable signal than bare natural-language chatter of the same length.
   const codeGrounded = ctx.files.length > 0 || ctx.symbols.length > 0;
 
+  // Accumulate every rule that fired — the verdict below picks the highest
+  // precedence candidateType, but downstream stages (graphify rerank, LLM
+  // distill) need the full list to decide whether to demote a duplicate.
+  const firedRules: string[] = [];
+  if (hasTeamSignal) firedRules.push(RULE_IDS.TEAM_SIGNAL);
+  if (isConvention) firedRules.push(RULE_IDS.CONVENTION_PATTERN);
+  if (isDecision) firedRules.push(RULE_IDS.DECISION_PATTERN);
+  if (codeGrounded) firedRules.push(RULE_IDS.LEARNING_CODE_GROUNDED);
+
   // Convention requires team signal AND a convention pattern (tightens from
   // the prior single-OR which was the source of convention-folder bloat).
   if (isConvention && hasTeamSignal) {
-    return { signalStrength: 0.85, scopeHint: "team", candidateType: "convention" };
+    return {
+      signalStrength: 0.85,
+      scopeHint: "team",
+      candidateType: "convention",
+      ruleIds: firedRules,
+    };
   }
   if (isDecision && hasTeamSignal) {
-    return { signalStrength: 0.8, scopeHint: "team", candidateType: "decision" };
+    return {
+      signalStrength: 0.8,
+      scopeHint: "team",
+      candidateType: "decision",
+      ruleIds: firedRules,
+    };
   }
   // Loosen decisions: an explicit decision phrase alone (rationale / chose / because)
   // is enough to qualify as a decision candidate when the prompt is non-trivial.
   if (isDecision && trimmed.length > 40) {
-    return { signalStrength: 0.65, scopeHint: "uncertain", candidateType: "decision" };
+    return {
+      signalStrength: 0.65,
+      scopeHint: "uncertain",
+      candidateType: "decision",
+      ruleIds: [...firedRules, RULE_IDS.DECISION_LONG],
+    };
   }
   if (hasTeamSignal) {
-    return { signalStrength: 0.7, scopeHint: "team", candidateType: "learning" };
+    return {
+      signalStrength: 0.7,
+      scopeHint: "team",
+      candidateType: "learning",
+      ruleIds: firedRules,
+    };
   }
   if (codeGrounded && trimmed.length > 40) {
-    return { signalStrength: 0.55, scopeHint: "uncertain", candidateType: "learning" };
+    return {
+      signalStrength: 0.55,
+      scopeHint: "uncertain",
+      candidateType: "learning",
+      ruleIds: firedRules,
+    };
   }
   if (trimmed.length > 120) {
-    return { signalStrength: 0.4, scopeHint: "uncertain", candidateType: "learning" };
+    return {
+      signalStrength: 0.4,
+      scopeHint: "uncertain",
+      candidateType: "learning",
+      ruleIds: [...firedRules, RULE_IDS.LEARNING_LONG_TEXT],
+    };
   }
-  return { signalStrength: 0.2, scopeHint: "personal", candidateType: null };
+  return {
+    signalStrength: 0.2,
+    scopeHint: "personal",
+    candidateType: null,
+    ruleIds: firedRules,
+  };
 }
 
 function classifyToolUse(payload: Record<string, unknown>): Classification {
@@ -125,20 +216,40 @@ function classifyToolUse(payload: Record<string, unknown>): Classification {
     error.length > 0 &&
     ERROR_TOKENS.some((t) => error.toLowerCase().includes(t.toLowerCase()));
   if (hasError) {
-    return { signalStrength: 0.55, scopeHint: "uncertain", candidateType: "error_pattern" };
+    return {
+      signalStrength: 0.55,
+      scopeHint: "uncertain",
+      candidateType: "error_pattern",
+      ruleIds: [RULE_IDS.TOOL_USE_ERROR],
+    };
   }
-  return { signalStrength: 0.1, scopeHint: "personal", candidateType: null };
+  return { signalStrength: 0.1, scopeHint: "personal", candidateType: null, ruleIds: [] };
 }
 
 function classifyCommit(payload: Record<string, unknown>): Classification {
   const msg = typeof payload.message === "string" ? payload.message : "";
   if (msg.length === 0) {
-    return { signalStrength: 0.1, scopeHint: "uncertain", candidateType: null };
+    return {
+      signalStrength: 0.1,
+      scopeHint: "uncertain",
+      candidateType: null,
+      ruleIds: [RULE_IDS.EMPTY_COMMIT],
+    };
   }
   if (/^(chore|style|wip)/i.test(msg)) {
-    return { signalStrength: 0.15, scopeHint: "personal", candidateType: null };
+    return {
+      signalStrength: 0.15,
+      scopeHint: "personal",
+      candidateType: null,
+      ruleIds: [RULE_IDS.COMMIT_CHORE],
+    };
   }
-  return { signalStrength: 0.45, scopeHint: "team", candidateType: "learning" };
+  return {
+    signalStrength: 0.45,
+    scopeHint: "team",
+    candidateType: "learning",
+    ruleIds: [RULE_IDS.COMMIT_MEANINGFUL],
+  };
 }
 
 /**
@@ -159,22 +270,53 @@ export function classifyEvent(ev: RawEvent): Classification {
       // Generic .md edit — low signal by itself. plan_added covers the
       // interesting subset (ADRs, plans, PRDs). md_change is mostly a
       // "someone touched docs" marker for activity timelines.
-      return { signalStrength: 0.2, scopeHint: "uncertain", candidateType: null };
+      return {
+        signalStrength: 0.2,
+        scopeHint: "uncertain",
+        candidateType: null,
+        ruleIds: [RULE_IDS.MD_CHANGE_GENERIC],
+      };
     case "plan_added": {
       // New or edited plan/ADR file. Route type by path — ADR → decision,
       // plan/PRD → learning. Always team scope since these live in git.
       const path = typeof payload.path === "string" ? payload.path : "";
       if (path.startsWith("decisions/") || path.includes("/decisions/")) {
-        return { signalStrength: 0.85, scopeHint: "team", candidateType: "decision" };
+        return {
+          signalStrength: 0.85,
+          scopeHint: "team",
+          candidateType: "decision",
+          ruleIds: [RULE_IDS.ADR_PATH],
+        };
       }
-      return { signalStrength: 0.7, scopeHint: "team", candidateType: "learning" };
+      return {
+        signalStrength: 0.7,
+        scopeHint: "team",
+        candidateType: "learning",
+        ruleIds: [RULE_IDS.PLAN_DOC],
+      };
     }
     case "session_start":
     case "session_end":
     case "pre_compact":
     case "pull":
-      return { signalStrength: 0, scopeHint: "uncertain", candidateType: null };
+      return {
+        signalStrength: 0,
+        scopeHint: "uncertain",
+        candidateType: null,
+        ruleIds: [RULE_IDS.NON_CARRIER_EVENT],
+      };
     default:
-      return { signalStrength: 0, scopeHint: "uncertain", candidateType: null };
+      return {
+        signalStrength: 0,
+        scopeHint: "uncertain",
+        candidateType: null,
+        ruleIds: [RULE_IDS.UNKNOWN_TYPE],
+      };
   }
 }
+
+/**
+ * Export the rule ID map so the dashboard and other consumers can render
+ * friendly names without stringly-typed drift.
+ */
+export { RULE_IDS };

@@ -10,6 +10,78 @@ import type { Database } from "bun:sqlite";
 import { addManualEntry } from "../capture/manual.js";
 import type { DetectedConvention } from "./detect-conventions.js";
 import { logger } from "../utils/logger.js";
+import { loadConfig } from "../utils/config.js";
+
+/**
+ * Which of the 6 knowledge types best describes this category?
+ *
+ * Prior behaviour: every DetectedConvention was stored as `type="convention"`.
+ * That's technically correct (they're all coding conventions) but erased the
+ * sub-shape — `custom_errors` is really a team-wide error_pattern library,
+ * not a naming rule. Mapping it separately lets the dashboard and `failures`
+ * tool surface error-handling choices alongside actual error signatures.
+ *
+ * The other seven categories stay `convention` — they describe how the team
+ * writes code, not what breaks. If we add more categories that are truly
+ * "what to do when X happens" (retries, rate-limits, etc.), they'd map to
+ * `learning` or `decision`.
+ */
+function mapCategoryToType(
+  category: DetectedConvention["category"],
+): "convention" | "error_pattern" {
+  return category === "custom_errors" ? "error_pattern" : "convention";
+}
+
+/**
+ * Collapses per-directory detections into a single project-level convention
+ * when the same (category, pattern) appears in `minDirs` or more directories.
+ *
+ * Why: the old pipeline emitted "Naming: src/api uses camelCase" AND
+ * "Naming: src/store uses camelCase" AND "Naming: src/compiler uses camelCase"
+ * as three separate entries — the bloat the user observed as "100 conventions".
+ * If ≥3 directories agree, it's a project-wide convention, not a local one.
+ * If fewer agree, the per-directory entries are kept so divergences surface.
+ */
+const PROJECT_WIDE_MIN_DIRS = 3;
+
+function consolidateConventions(
+  conventions: readonly DetectedConvention[],
+): DetectedConvention[] {
+  const groups = new Map<string, DetectedConvention[]>();
+  for (const c of conventions) {
+    const key = `${c.category}::${c.pattern}`;
+    const list = groups.get(key) ?? [];
+    list.push(c);
+    groups.set(key, list);
+  }
+
+  const out: DetectedConvention[] = [];
+  for (const list of groups.values()) {
+    if (list.length < PROJECT_WIDE_MIN_DIRS) {
+      out.push(...list);
+      continue;
+    }
+    const first = list[0]!;
+    const totalScanned = list.reduce((sum, c) => sum + c.evidence.filesScanned, 0);
+    const totalMatching = list.reduce((sum, c) => sum + c.evidence.filesMatching, 0);
+    const examples = list
+      .flatMap((c) => c.evidence.examples)
+      .slice(0, 3);
+    const avgConfidence = list.reduce((sum, c) => sum + c.confidence, 0) / list.length;
+    out.push({
+      category: first.category,
+      directory: "src",
+      pattern: first.pattern,
+      confidence: avgConfidence,
+      evidence: {
+        filesScanned: totalScanned,
+        filesMatching: totalMatching,
+        examples,
+      },
+    });
+  }
+  return out;
+}
 
 // ---------------------------------------------------------------------------
 // Deduplication helpers
@@ -115,7 +187,11 @@ export async function storeDetectedConventions(
   db: Database,
   conventions: DetectedConvention[],
 ): Promise<number> {
-  const eligible = conventions.filter((c) => c.confidence >= MIN_CONFIDENCE);
+  // Step 1: consolidate cross-directory duplicates into project-wide
+  // entries BEFORE confidence filtering — the consolidated entry's
+  // evidence is stronger than any individual directory's.
+  const consolidated = consolidateConventions(conventions);
+  const eligible = consolidated.filter((c) => c.confidence >= MIN_CONFIDENCE);
 
   // Load titles already in the database so we can skip exact duplicates.
   const existingTitles = loadExistingConventionTitles(db);
@@ -125,12 +201,26 @@ export async function storeDetectedConventions(
   );
   const skippedDuplicates = eligible.length - toStore.length;
 
+  // Auto-detected conventions are a project-wide signal. If the user has
+  // opted into team mode, they land in the team layer; otherwise they
+  // stay personal so the shared team folder stays empty until explicitly
+  // initialised.
+  let teamMode = false;
+  try {
+    teamMode = loadConfig().teamMode;
+  } catch {
+    teamMode = false;
+  }
+  const resolvedScope: "personal" | "team" = teamMode ? "team" : "personal";
+
   logger.info("store-conventions: storing detected conventions", {
     total: conventions.length,
+    consolidated: consolidated.length,
     eligible: eligible.length,
-    skippedLowConfidence: conventions.length - eligible.length,
+    skippedLowConfidence: consolidated.length - eligible.length,
     skippedDuplicates,
     toStore: toStore.length,
+    scope: resolvedScope,
   });
 
   let stored = 0;
@@ -138,11 +228,12 @@ export async function storeDetectedConventions(
   for (const convention of toStore) {
     try {
       await addManualEntry(db, {
-        type: "convention",
+        type: mapCategoryToType(convention.category),
         title: buildTitle(convention),
         content: buildContent(convention),
         tags: [convention.directory, convention.category],
         files: [`${convention.directory}/`],
+        scope: resolvedScope,
       });
       stored++;
     } catch (err) {

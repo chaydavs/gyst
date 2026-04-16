@@ -37,7 +37,7 @@ export const KnowledgeEntrySchema = z.object({
   status: z
     .enum(["active", "stale", "conflicted", "archived"])
     .default("active"),
-  scope: z.enum(["personal", "team", "project"]).default("team"),
+  scope: z.enum(["personal", "team", "project"]).default("personal"),
   developerId: z.string().optional(),
   metadata: z.string().optional(),
 });
@@ -155,11 +155,12 @@ export function extractEntry(input: LearnInput): KnowledgeEntry {
   // 4. Build the entry (immutable — construct a new object, never mutate)
   const now = new Date().toISOString();
 
-  // Determine scope: use explicit input if provided, otherwise apply
-  // type-based defaults (learning → personal; ghost_knowledge → team;
-  // everything else → team).
-  const defaultScope =
-    valid.type === "learning" ? "personal" : "team";
+  // Determine scope: explicit input wins. Otherwise default to "personal" so
+  // nothing lands in the shared team layer unless the caller or `learn` tool
+  // (which knows about ctx.mode) deliberately opts in. Ghost knowledge is the
+  // one exception — those are team-wide hard constraints by definition.
+  const defaultScope: "personal" | "team" =
+    valid.type === "ghost_knowledge" ? "team" : "personal";
   const resolvedScope: "personal" | "team" | "project" =
     valid.scope ?? defaultScope;
 

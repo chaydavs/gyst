@@ -328,15 +328,17 @@ export function registerLearnTool(server: McpServer, ctx: ToolContext): void {
       // Persist as new entry
       const id = crypto.randomUUID();
 
-      // Determine scope: use explicit input if provided, otherwise apply
-      // mode-based defaults. In team mode all entries default to "team";
-      // in personal mode learnings default to "personal", others to "team".
+      // Determine scope: explicit input wins. Otherwise apply mode-based
+      // defaults. Team mode opts into shared scope; personal mode keeps
+      // everything personal unless the caller asks otherwise. Ghost
+      // knowledge is the one exception — team-wide hard constraints by
+      // definition, so we force scope=team even in personal mode.
       const defaultScope: "personal" | "team" =
-        ctx.mode === "team"
+        valid.type === "ghost_knowledge"
           ? "team"
-          : valid.type === "learning"
-            ? "personal"
-            : "team";
+          : ctx.mode === "team"
+            ? "team"
+            : "personal";
       const resolvedScope: "personal" | "team" | "project" =
         valid.scope ?? defaultScope;
 

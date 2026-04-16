@@ -21,10 +21,30 @@ import {
   type EventType,
 } from "../store/events.js";
 import { classifyEvent, type Classification } from "./classify-event.js";
+import { rerankWithGraphify } from "./classify-rerank.js";
+import { distillWithLLM, resetDistillBudget } from "./classify-distill.js";
 import { parseError } from "./parsers/error.js";
 import { extractContextFromPrompt } from "./parsers/prompt.js";
 import { parseAdr } from "./parsers/markdown-adr.js";
 import { parsePlanDoc } from "./parsers/markdown-headings.js";
+import { loadConfig } from "../utils/config.js";
+
+/**
+ * Returns true when the project has opted into team mode (`gyst team init`
+ * writes `teamMode: true` to `.gyst-wiki.json`). The `_db` parameter is
+ * accepted for future DB-backed settings; not currently consulted.
+ *
+ * Wrapped in a try/catch because classify runs in the hot path and a
+ * malformed config must never crash event processing — it just means
+ * every entry stays personal, which is the safe default.
+ */
+function isTeamModeActive(_db: Database): boolean {
+  try {
+    return loadConfig().teamMode;
+  } catch {
+    return false;
+  }
+}
 
 export interface ProcessOptions {
   readonly limit?: number;
@@ -51,6 +71,9 @@ export async function processEvents(
   const threshold = options.signalThreshold ?? DEFAULT_THRESHOLD;
 
   const rows = getPendingEvents(db, limit);
+  // Reset the distill budget once per batch — it's a soft ceiling on how
+  // many Claude calls we're willing to spend per processEvents invocation.
+  resetDistillBudget();
   let entriesCreated = 0;
   let skipped = 0;
   let failed = 0;
@@ -67,7 +90,14 @@ export async function processEvents(
       if (row.session_id && !payload.sessionId) {
         payload.sessionId = row.session_id;
       }
-      const verdict = classifyEvent({ type: row.type as string, payload });
+      const stage1 = classifyEvent({ type: row.type as string, payload });
+      // Stage 2: graphify / entity-overlap rerank. Strictly a suppressor —
+      // never amplifies, so applying it before the threshold gate is safe.
+      const stage2 = rerankWithGraphify(db, stage1, payload);
+      // Stage 3: LLM distill. No-op unless ANTHROPIC_API_KEY is set AND the
+      // stage-2 signal is borderline. Budget-capped per batch. Fail-soft —
+      // any network/schema error returns the stage-2 verdict unchanged.
+      const verdict = await distillWithLLM(stage2, payload);
 
       if (verdict.signalStrength >= threshold && verdict.candidateType) {
         const created = createEntryFromEvent(db, row.type, payload, verdict);
@@ -167,7 +197,12 @@ function createEntryFromEvent(
 ): boolean {
   const id = randomUUID();
   const now = new Date().toISOString();
-  const scope = verdict.scopeHint === "uncertain" ? "personal" : verdict.scopeHint;
+  // Default to personal — event-classifier scopeHints are advisory signals,
+  // not team policy. Promoting to team scope requires explicit opt-in (either
+  // `gyst team init` or a caller passing scope through `learn`).
+  const scope = isTeamModeActive(db) && verdict.scopeHint !== "uncertain"
+    ? verdict.scopeHint
+    : "personal";
 
   const title = deriveTitle(eventType, payload);
   const content = deriveContent(eventType, payload);
@@ -205,7 +240,20 @@ function createEntryFromEvent(
   }
 
   const metadata = buildMetadata(payload);
-  const metadataJson = metadata ? JSON.stringify(metadata) : null;
+  // Attach the classifier's verdict trail so the dashboard "Why?" view can
+  // reconstruct why this entry exists. Only stored when at least one rule
+  // fired — noise-free for hand-authored entries that never touched this path.
+  const verdictTrail =
+    verdict.ruleIds.length > 0 || verdict.reasoning
+      ? {
+          ruleIds: [...verdict.ruleIds],
+          signalStrength: verdict.signalStrength,
+          ...(verdict.reasoning ? { reasoning: verdict.reasoning } : {}),
+        }
+      : null;
+  const metadataWithTrail =
+    verdictTrail ? { ...(metadata ?? {}), classifier: verdictTrail } : metadata;
+  const metadataJson = metadataWithTrail ? JSON.stringify(metadataWithTrail) : null;
   const filePath =
     parsedError?.file ??
     (typeof payload.cwd === "string" ? null : null);
