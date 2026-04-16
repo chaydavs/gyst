@@ -144,17 +144,38 @@ const serveAction = async () => {
   await import("../mcp/server.js");
 };
 
+/**
+ * Reads a JSON payload from stdin when stdin is piped.
+ * Returns an empty object if stdin is a TTY or empty — preserves backward
+ * compatibility with callers that still pass payload as a positional arg.
+ */
+function readStdinPayloadSync(): Record<string, unknown> {
+  if (process.stdin.isTTY) return {};
+  try {
+    // fd 0 is stdin; readFileSync blocks until EOF so it's safe in a short-lived CLI.
+    const raw = require("node:fs").readFileSync(0, "utf8") as string;
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) return {};
+    return JSON.parse(trimmed) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
 const emitAction = async (type: string, payload: string | undefined) => {
   try {
     const config = loadConfig();
     const db = initDatabase(config.dbPath);
-    let parsedPayload = {};
+    let parsedPayload: Record<string, unknown> = {};
     if (payload) {
       try {
         parsedPayload = JSON.parse(payload);
       } catch {
         parsedPayload = { raw: payload };
       }
+    } else {
+      // No positional payload — try stdin (hook scripts pipe Claude Code JSON here).
+      parsedPayload = readStdinPayloadSync();
     }
     emitEvent(db, type as EventType, parsedPayload);
     db.close();
