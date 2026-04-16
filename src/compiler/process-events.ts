@@ -22,6 +22,8 @@ import {
 import { classifyEvent, type Classification } from "./classify-event.js";
 import { parseError } from "./parsers/error.js";
 import { extractContextFromPrompt } from "./parsers/prompt.js";
+import { parseAdr } from "./parsers/markdown-adr.js";
+import { parsePlanDoc } from "./parsers/markdown-headings.js";
 
 export interface ProcessOptions {
   readonly limit?: number;
@@ -126,6 +128,21 @@ function enrichPayload(
     }
     return payload;
   }
+  if (eventType === "plan_added") {
+    const path = typeof payload.path === "string" ? payload.path : "";
+    const content = typeof payload.content === "string" ? payload.content : "";
+    if (content.length === 0) return payload;
+    // ADRs: decisions/NNN-*.md use parseAdr. Everything else under
+    // docs/plans/ or docs/superpowers/plans/ uses parsePlanDoc.
+    if (isAdrPath(path)) {
+      const adr = parseAdr(path, content);
+      if (adr) return { ...payload, parsedAdr: adr };
+    } else {
+      const plan = parsePlanDoc(content);
+      if (plan) return { ...payload, parsedPlan: plan };
+    }
+    return payload;
+  }
   return payload;
 }
 
@@ -213,6 +230,11 @@ function createEntryFromEvent(
   return true;
 }
 
+/** True when a file path points to an Architecture Decision Record. */
+export function isAdrPath(path: string): boolean {
+  return path.startsWith("decisions/") || path.includes("/decisions/");
+}
+
 function buildMetadata(payload: Record<string, unknown>): Record<string, unknown> | null {
   const meta: Record<string, unknown> = {};
   if (typeof payload.sessionId === "string" && payload.sessionId.length > 0) {
@@ -224,21 +246,47 @@ function buildMetadata(payload: Record<string, unknown>): Record<string, unknown
   if (payload.parsedError && typeof payload.parsedError === "object") {
     meta.parsedError = payload.parsedError;
   }
+  if (payload.parsedAdr && typeof payload.parsedAdr === "object") {
+    meta.parsedAdr = payload.parsedAdr;
+  }
+  if (payload.parsedPlan && typeof payload.parsedPlan === "object") {
+    meta.parsedPlan = payload.parsedPlan;
+  }
+  if (typeof payload.path === "string" && payload.path.length > 0) {
+    meta.path = payload.path;
+  }
   return Object.keys(meta).length > 0 ? meta : null;
 }
 
 function deriveTitle(eventType: string, payload: Record<string, unknown>): string {
+  // ADR / plan parsed on enrichment — use the structured title.
+  const adr = payload.parsedAdr as { title?: string } | null | undefined;
+  if (adr?.title) return truncateTitle(adr.title);
+  const plan = payload.parsedPlan as { title?: string } | null | undefined;
+  if (plan?.title) return truncateTitle(plan.title);
+
   const text = typeof payload.text === "string" ? payload.text : "";
   const msg = typeof payload.message === "string" ? payload.message : "";
   const raw = text || msg || `${eventType} event`;
   const oneLine = raw.replace(/\s+/g, " ").trim();
-  return oneLine.length <= 100 ? oneLine : `${oneLine.slice(0, 97)}...`;
+  return truncateTitle(oneLine);
 }
 
 function deriveContent(_eventType: string, payload: Record<string, unknown>): string {
+  // Prefer the parser's summary for plan_added — compact, signal-rich.
+  const adr = payload.parsedAdr as { summary?: string } | null | undefined;
+  if (adr?.summary) return adr.summary;
+  const plan = payload.parsedPlan as { summary?: string } | null | undefined;
+  if (plan?.summary) return plan.summary;
+
   const text = typeof payload.text === "string" ? payload.text : "";
   if (text.length > 0) return text;
   const msg = typeof payload.message === "string" ? payload.message : "";
   if (msg.length > 0) return msg;
   return JSON.stringify(payload);
+}
+
+function truncateTitle(raw: string): string {
+  const oneLine = raw.replace(/\s+/g, " ").trim();
+  return oneLine.length <= 100 ? oneLine : `${oneLine.slice(0, 97)}...`;
 }

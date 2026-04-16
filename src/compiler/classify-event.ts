@@ -155,6 +155,20 @@ export function classifyEvent(ev: RawEvent): Classification {
       return classifyToolUse(payload);
     case "commit":
       return classifyCommit(payload);
+    case "md_change":
+      // Generic .md edit — low signal by itself. plan_added covers the
+      // interesting subset (ADRs, plans, PRDs). md_change is mostly a
+      // "someone touched docs" marker for activity timelines.
+      return { signalStrength: 0.2, scopeHint: "uncertain", candidateType: null };
+    case "plan_added": {
+      // New or edited plan/ADR file. Route type by path — ADR → decision,
+      // plan/PRD → learning. Always team scope since these live in git.
+      const path = typeof payload.path === "string" ? payload.path : "";
+      if (path.startsWith("decisions/") || path.includes("/decisions/")) {
+        return { signalStrength: 0.85, scopeHint: "team", candidateType: "decision" };
+      }
+      return { signalStrength: 0.7, scopeHint: "team", candidateType: "learning" };
+    }
     case "session_start":
     case "session_end":
     case "pre_compact":

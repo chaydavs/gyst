@@ -11,6 +11,8 @@ export type EventType =
   | "commit"
   | "pull"
   | "file_change"
+  | "md_change"
+  | "plan_added"
   | "error";
 
 /**

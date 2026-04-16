@@ -106,6 +106,76 @@ describe("processEvents", () => {
     expect(meta.promptContext.symbols).toContain("handleSessionTimeout");
   });
 
+  test("plan_added: ADR markdown becomes a decision entry with parsed title + summary", async () => {
+    const adrMd = [
+      "# Decision: Switch session storage to Redis",
+      "",
+      "Date: 2026-05-01",
+      "Status: Accepted",
+      "",
+      "## Context",
+      "",
+      "SQLite sessions contend with writes under load.",
+      "",
+      "## Decision",
+      "",
+      "We chose Redis for low-latency session storage.",
+    ].join("\n");
+
+    emitEvent(db, "plan_added", {
+      path: "decisions/042-redis-sessions.md",
+      content: adrMd,
+      sessionId: "sess-plan-1",
+    });
+
+    const report = await processEvents(db);
+    expect(report.entriesCreated).toBe(1);
+
+    const entry = db.query("SELECT * FROM entries WHERE type = 'decision'").get() as any;
+    expect(entry).toBeTruthy();
+    expect(entry.title).toBe("Switch session storage to Redis");
+    expect(entry.content).toContain("Redis");
+    const meta = JSON.parse(entry.metadata);
+    expect(meta.parsedAdr.number).toBe(42);
+    expect(meta.parsedAdr.status).toBe("Accepted");
+    expect(meta.sessionId).toBe("sess-plan-1");
+  });
+
+  test("plan_added: non-decisions path routes to learning via plan parser", async () => {
+    const planMd = [
+      "# Rollout Plan: Quality Gate V2",
+      "",
+      "**Goal:** Land V2 by EOQ",
+      "",
+      "## Tasks",
+      "",
+      "- [x] design",
+      "- [ ] implement",
+    ].join("\n");
+
+    emitEvent(db, "plan_added", {
+      path: "docs/superpowers/plans/2026-05-quality-v2.md",
+      content: planMd,
+    });
+
+    const report = await processEvents(db);
+    expect(report.entriesCreated).toBe(1);
+
+    const entry = db.query("SELECT * FROM entries WHERE type = 'learning'").get() as any;
+    expect(entry).toBeTruthy();
+    expect(entry.title).toBe("Rollout Plan: Quality Gate V2");
+    const meta = JSON.parse(entry.metadata);
+    expect(meta.parsedPlan.tasks.total).toBe(2);
+    expect(meta.parsedPlan.tasks.done).toBe(1);
+  });
+
+  test("md_change is recorded but low-signal — no entry created", async () => {
+    emitEvent(db, "md_change", { path: "README.md" });
+    const report = await processEvents(db);
+    expect(report.entriesCreated).toBe(0);
+    expect(report.skipped).toBe(1);
+  });
+
   test("handles processing failures by marking events as failed", async () => {
     // Insert a malformed payload manually to trigger an error in JSON.parse or similar
     db.run(
