@@ -174,33 +174,38 @@ export function generateSessionContext(opts: SessionContextOptions): SessionCont
 
   const agentText = truncateToTokenBudget(agentSections.join("\n"), maxTokens);
 
-  // 2. Build User Summary (Human-friendly notification)
-  const summaryLines: string[] = ["🧠 Gyst Memory Active"];
-  summaryLines.push("---------------------------------");
-  
-  if (ghostRows.length > 0) {
-    summaryLines.push(`🚩 Team Rules: ${ghostRows.length} active`);
-  }
-  
-  if (personalRows.length > 0) {
-    summaryLines.push(`👤 Personal Memories: ${personalRows.length} loaded`);
+  // 2. Build User Summary (human-friendly notification — always produces
+  //    output, even when the project has no memory yet, so developers know
+  //    Gyst is active and where to view their data).
+  const dashPort = process.env["GYST_DASHBOARD_PORT"] || "37778";
+  const projectName = projectDir.split("/").filter(Boolean).pop() || "project";
+  const now = new Date();
+  const ts = now.toLocaleString("en-US", {
+    month: "short", day: "numeric", hour: "numeric",
+    minute: "2-digit", hour12: true,
+  });
+
+  const summaryLines: string[] = [];
+  summaryLines.push(`# [${projectName}] Gyst context · ${ts}`);
+
+  const factLines: string[] = [];
+  if (ghostRows.length > 0)      factLines.push(`  • ${ghostRows.length} team rule${ghostRows.length === 1 ? "" : "s"} loaded`);
+  if (personalRows.length > 0)   factLines.push(`  • ${personalRows.length} personal ${personalRows.length === 1 ? "memory" : "memories"} loaded`);
+  if (conventionRows.length > 0) factLines.push(`  • ${conventionRows.length} convention${conventionRows.length === 1 ? "" : "s"} for this path`);
+  if (errorRows.length > 0)      factLines.push(`  • Recent fix noted: "${errorRows[0].title}"`);
+  if (topFileRows.length > 0)    factLines.push(`  • ${topFileRows.length} indexed file${topFileRows.length === 1 ? "" : "s"} — skipping re-read`);
+
+  if (factLines.length === 0) {
+    summaryLines.push("  No prior context for this project yet.");
+    summaryLines.push("  Noted: first session started. Run `gyst add` to capture knowledge.");
+  } else {
+    summaryLines.push(...factLines);
   }
 
-  if (conventionRows.length > 0) {
-    summaryLines.push(`📏 Conventions: ${conventionRows.length} for current path`);
-  }
-
-  if (errorRows.length > 0) {
-    summaryLines.push(`🕒 Recent Fix: "${errorRows[0].title}"`);
-  }
-
-  if (summaryLines.length === 2) {
-    // If only header and line, it was empty
-    return { agentContext: "", userSummary: "" };
-  }
+  summaryLines.push(`  View dashboard → http://localhost:${dashPort}`);
 
   return {
     agentContext: agentText,
-    userSummary: summaryLines.join("\n")
+    userSummary: summaryLines.join("\n"),
   };
 }
