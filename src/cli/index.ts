@@ -325,16 +325,31 @@ program
 program
   .command("install")
   .alias("setup")
-  .description("First-time setup (detects tools, registers MCP, initializes)")
-  .action(setupAction);
+  .description("First-time setup (detects tools, registers MCP + 6 hooks, scans conventions)")
+  .option("--minimal", "Use the minimal, non-interactive setup path")
+  .action(async (opts: { minimal?: boolean }) => {
+    if (opts.minimal) {
+      await setupAction();
+      return;
+    }
+    try {
+      const { runInstall } = await import("./install.js");
+      await runInstall();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`\nInstall failed: ${msg}\n`);
+      process.exit(1);
+    }
+  });
 
 program.command("recall <query>").description("Search memory").option("-t, --type <type>", "Filter", "all").option("-n, --max <max>", "Limit", "5").action(searchAction);
 program.command("search <query>").description("Alias for recall").option("-t, --type <type>", "Filter", "all").option("-n, --max <max>", "Limit", "5").action(searchAction);
 
-program.command("add [title] [content]").description("Add knowledge").option("-t, --type <type>", "Type", "learning").option("-f, --files <files...>", "Files").option("--tags <tags...>", "Tags").action(async (posTitle, posContent, options) => {
+program.command("add [title] [content...]").description("Add knowledge (content can be unquoted; remaining args are joined)").option("-t, --type <type>", "Type", "learning").option("-f, --files <files...>", "Files").option("--tags <tags...>", "Tags").action(async (posTitle, posContentParts, options) => {
   try {
     const finalTitle = (options.title ?? posTitle ?? "").trim();
-    const finalContent = (options.content ?? posContent ?? finalTitle).trim();
+    const joinedContent = Array.isArray(posContentParts) ? posContentParts.join(" ") : (posContentParts ?? "");
+    const finalContent = (options.content ?? joinedContent ?? finalTitle).toString().trim() || finalTitle;
     if (finalTitle === "") {
       process.stdout.write("Error: title is required\n");
       process.exit(1);
@@ -363,17 +378,34 @@ team.command("invite").description("Invite member").action(inviteTeamAction);
 team.command("members").description("List members").action(membersTeamAction);
 
 program
-  .command("create [keyword] [name]")
-  .description("Create a new team")
-  .action((keyword: string | undefined, name: string | undefined) => {
+  .command("create [keyword] [nameParts...]")
+  .description("Create a new team (e.g. `gyst create team Acme` or `gyst create Acme`)")
+  .action((keyword: string | undefined, nameParts: string[] | undefined) => {
+    const rest = (nameParts ?? []).join(" ").trim();
     let teamName = "";
     if (keyword?.toLowerCase() === "team") {
-      teamName = (name ?? "").trim();
+      teamName = rest;
     } else {
-      teamName = (keyword ?? "").trim();
+      teamName = [keyword ?? "", rest].filter(Boolean).join(" ").trim();
     }
     if (!teamName) {
-      process.stdout.write("Error: team name is required. Usage: gyst create team \"name\"\n");
+      process.stdout.write(
+        "Error: team name is required.\n" +
+        "  Usage:  gyst create team <name>\n" +
+        "  Or:     gyst create-team <name>\n",
+      );
+      process.exit(1);
+    }
+    createTeamAction(teamName);
+  });
+
+program
+  .command("create-team <nameParts...>")
+  .description("Alias for `gyst create team <name>`")
+  .action((nameParts: string[]) => {
+    const teamName = nameParts.join(" ").trim();
+    if (!teamName) {
+      process.stdout.write("Error: team name is required. Usage: gyst create-team <name>\n");
       process.exit(1);
     }
     createTeamAction(teamName);
@@ -533,5 +565,20 @@ program
       process.exit(1);
     }
   });
+
+// Improve the "unknown command" error with a did-you-mean hint.
+program.on("command:*", (operands: string[]) => {
+  const bad = operands.join(" ");
+  const known = program.commands.map((c) => c.name());
+  const suggestion = bad
+    ? known.find((n) => n.startsWith(bad.split(" ")[0]!.toLowerCase()))
+    : undefined;
+  process.stderr.write(`\nError: unknown command "${bad}"\n`);
+  if (suggestion) {
+    process.stderr.write(`  Did you mean:  gyst ${suggestion}\n`);
+  }
+  process.stderr.write(`  Run \`gyst --help\` for the full command list.\n\n`);
+  process.exit(1);
+});
 
 program.parse();

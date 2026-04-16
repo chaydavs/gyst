@@ -312,10 +312,18 @@ export function initProject(dir: string = process.cwd()): void {
 // Stdin helpers (interactive I/O)
 // ---------------------------------------------------------------------------
 
-/** Prints an inline y/n prompt and returns true for y/yes. */
-async function askYesNo(question: string): Promise<boolean> {
+/**
+ * Prints an inline y/n prompt and returns true for y/yes.
+ *
+ * The reader must be acquired ONCE by the top-level flow and passed in.
+ * Re-acquiring `Bun.stdin.stream().getReader()` per call drops buffered
+ * bytes in Bun (seen in the wild with multi-prompt install flows).
+ */
+async function askYesNo(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  question: string,
+): Promise<boolean> {
   process.stdout.write(`\n  ? ${question} (y/n) `);
-  const reader = Bun.stdin.stream().getReader();
   const decoder = new TextDecoder();
   let buffer = "";
 
@@ -325,7 +333,6 @@ async function askYesNo(question: string): Promise<boolean> {
     buffer += decoder.decode(value, { stream: true });
     if (buffer.includes("\n")) break;
   }
-  reader.releaseLock();
   const answer = buffer.split("\n")[0]!.trim().toLowerCase();
   return answer === "y" || answer === "yes";
 }
@@ -334,7 +341,10 @@ async function askYesNo(question: string): Promise<boolean> {
 // Step 3 (interactive) — Register MCP configs
 // ---------------------------------------------------------------------------
 
-async function registerMcpForTools(tools: ToolInfo[]): Promise<string[]> {
+async function registerMcpForTools(
+  tools: ToolInfo[],
+  stdinReader: ReadableStreamDefaultReader<Uint8Array>,
+): Promise<string[]> {
   const configured: string[] = [];
 
   for (const tool of tools.filter((t) => t.detected)) {
@@ -346,6 +356,7 @@ async function registerMcpForTools(tools: ToolInfo[]): Promise<string[]> {
 
     if (alreadyConfigured) {
       const overwrite = await askYesNo(
+        stdinReader,
         `Gyst is already configured for ${tool.name}. Overwrite?`,
       );
       if (!overwrite) {
@@ -467,14 +478,30 @@ export function installGitHooks(projectDir: string = process.cwd()): {
 // ---------------------------------------------------------------------------
 
 async function registerHooks(tools: ToolInfo[]): Promise<void> {
-  // Claude Code — write hooks.json to plugin dir (auto-discovered by Claude Code)
+  let totalRegistered = 0;
+
+  // Claude Code — two registration paths:
+  //   (a) plugin hooks.json (for future marketplace-installed plugin use)
+  //   (b) settings.json merge (actually fires today for npm-installed users)
   const claude = tools.find((t) => t.name === "Claude Code");
   if (claude?.detected) {
     try {
       writeHooksPlugin(join(homedir(), ".claude", "plugins", "gyst"));
-      process.stdout.write("    Claude Code: MCP server + lifecycle hooks ✓\n");
+      process.stdout.write("    Claude Code plugin hooks.json    ✓ (SessionStart, UserPromptSubmit, PostToolUse, Stop)\n");
+      totalRegistered += 4;
     } catch (err) {
-      logger.warn("install: failed to write Claude Code hooks", { error: err });
+      logger.warn("install: failed to write Claude Code plugin hooks", { error: err });
+      process.stdout.write("    Claude Code plugin hooks.json    ✗ (see logs)\n");
+    }
+
+    try {
+      const existing = readJsonConfig(claude.configPath);
+      writeJsonConfig(claude.configPath, mergeClaudeHooks(existing));
+      process.stdout.write("    Claude Code settings.json hooks  ✓ (SessionStart, PreCompact)\n");
+      totalRegistered += 2;
+    } catch (err) {
+      logger.warn("install: failed to merge Claude Code settings.json hooks", { error: err });
+      process.stdout.write("    Claude Code settings.json hooks  ✗ (see logs)\n");
     }
   }
 
@@ -483,7 +510,8 @@ async function registerHooks(tools: ToolInfo[]): Promise<void> {
   if (codex?.detected) {
     try {
       writeHooksPlugin(join(homedir(), ".codex"));
-      process.stdout.write("    Codex: MCP server + lifecycle hooks ✓\n");
+      process.stdout.write("    Codex plugin hooks.json          ✓ (4 lifecycle hooks)\n");
+      totalRegistered += 4;
     } catch (err) {
       logger.warn("install: failed to write Codex hooks", { error: err });
     }
@@ -495,7 +523,8 @@ async function registerHooks(tools: ToolInfo[]): Promise<void> {
     try {
       const existing = readJsonConfig(gemini.configPath);
       writeJsonConfig(gemini.configPath, mergeGeminiHooks(existing));
-      process.stdout.write("    Gemini CLI: MCP server + lifecycle hooks ✓\n");
+      process.stdout.write("    Gemini CLI settings.json hooks   ✓ (7 lifecycle hooks)\n");
+      totalRegistered += 7;
     } catch (err) {
       logger.warn("install: failed to write Gemini CLI hooks", { error: err });
     }
@@ -506,9 +535,11 @@ async function registerHooks(tools: ToolInfo[]): Promise<void> {
   for (const toolName of mcpOnlyTools) {
     const tool = tools.find((t) => t.name === toolName);
     if (tool?.detected) {
-      process.stdout.write(`    ${toolName}: MCP server ✓ (no lifecycle hooks available)\n`);
+      process.stdout.write(`    ${toolName.padEnd(32)} ✓ (MCP only — no lifecycle hooks)\n`);
     }
   }
+
+  process.stdout.write(`\n    → Registered ${totalRegistered} session hooks\n`);
 }
 
 // ---------------------------------------------------------------------------
@@ -524,6 +555,10 @@ async function registerHooks(tools: ToolInfo[]): Promise<void> {
  */
 export async function runInstall(): Promise<void> {
   process.stdout.write("\n");
+
+  // Acquire stdin reader ONCE — re-acquiring it per prompt drops buffered
+  // bytes in Bun and causes prompts after the first to hang or abort.
+  const stdinReader = Bun.stdin.stream().getReader();
 
   // Step 1: Bun version check
   process.stdout.write("  ✓ Checking dependencies...\n");
@@ -548,14 +583,14 @@ export async function runInstall(): Promise<void> {
   const detectedTools = tools.filter((t) => t.detected);
   if (detectedTools.length > 0) {
     process.stdout.write("\n  ✓ Registering Gyst MCP server...\n");
-    await registerMcpForTools(tools);
+    await registerMcpForTools(tools, stdinReader);
   }
 
   // Step 4: Project init
   process.stdout.write("\n  ✓ Initializing project...\n");
   const alreadyInit = existsSync(join(process.cwd(), ".gyst"));
   if (alreadyInit) {
-    const reinit = await askYesNo("Gyst already initialized. Reinitialize?");
+    const reinit = await askYesNo(stdinReader, "Gyst already initialized. Reinitialize?");
     if (reinit) {
       initProject();
       process.stdout.write("    Reinitialized .gyst/ and gyst-wiki/\n");
@@ -617,4 +652,10 @@ export async function runInstall(): Promise<void> {
   Or run: gyst ghost-init to add unwritten team rules manually.
 
 `);
+
+  try {
+    stdinReader.releaseLock();
+  } catch {
+    // ignore — stream may already be closed.
+  }
 }
