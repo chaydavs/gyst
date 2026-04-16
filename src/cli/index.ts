@@ -487,6 +487,37 @@ program
     }
   });
 
+program
+  .command("sync-graph")
+  .description("Update the structural code graph using Graphify and sync it to Gyst")
+  .action(async () => {
+    try {
+      const { spawnSync } = await import("node:child_process");
+      process.stdout.write("Running Graphify update...\n");
+      
+      const result = spawnSync("graphify", ["update", "."], { stdio: "inherit" });
+      if (result.status !== 0) {
+        throw new Error(`Graphify failed with exit code ${result.status}`);
+      }
+
+      const config = loadConfig();
+      const db = initDatabase(config.dbPath);
+      const { transformGraphify } = await import("../compiler/graphify-transformer.js");
+      
+      process.stdout.write("Transforming Graphify data into Gyst...\n");
+      const report = transformGraphify(db);
+      db.close();
+
+      process.stdout.write(`Sync complete:\n`);
+      process.stdout.write(`  Structural nodes: ${report.nodesImported}\n`);
+      process.stdout.write(`  Relationships:    ${report.linksImported}\n`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stdout.write(`Error: ${message}\n`);
+      process.exit(1);
+    }
+  });
+
 program.command("harvest-session").description("Harvest from Claude Code").action(async () => {
   const { runHarvestSession } = await import("./harvest.js");
   await runHarvestSession();

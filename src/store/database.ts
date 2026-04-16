@@ -106,7 +106,7 @@ const SCHEMA_STATEMENTS: readonly string[] = [
   // ----- tables -----
   `CREATE TABLE IF NOT EXISTS entries (
     id               TEXT    NOT NULL PRIMARY KEY,
-    type             TEXT    NOT NULL CHECK (type IN ('error_pattern','convention','decision','learning','ghost_knowledge')),
+    type             TEXT    NOT NULL CHECK (type IN ('error_pattern','convention','decision','learning','ghost_knowledge','structural')),
     title            TEXT    NOT NULL,
     content          TEXT    NOT NULL DEFAULT '',
     file_path        TEXT,
@@ -140,7 +140,7 @@ const SCHEMA_STATEMENTS: readonly string[] = [
     source_id  TEXT NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
     target_id  TEXT NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
     type       TEXT NOT NULL CHECK (type IN (
-                 'related_to','supersedes','contradicts','depends_on','caused_by'
+                 'related_to','supersedes','contradicts','depends_on','caused_by','imports_from','calls'
                )),
     strength   REAL NOT NULL DEFAULT 1.0,
     UNIQUE (source_id, target_id, type)

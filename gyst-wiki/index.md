@@ -1,6 +1,6 @@
 # Gyst Knowledge Base Index
 
-> Generated: 2026-04-16T07:08:57.611Z  
+> Generated: 2026-04-16T09:07:00.639Z  
 > Active entries: 13
 
 ## Convention
