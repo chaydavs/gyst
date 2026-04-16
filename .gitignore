@@ -55,3 +55,9 @@ tests/benchmark/coir/results/
 .claude/memory/*.md
 !.claude/memory/MEMORY.md.template
 .worktrees/
+
+# Agent worktree pointer files (they're live filesystem pointers, never code)
+.claude/worktrees/
+
+# Graphify structural graph output (derived — regenerate with `graphify`)
+graphify-out/
