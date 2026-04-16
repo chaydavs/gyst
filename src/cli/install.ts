@@ -366,7 +366,7 @@ export function initProject(dir: string = process.cwd()): void {
   mkdirSync(join(dir, ".gyst"), { recursive: true });
   mkdirSync(join(dir, "gyst-wiki"), { recursive: true });
   // Database is created by the caller via initDatabase(loadConfig(dir).dbPath)
-  // at gyst-wiki/.wiki.db — NOT here — to keep one canonical DB location.
+  // at .gyst/wiki.db — NOT here — to keep one canonical DB location.
 }
 
 // ---------------------------------------------------------------------------

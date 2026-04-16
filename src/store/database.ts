@@ -316,12 +316,12 @@ const SCHEMA_STATEMENTS: readonly string[] = [
  * This function is **synchronous** — `bun:sqlite` does not expose async APIs.
  *
  * @param path - File-system path for the SQLite database.
- *   Defaults to `"gyst-wiki/.wiki.db"`.
+ *   Defaults to `".gyst/wiki.db"` (matches `config.dbPath` default).
  * @returns An open `bun:sqlite` `Database` instance ready for use.
  * @throws {DatabaseError} If the database cannot be opened or the schema
  *   cannot be applied.
  */
-export function initDatabase(path: string = "gyst-wiki/.wiki.db"): Database {
+export function initDatabase(path: string = ".gyst/wiki.db"): Database {
   logger.info("Initialising database", { path });
 
   // Try to switch to a system SQLite that supports extension loading.

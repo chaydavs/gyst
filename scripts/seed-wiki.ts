@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Seed the real gyst-wiki/.wiki.db + markdown files from the eval fixtures.
+ * Seed the real .gyst/wiki.db + gyst-wiki/ markdown files from the eval fixtures.
  *
  * The eval harness seeds into a /tmp temp DB, which means the real wiki
  * stays empty during development. This script uses the same 55-entry

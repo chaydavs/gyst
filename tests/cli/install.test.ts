@@ -91,7 +91,7 @@ describe("initProject", () => {
     expect(existsSync(join(tmpDir, "gyst-wiki"))).toBe(true);
   });
 
-  test("does NOT create a database at .gyst/wiki.db (canonical path is gyst-wiki/.wiki.db)", () => {
+  test("does NOT create a database at .gyst/wiki.db (DB is created lazily by initDatabase)", () => {
     expect(existsSync(join(tmpDir, ".gyst", "wiki.db"))).toBe(false);
   });
 
