@@ -1,9 +1,13 @@
 /**
  * Graphify Transformer.
  *
- * Imports structural knowledge from Graphify's `graph.json` into the Gyst 
- * knowledge base. This bridges deterministic AST-based code maps with Gyst's 
- * interaction-based knowledge.
+ * Imports AST-derived structural knowledge from Graphify's `graph.json` into
+ * the ADJACENT structural_nodes / structural_edges index. Deliberately kept
+ * out of the curated `entries` table so deterministic AST data never pollutes
+ * retrieval, FTS, or the dashboard's curated-knowledge views.
+ *
+ * The structural index is rebuildable — this transformer is an upsert path,
+ * and dropping it loses nothing that re-running graphify cannot restore.
  */
 
 import { readFileSync, existsSync } from "node:fs";
@@ -39,11 +43,14 @@ export interface TransformReport {
 }
 
 /**
- * Reads Graphify's output and upserts it into the Gyst database.
+ * Reads Graphify's output and upserts it into the adjacent structural index.
  */
-export function transformGraphify(db: Database, outputDir: string = "graphify-out"): TransformReport {
+export function transformGraphify(
+  db: Database,
+  outputDir: string = "graphify-out",
+): TransformReport {
   const jsonPath = join(outputDir, "graph.json");
-  
+
   if (!existsSync(jsonPath)) {
     logger.warn("graphify-transformer: graph.json not found", { jsonPath });
     return { nodesImported: 0, linksImported: 0 };
@@ -56,96 +63,58 @@ export function transformGraphify(db: Database, outputDir: string = "graphify-ou
   let linksImported = 0;
 
   db.transaction(() => {
-    // 1. Import Nodes
     for (const node of data.nodes) {
-      // Add 'metadata' column update to store suppressExport: true
-      const metadata = JSON.stringify({ suppressExport: true, graphifyId: node.id });
-      
       db.run(
-        `INSERT INTO entries (
-          id, type, title, content, file_path, confidence, 
-          created_at, last_confirmed, status, scope, source_tool, metadata
-        ) VALUES (?, 'structural', ?, ?, ?, ?, ?, ?, 'active', 'project', 'graphify', ?)
-        ON CONFLICT(id) DO UPDATE SET
-          last_confirmed = excluded.last_confirmed,
-          title = excluded.title,
-          file_path = excluded.file_path,
-          metadata = excluded.metadata`,
+        `INSERT INTO structural_nodes
+           (id, label, file_path, file_type, source_location, norm_label,
+            created_at, last_seen, metadata)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+         ON CONFLICT(id) DO UPDATE SET
+           label = excluded.label,
+           file_path = excluded.file_path,
+           file_type = excluded.file_type,
+           source_location = excluded.source_location,
+           norm_label = excluded.norm_label,
+           last_seen = excluded.last_seen`,
         [
           node.id,
           node.label,
-          `Structural element in ${node.source_file}${node.source_location ? ` at ${node.source_location}` : ""}`,
           node.source_file,
-          1.0, // AST extraction is 100% confident
+          node.file_type,
+          node.source_location ?? null,
+          node.norm_label ?? null,
           now,
           now,
-          metadata
-        ]
+        ],
       );
-
-      // Associated file path
-      db.run(
-        "INSERT OR IGNORE INTO entry_files (entry_id, file_path) VALUES (?, ?)",
-        [node.id, node.source_file]
-      );
-
-      // Norm label as tag
-      if (node.norm_label) {
-        db.run(
-          "INSERT OR IGNORE INTO entry_tags (entry_id, tag) VALUES (?, ?)",
-          [node.id, node.norm_label.replace(/[()]/g, "")]
-        );
-      }
-      
-      nodesImported++;
+      nodesImported += 1;
     }
 
-    // 2. Import Links
     for (const link of data.links) {
       try {
-        // Validate relation type against Gyst's allowed types
-        // Graphify uses 'imports_from', 'calls', etc.
-        const type = mapRelationType(link.relation);
-        
         db.run(
-          `INSERT INTO relationships (source_id, target_id, type, strength)
+          `INSERT INTO structural_edges (source_id, target_id, relation, weight)
            VALUES (?, ?, ?, ?)
-           ON CONFLICT(source_id, target_id, type) DO UPDATE SET
-             strength = excluded.strength`,
+           ON CONFLICT(source_id, target_id, relation) DO UPDATE SET
+             weight = excluded.weight`,
           [
             link.source,
             link.target,
-            type,
-            link.weight ?? link.confidence_score ?? 1.0
-          ]
+            link.relation,
+            link.weight ?? link.confidence_score ?? 1.0,
+          ],
         );
-        linksImported++;
+        linksImported += 1;
       } catch (err) {
-        // Skip if referential integrity or check constraint fails (e.g. missing node)
-        logger.debug("graphify-transformer: skipping link", { 
-          source: link.source, 
-          target: link.target, 
-          error: String(err) 
+        // Skip edges whose endpoints are missing (referential integrity).
+        logger.debug("graphify-transformer: skipping link", {
+          source: link.source,
+          target: link.target,
+          error: String(err),
         });
       }
     }
   })();
 
   return { nodesImported, linksImported };
-}
-
-/**
- * Maps Graphify relationship types to Gyst's allowed relationship types.
- */
-function mapRelationType(graphifyType: string): string {
-  const allowed = ['related_to', 'supersedes', 'contradicts', 'depends_on', 'caused_by', 'imports_from', 'calls'];
-  
-  if (allowed.includes(graphifyType)) {
-    return graphifyType;
-  }
-  
-  // Mapping logic
-  if (graphifyType === 'defined_in') return 'related_to';
-  
-  return 'related_to'; // Fallback
 }

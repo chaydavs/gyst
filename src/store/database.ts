@@ -101,16 +101,13 @@ const PRAGMAS = [
   "PRAGMA busy_timeout = 5000;",
 ] as const;
 
-/** Individual DDL statements — one per CREATE TABLE / INDEX / TRIGGER */
-const SCHEMA_STATEMENTS: readonly string[] = [
-  // ----- system -----
-  `CREATE TABLE IF NOT EXISTS system_config (
-    key   TEXT NOT NULL PRIMARY KEY,
-    value TEXT
-  )`,
-
-  // ----- tables -----
-  `CREATE TABLE IF NOT EXISTS entries (
+/**
+ * DDL extracted by name — keeps migrations (which need to re-create a single
+ * table) robust to reordering of the main SCHEMA_STATEMENTS array. Do NOT
+ * reference SCHEMA_STATEMENTS by positional index inside migrations; use
+ * these named constants instead.
+ */
+const ENTRIES_DDL = `CREATE TABLE IF NOT EXISTS entries (
     id               TEXT    NOT NULL PRIMARY KEY,
     type             TEXT    NOT NULL CHECK (type IN ('error_pattern','convention','decision','learning','ghost_knowledge','structural')),
     title            TEXT    NOT NULL,
@@ -130,7 +127,28 @@ const SCHEMA_STATEMENTS: readonly string[] = [
     developer_id     TEXT,
     metadata         TEXT,
     markdown_path    TEXT
+  )`;
+
+const RELATIONSHIPS_DDL = `CREATE TABLE IF NOT EXISTS relationships (
+    source_id  TEXT NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+    target_id  TEXT NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+    type       TEXT NOT NULL CHECK (type IN (
+                 'related_to','supersedes','contradicts','depends_on','caused_by','imports_from','calls'
+               )),
+    strength   REAL NOT NULL DEFAULT 1.0,
+    UNIQUE (source_id, target_id, type)
+  )`;
+
+/** Individual DDL statements — one per CREATE TABLE / INDEX / TRIGGER */
+const SCHEMA_STATEMENTS: readonly string[] = [
+  // ----- system -----
+  `CREATE TABLE IF NOT EXISTS system_config (
+    key   TEXT NOT NULL PRIMARY KEY,
+    value TEXT
   )`,
+
+  // ----- tables -----
+  ENTRIES_DDL,
 
   `CREATE TABLE IF NOT EXISTS entry_files (
     entry_id   TEXT NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
@@ -144,15 +162,7 @@ const SCHEMA_STATEMENTS: readonly string[] = [
     PRIMARY KEY (entry_id, tag)
   )`,
 
-  `CREATE TABLE IF NOT EXISTS relationships (
-    source_id  TEXT NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
-    target_id  TEXT NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
-    type       TEXT NOT NULL CHECK (type IN (
-                 'related_to','supersedes','contradicts','depends_on','caused_by','imports_from','calls'
-               )),
-    strength   REAL NOT NULL DEFAULT 1.0,
-    UNIQUE (source_id, target_id, type)
-  )`,
+  RELATIONSHIPS_DDL,
 
   `CREATE TABLE IF NOT EXISTS co_retrievals (
     entry_a      TEXT NOT NULL,
@@ -175,6 +185,34 @@ const SCHEMA_STATEMENTS: readonly string[] = [
     git_commit    TEXT,
     timestamp     TEXT    NOT NULL
   )`,
+
+  // ----- structural index (graphify-populated, rebuildable) -----
+  // Kept ADJACENT to the curated entries table so AST-derived nodes don't
+  // pollute retrieval, search, FTS, or the dashboard's curated-knowledge
+  // views. Rebuild from source any time via `gyst graphify update`.
+  `CREATE TABLE IF NOT EXISTS structural_nodes (
+    id               TEXT    NOT NULL PRIMARY KEY,
+    label            TEXT    NOT NULL,
+    file_path        TEXT    NOT NULL,
+    file_type        TEXT,
+    source_location  TEXT,
+    norm_label       TEXT,
+    created_at       TEXT    NOT NULL,
+    last_seen        TEXT    NOT NULL,
+    metadata         TEXT
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_structural_nodes_file ON structural_nodes(file_path)",
+  "CREATE INDEX IF NOT EXISTS idx_structural_nodes_norm ON structural_nodes(norm_label)",
+
+  `CREATE TABLE IF NOT EXISTS structural_edges (
+    source_id  TEXT NOT NULL REFERENCES structural_nodes(id) ON DELETE CASCADE,
+    target_id  TEXT NOT NULL REFERENCES structural_nodes(id) ON DELETE CASCADE,
+    relation   TEXT NOT NULL,
+    weight     REAL NOT NULL DEFAULT 1.0,
+    PRIMARY KEY (source_id, target_id, relation)
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_structural_edges_source ON structural_edges(source_id)",
+  "CREATE INDEX IF NOT EXISTS idx_structural_edges_target ON structural_edges(target_id)",
 
   // ----- FTS5 virtual table -----
   `CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts
@@ -342,7 +380,7 @@ export function initDatabase(path: string = "gyst-wiki/.wiki.db"): Database {
       db.transaction(() => {
         db.run("CREATE TABLE entries_new AS SELECT * FROM entries");
         db.run("DROP TABLE entries");
-        db.run(SCHEMA_STATEMENTS[0]); // Re-create with new schema
+        db.run(ENTRIES_DDL);
         db.run("INSERT INTO entries SELECT * FROM entries_new");
         db.run("DROP TABLE entries_new");
       })();
@@ -355,7 +393,7 @@ export function initDatabase(path: string = "gyst-wiki/.wiki.db"): Database {
       db.transaction(() => {
         db.run("CREATE TABLE relationships_new AS SELECT * FROM relationships");
         db.run("DROP TABLE relationships");
-        db.run(SCHEMA_STATEMENTS[3]); // Re-create with new schema
+        db.run(RELATIONSHIPS_DDL);
         db.run(`INSERT INTO relationships (source_id, target_id, type, strength)
                 SELECT source_id, target_id, type, strength FROM relationships_new`);
         db.run("DROP TABLE relationships_new");
@@ -374,6 +412,57 @@ export function initDatabase(path: string = "gyst-wiki/.wiki.db"): Database {
       db.run("ALTER TABLE event_queue ADD COLUMN session_id TEXT");
     } catch {
       // Column already exists — safe to ignore.
+    }
+
+    // Migration: move any existing type='structural' rows out of the curated
+    // entries table into the adjacent structural_nodes/edges index. This is
+    // the Phase B split — structural (AST) knowledge should not share the
+    // retrieval path with curated (human-authored/learned) knowledge.
+    try {
+      const structuralCount = db
+        .query<{ n: number }, []>(
+          "SELECT COUNT(*) AS n FROM entries WHERE type='structural'",
+        )
+        .get();
+      if (structuralCount && structuralCount.n > 0) {
+        logger.info("Migrating structural entries to adjacent index", {
+          rows: structuralCount.n,
+        });
+        // Rebuild FTS so the DELETE trigger does not trip on stale rowids
+        // — DBs that pre-date triggered FTS sync may have entries without
+        // matching FTS rows.
+        try {
+          db.run("INSERT INTO entries_fts(entries_fts) VALUES('rebuild')");
+        } catch {
+          // FTS rebuild is best-effort — continue regardless.
+        }
+        db.transaction(() => {
+          db.run(
+            `INSERT OR IGNORE INTO structural_nodes
+               (id, label, file_path, file_type, source_location, norm_label,
+                created_at, last_seen, metadata)
+             SELECT id, title, COALESCE(file_path, ''), NULL, NULL, NULL,
+                    created_at, last_confirmed, metadata
+             FROM entries WHERE type='structural'`,
+          );
+          db.run(
+            `INSERT OR IGNORE INTO structural_edges (source_id, target_id, relation, weight)
+             SELECT r.source_id, r.target_id, r.type, r.strength
+             FROM relationships r
+             JOIN entries e1 ON e1.id = r.source_id AND e1.type = 'structural'
+             JOIN entries e2 ON e2.id = r.target_id AND e2.type = 'structural'`,
+          );
+          db.run(
+            `DELETE FROM relationships WHERE source_id IN (SELECT id FROM entries WHERE type='structural')
+               OR target_id IN (SELECT id FROM entries WHERE type='structural')`,
+          );
+          db.run("DELETE FROM entries WHERE type='structural'");
+        })();
+      }
+    } catch (err) {
+      logger.warn("Structural migration skipped", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   } catch (err) {
     db.close();
