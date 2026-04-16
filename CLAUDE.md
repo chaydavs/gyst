@@ -174,15 +174,15 @@ Run security.ts stripSensitiveData() on ALL content before storage.
 ## Build Commands
 - `bun run dev` — Start MCP server in dev mode
 - `bun run build` — Compile to dist/
-- `bun test` — Run all tests (842 tests, 41 files)
+- `bun test` — Run all tests (895 tests, 47 files)
 - `bun run setup` — First-time setup
 - `bun run install-hooks` — Install git hooks
 - `bun run lint` — TypeScript type check (tsc --noEmit)
-- `bun run benchmark:codememb` — Run CodeMemBench (NDCG@10=0.351, Hit=78%)
+- `bun run benchmark:codememb` — Run CodeMemBench (NDCG@10=0.327, Hit=66%)
 
 ## Benchmarks (CodeMemBench, April 2026)
-NDCG@10: 0.3511 | Recall@10: 0.6767 | MRR@10: 0.2743 | Hit Rate: 78.0%
-ghost_knowledge hit: 76% | convention hit: 92% | onboarding hit: 84%
+NDCG@10: 0.3269 | Recall@10: 0.6008 | MRR@10: 0.2555 | Hit Rate: 66.0%
+ghost_knowledge hit: 92.0% | convention hit: 64% | onboarding hit: 84%
 
 ## Decision Log
 When making a significant technical choice, create a file in decisions/:

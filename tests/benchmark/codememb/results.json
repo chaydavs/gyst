@@ -1,33 +1,33 @@
 {
   "benchmark": "CodeMemBench",
   "version": "1.0.0",
-  "timestamp": "2026-04-16T01:24:17.741Z",
+  "timestamp": "2026-04-16T01:32:26.980Z",
   "datasetPath": "tests/benchmark/codememb/dataset.json",
   "totalQueries": 200,
   "topK": 10,
   "semanticAvailable": true,
-  "ingestMs": 145,
-  "retrieveMs": 7320,
+  "ingestMs": 153,
+  "retrieveMs": 7427,
   "overall": {
-    "ndcg": 0.34145768949447297,
-    "recall": 0.6224999999999999,
-    "mrr": 0.27396031746031757,
-    "hitRate": 0.71
+    "ndcg": 0.32689210205871155,
+    "recall": 0.6008333333333333,
+    "mrr": 0.2554841269841271,
+    "hitRate": 0.66
   },
   "categoryMetrics": {
     "error_resolution": {
       "count": 25,
-      "ndcg": 0.32168879415483675,
-      "recall": 0.58,
-      "mrr": 0.258968253968254,
-      "hitRate": 0.64
+      "ndcg": 0.2990811526674544,
+      "recall": 0.5666666666666667,
+      "mrr": 0.21896825396825398,
+      "hitRate": 0.6
     },
     "convention_lookup": {
       "count": 25,
-      "ndcg": 0.355779639580674,
-      "recall": 0.6866666666666665,
-      "mrr": 0.25709523809523815,
-      "hitRate": 0.76
+      "ndcg": 0.3357466002303606,
+      "recall": 0.64,
+      "mrr": 0.24071428571428577,
+      "hitRate": 0.64
     },
     "decision_rationale": {
       "count": 25,
@@ -45,10 +45,10 @@
     },
     "file_specific": {
       "count": 25,
-      "ndcg": 0.20848334934272178,
-      "recall": 0.44,
-      "mrr": 0.1387142857142857,
-      "hitRate": 0.52
+      "ndcg": 0.17484893515157102,
+      "recall": 0.36,
+      "mrr": 0.11833333333333335,
+      "hitRate": 0.36
     },
     "cross_cutting": {
       "count": 25,
@@ -59,10 +59,10 @@
     },
     "temporal": {
       "count": 25,
-      "ndcg": 0.3150597880800744,
-      "recall": 0.5266666666666667,
-      "mrr": 0.281984126984127,
-      "hitRate": 0.64
+      "ndcg": 0.2748101836228297,
+      "recall": 0.49333333333333335,
+      "mrr": 0.21093650793650792,
+      "hitRate": 0.56
     },
     "onboarding": {
       "count": 25,
@@ -89,10 +89,10 @@
     },
     "hard": {
       "count": 48,
-      "ndcg": 0.19565826104503603,
-      "recall": 0.3020833333333334,
-      "mrr": 0.23956679894179891,
-      "hitRate": 0.6666666666666666
+      "ndcg": 0.1349683133960302,
+      "recall": 0.21180555555555558,
+      "mrr": 0.16258267195767195,
+      "hitRate": 0.4583333333333333
     }
   }
 }

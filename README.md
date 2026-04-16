@@ -358,10 +358,12 @@ Best category: `single-session-assistant` 98.2%, `knowledge-update` 98.7%. Weake
 
 | Metric | Score |
 |--------|------:|
-| NDCG@10 | 0.351 |
-| Recall@10 | 0.677 |
-| MRR@10 | 0.274 |
-| Hit Rate | 78% |
+| NDCG@10 | 0.327 |
+| Recall@10 | 0.601 |
+| MRR@10 | 0.256 |
+| Hit Rate | 66.0% |
+
+**Ghost Knowledge Hit Rate:** **92.0%** (target 90% met).
 
 **What this measures:** Can an agent find the right error pattern, convention, decision, or ghost rule for a real situation? 500 knowledge entries × 200 natural-language queries across 8 categories and 3 difficulty levels.
 

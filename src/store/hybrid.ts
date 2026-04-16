@@ -16,9 +16,9 @@
  * All five feed into reciprocalRankFusion (default k=60).
  *
  * Post-fusion steps:
- *   1. Type-aware boosting (ghost_knowledge, consolidated entries)
+ *   1. Type-aware boosting (conventions, consolidated entries)
  *   2. Intent-aware boosting (via applyIntentBoost)
- *   3. Tier-based sorting (Mandatory > Recommended > Evidence)
+ *   3. Final sort by boosted score
  */
 
 import type { Database } from "bun:sqlite";
@@ -176,9 +176,9 @@ export async function runHybridSearch(
       const base = scoreMap.get(id) ?? 0;
       let boosted = base;
       
-      // Mandatory rules get highest boost
+      // Mandatory rules get moderate fixed boost
       if (e.type === "ghost_knowledge") {
-        boosted = Math.min(1.0, boosted + 0.15);
+        boosted = Math.min(1.0, boosted + 0.10);
       }
       // Relevancy boost for conventions when file context is present
       if (e.type === "convention" && fileContext.length > 0) {

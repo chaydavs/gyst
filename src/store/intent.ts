@@ -46,7 +46,7 @@ export const INTENT_BOOSTS: IntentBoostTable = {
 const INTENT_PATTERNS: ReadonlyArray<readonly [RegExp, QueryIntent]> = [
   [/\b(fix|error|bug|failing|broken|crash|exception|throws|TypeError|undefined is not)\b/i, "debugging"],
   [/\b(naming|style|format|convention|lint|standard|consistent|pattern)\b/i, "conventions"],
-  [/\b(why|who|when|history|changelog|decided|decision|rationale|motivation)\b/i, "history"],
+  [/\b(why|who|when|history|changelog|decided|decision|rationale|motivation|policy|guidance|rule|protocol)\b/i, "history"],
   [/\b(write|create|add|implement|build|generate|scaffold|new)\b/i, "writing_code"],
 ] as const;
 
