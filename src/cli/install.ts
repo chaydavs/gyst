@@ -182,11 +182,14 @@ function writeJsonConfig(filePath: string, config: McpConfig): void {
  * Claude Code and Codex share the same hooks.json schema; the only
  * difference is the destination directory.
  */
-function writeHooksPlugin(targetDir: string): void {
-  // Resolve scripts dir relative to this file:
-  //   src/cli/install.ts  → ../../plugin/scripts  (dev)
-  //   dist/cli/install.js → ../../plugin/scripts  (prod, same relative depth)
-  const scriptsDir = join(import.meta.dir, "..", "..", "plugin", "scripts");
+export function writeHooksPlugin(targetDir: string): void {
+  const here = import.meta.dir;
+  const candidates = [
+    join(here, "..", "..", "plugin", "scripts"),
+    join(here, "..", "plugin", "scripts"),
+    join(here, "plugin", "scripts"),
+  ];
+  const scriptsDir = candidates.find((p) => existsSync(p)) ?? candidates[0]!;
   const hooksConfig = {
     hooks: [
       { event: "SessionStart", script: join(scriptsDir, "session-start.js"), timeout: 5000 },
@@ -218,7 +221,7 @@ export function mergeGystMcpEntry(config: McpConfig): McpConfig {
 }
 
 /**
- * Returns a new config with Gyst's SessionStart and PreCompact hooks merged
+ * Returns a new config with Gyst's lifecycle hooks merged
  * into the Claude Code `hooks` block. Existing Gyst hooks are replaced to
  * prevent duplicates; non-Gyst hooks are preserved. Does not mutate the original.
  *
@@ -248,6 +251,18 @@ export function mergeClaudeHooks(config: McpConfig): McpConfig {
     matcher: "auto",
     hooks: [{ type: "command", command: "gyst emit pre_compact 2>/dev/null || true" }],
   };
+  const gystPrompt: HookEntry = {
+    matcher: "*",
+    hooks: [{ type: "command", command: "gyst emit prompt 2>/dev/null || true" }],
+  };
+  const gystToolUse: HookEntry = {
+    matcher: "*",
+    hooks: [{ type: "command", command: "gyst emit tool_use 2>/dev/null || true" }],
+  };
+  const gystStop: HookEntry = {
+    matcher: "*",
+    hooks: [{ type: "command", command: "gyst emit session_end 2>/dev/null || true" }],
+  };
 
   const existingHooks =
     typeof config.hooks === "object" && config.hooks !== null
@@ -265,6 +280,9 @@ export function mergeClaudeHooks(config: McpConfig): McpConfig {
       ...existingHooks,
       SessionStart: merge(existingHooks["SessionStart"], gystSessionStart),
       PreCompact: merge(existingHooks["PreCompact"], gystPreCompact),
+      UserPromptSubmit: merge(existingHooks["UserPromptSubmit"], gystPrompt),
+      PostToolUse: merge(existingHooks["PostToolUse"], gystToolUse),
+      Stop: merge(existingHooks["Stop"], gystStop),
     },
   };
 }

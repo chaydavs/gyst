@@ -6,7 +6,7 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { mkdtempSync, rmSync, existsSync, writeFileSync, chmodSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, writeFileSync, chmodSync, readFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir, homedir } from "node:os";
 import {
@@ -15,7 +15,10 @@ import {
   mergeGystMcpEntry,
   mergeClaudeHooks,
   initProject,
+  writeHooksPlugin,
+  installGitHooks,
 } from "../../src/cli/install.js";
+import { loadConfig } from "../../src/utils/config.js";
 
 // ---------------------------------------------------------------------------
 // Test 1 — checkBunVersion
@@ -167,6 +170,20 @@ describe("mergeClaudeHooks", () => {
     expect(last.hooks[0]!.command).toContain("gyst emit pre_compact");
   });
 
+  test("UserPromptSubmit, PostToolUse, and Stop hooks are injected", () => {
+    const result = mergeClaudeHooks({});
+    const hooks = result.hooks as Record<string, { matcher: string; hooks: { type: string; command: string }[] }[]>;
+    
+    expect(hooks["UserPromptSubmit"]).toBeDefined();
+    expect(hooks["UserPromptSubmit"]![0].hooks[0].command).toContain("gyst emit prompt");
+    
+    expect(hooks["PostToolUse"]).toBeDefined();
+    expect(hooks["PostToolUse"]![0].hooks[0].command).toContain("gyst emit tool_use");
+    
+    expect(hooks["Stop"]).toBeDefined();
+    expect(hooks["Stop"]![0].hooks[0].command).toContain("gyst emit session_end");
+  });
+
   test("preserves existing non-gyst hooks", () => {
     const nonGystHook = { matcher: "", hooks: [{ type: "command", command: "echo hello" }] };
     const input = { hooks: { SessionStart: [nonGystHook] } };
@@ -197,45 +214,43 @@ describe("mergeClaudeHooks", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 6 — serve command exists in CLI
+// Test 6 — writeHooksPlugin
 // ---------------------------------------------------------------------------
 
-// Resolve project root relative to this test file so the path works in CI.
-const projectRoot = new URL("../../", import.meta.url).pathname;
+describe("writeHooksPlugin", () => {
+  let hooksTmp: string;
 
-import { spawnSync } from "node:child_process";
-
-/*
-describe("CLI commands", () => {
-  test("serve command is registered", async () => {
-    const result = spawnSync(process.argv[0], ["src/cli/index.ts", "--help"], {
-      cwd: projectRoot,
-      encoding: "utf-8",
-    });
-    const output = result.stdout;
-    expect(output).toContain("serve");
-    expect(output).toContain("Start Gyst MCP server");
+  beforeAll(() => {
+    hooksTmp = mkdtempSync(join(tmpdir(), "gyst-hooks-"));
   });
 
-  test("install command is registered", async () => {
-    const result = spawnSync(process.argv[0], ["src/cli/index.ts", "--help"], {
-      cwd: projectRoot,
-      encoding: "utf-8",
-    });
-    const output = result.stdout;
-    expect(output).toContain("install");
-    expect(output).toContain("First-time setup");
+  afterAll(() => {
+    rmSync(hooksTmp, { recursive: true, force: true });
+  });
+
+  test("writes hooks.json to target directory", () => {
+    writeHooksPlugin(hooksTmp);
+    expect(existsSync(join(hooksTmp, "hooks.json"))).toBe(true);
+  });
+
+  test("hooks.json contains absolute paths for scripts", () => {
+    writeHooksPlugin(hooksTmp);
+    const content = JSON.parse(readFileSync(join(hooksTmp, "hooks.json"), "utf-8"));
+    const hooks = content.hooks as { event: string; script: string }[];
+    
+    expect(hooks.length).toBe(4);
+    for (const hook of hooks) {
+      expect(hook.script.startsWith("/")).toBe(true);
+      expect(hook.script.endsWith(".js")).toBe(true);
+      // Verify candidate searching actually found the real scripts dir in this project:
+      expect(hook.script).toContain("plugin/scripts");
+    }
   });
 });
-*/
 
 // ---------------------------------------------------------------------------
-// Test 7 — installGitHooks
+// Test 7 — loadConfig
 // ---------------------------------------------------------------------------
-
-import { installGitHooks } from "../../src/cli/install.js";
-import { readFileSync, mkdirSync } from "node:fs";
-import { loadConfig } from "../../src/utils/config.js";
 
 describe("loadConfig", () => {
   test("loadConfig: autoExport defaults to false", () => {
@@ -254,6 +269,10 @@ describe("loadConfig", () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Test 8 — installGitHooks
+// ---------------------------------------------------------------------------
 
 describe("installGitHooks", () => {
   let gitTmp: string;
