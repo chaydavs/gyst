@@ -235,11 +235,11 @@ describe("applyIntentBoost", () => {
     expect(result.get("h1")).toBeCloseTo(0.62);
   });
 
-  test("history: ghost_knowledge entry gets +0.05 boost", () => {
+  test("history: ghost_knowledge entry gets +0.15 boost", () => {
     const entries = [makeEntry("h2", "ghost_knowledge")];
     const scores: ReadonlyMap<string, number> = new Map([["h2", 0.50]]);
     const result = applyIntentBoost(entries, scores, "history");
-    expect(result.get("h2")).toBeCloseTo(0.55);
+    expect(result.get("h2")).toBeCloseTo(0.65);
   });
 
   test("multiple entries in one call — each boosted independently", () => {
