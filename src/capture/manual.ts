@@ -33,6 +33,11 @@ export interface ManualInput {
   readonly content: string;
   readonly files?: readonly string[];
   readonly tags?: readonly string[];
+  /**
+   * Visibility scope. Optional — when omitted, `extractEntry` applies type-based
+   * defaults (personal, except ghost_knowledge which defaults to team).
+   */
+  readonly scope?: "personal" | "team" | "project";
 }
 
 // ---------------------------------------------------------------------------
@@ -123,6 +128,7 @@ export async function addManualEntry(
     content: safeContent,
     files: safeFiles,
     tags: safeTags,
+    scope: input.scope,
   };
 
   // 3. Extract entry (generate ID, normalize fields)
@@ -132,6 +138,7 @@ export async function addManualEntry(
     content: safeInput.content,
     files: [...safeFiles],
     tags: [...safeTags],
+    scope: safeInput.scope,
   };
   const entry = extractEntry(learnInput);
 

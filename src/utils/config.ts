@@ -33,6 +33,14 @@ const ConfigSchema = z.object({
     .default("info"),
   /** When true, write markdown files after every learn. Default: false. */
   autoExport: z.boolean().default(false),
+  /**
+   * When true, the rule-based classifier is allowed to scope entries as
+   * "team" based on team-signal phrases ("we use", "always", "never", …).
+   * Default is false — entries stay personal until the user runs
+   * `gyst team init`, which flips this flag. Prevents a single-dev project
+   * from accidentally polluting a shared team layer that does not exist.
+   */
+  teamMode: z.boolean().default(false),
 });
 
 /** Fully-resolved Gyst configuration. */

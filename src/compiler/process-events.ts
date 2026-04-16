@@ -25,6 +25,24 @@ import { parseError } from "./parsers/error.js";
 import { extractContextFromPrompt } from "./parsers/prompt.js";
 import { parseAdr } from "./parsers/markdown-adr.js";
 import { parsePlanDoc } from "./parsers/markdown-headings.js";
+import { loadConfig } from "../utils/config.js";
+
+/**
+ * Returns true when the project has opted into team mode (`gyst team init`
+ * writes `teamMode: true` to `.gyst-wiki.json`). The `_db` parameter is
+ * accepted for future DB-backed settings; not currently consulted.
+ *
+ * Wrapped in a try/catch because classify runs in the hot path and a
+ * malformed config must never crash event processing — it just means
+ * every entry stays personal, which is the safe default.
+ */
+function isTeamModeActive(_db: Database): boolean {
+  try {
+    return loadConfig().teamMode;
+  } catch {
+    return false;
+  }
+}
 
 export interface ProcessOptions {
   readonly limit?: number;
@@ -167,7 +185,12 @@ function createEntryFromEvent(
 ): boolean {
   const id = randomUUID();
   const now = new Date().toISOString();
-  const scope = verdict.scopeHint === "uncertain" ? "personal" : verdict.scopeHint;
+  // Default to personal — event-classifier scopeHints are advisory signals,
+  // not team policy. Promoting to team scope requires explicit opt-in (either
+  // `gyst team init` or a caller passing scope through `learn`).
+  const scope = isTeamModeActive(db) && verdict.scopeHint !== "uncertain"
+    ? verdict.scopeHint
+    : "personal";
 
   const title = deriveTitle(eventType, payload);
   const content = deriveContent(eventType, payload);
