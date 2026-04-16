@@ -34,6 +34,7 @@ import { loadConfig } from "../../utils/config.js";
 import { formatForContext } from "../../utils/format-recall.js";
 import { logger } from "../../utils/logger.js";
 import { emitEvent } from "../../store/events.js";
+import { getStructuralForEntries } from "../../store/structural.js";
 
 // ---------------------------------------------------------------------------
 // Input schema
@@ -392,6 +393,30 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
       });
 
       let formatted = formatForContext(formattableEntries, budget);
+
+      // Phase B.3: attach an adjacent structural sidecar (graphify AST) for
+      // the files touched by the top-ranked curated results. Strictly
+      // post-retrieval — never interleaved with the ranked list and only when
+      // headroom remains in the context budget (keep at most ~200 tokens).
+      if (!isGlobalResult && filtered.length > 0 && budget >= 1500) {
+        try {
+          const topIds = filtered.slice(0, 5).map((e) => e.id);
+          const adjacent = getStructuralForEntries(db, topIds, input.files ?? [], 5);
+          if (adjacent.length > 0) {
+            const lines = adjacent.map(
+              (s) =>
+                `  • ${s.label}${s.sourceLocation ? ` @${s.sourceLocation}` : ""} — ${s.filePath}`,
+            );
+            formatted +=
+              "\n\n📐 Structural context (graphify, adjacent — not ranked):\n" +
+              lines.join("\n");
+          }
+        } catch (err) {
+          logger.warn("recall: structural adjacent lookup failed", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
 
       // Staleness warning: zero results on a non-trivial query may indicate
       // the SQLite index is out of sync with the wiki markdown files.
