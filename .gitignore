@@ -37,11 +37,19 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 *.db
 *.db-journal
 *.db-wal
+*.db-shm
+
+# Playwright MCP trace/log output
+.playwright-mcp/
 
 # Test-generated wiki artifacts (convention detector outputs with hash suffixes)
 # See memory/feedback_ship_cleanup.md — tests write real markdown into gyst-wiki/
 # and the 8-char hash suffix uniquely identifies the generated files.
 gyst-wiki/**/*-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].md
+
+# Generated wiki — the whole tree is regenerated from SQLite via `gyst export`.
+# SQLite is the source of truth (see CLAUDE.md Architecture Rules).
+gyst-wiki/
 
 # LongMemEval dataset (277MB — re-downloaded by run.ts)
 tests/benchmark/longmemeval/data/
