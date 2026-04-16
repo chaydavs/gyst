@@ -242,9 +242,21 @@ const SCHEMA_STATEMENTS: readonly string[] = [
     status       TEXT    NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
     error        TEXT,
     created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
-    processed_at TEXT
+    processed_at TEXT,
+    session_id   TEXT
   )`,
   "CREATE INDEX IF NOT EXISTS idx_event_queue_status ON event_queue(status)",
+  "CREATE INDEX IF NOT EXISTS idx_event_queue_session ON event_queue(session_id)",
+
+  // ----- sessions -----
+  `CREATE TABLE IF NOT EXISTS sessions (
+    id            TEXT    NOT NULL PRIMARY KEY,
+    developer_id  TEXT,
+    tool          TEXT,
+    started_at    TEXT    NOT NULL,
+    ended_at      TEXT,
+    metadata      TEXT    -- JSON
+  )`,
 ];
 
 // ---------------------------------------------------------------------------
@@ -318,6 +330,13 @@ export function initDatabase(path: string = "gyst-wiki/.wiki.db"): Database {
     // Migration: add markdown_path column to entries for existing DBs.
     try {
       db.run("ALTER TABLE entries ADD COLUMN markdown_path TEXT");
+    } catch {
+      // Column already exists — safe to ignore.
+    }
+
+    // Migration: add session_id column to event_queue for existing DBs.
+    try {
+      db.run("ALTER TABLE event_queue ADD COLUMN session_id TEXT");
     } catch {
       // Column already exists — safe to ignore.
     }

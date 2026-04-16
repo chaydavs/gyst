@@ -35,10 +35,11 @@ export function emitEvent(
   type: EventType,
   payload: EventPayload,
 ): void {
+  const sessionId = payload.sessionId ?? null;
   withRetry(() => {
     db.run(
-      "INSERT INTO event_queue (type, payload) VALUES (?, ?)",
-      [type, JSON.stringify(payload)],
+      "INSERT INTO event_queue (type, payload, session_id) VALUES (?, ?, ?)",
+      [type, JSON.stringify(payload), sessionId],
     );
   }, 3, 50); // Aggressive retry with short delay for hooks
 }
