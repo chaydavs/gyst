@@ -11,6 +11,7 @@
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Database } from "bun:sqlite";
+import { emitEvent, type EventType } from "../store/events.js";
 import { registerLearnTool } from "./tools/learn.js";
 import { registerRecallTool } from "./tools/recall.js";
 import { registerConventionsTool } from "./tools/conventions.js";
@@ -70,6 +71,8 @@ export interface ToolContext {
  * @param ctx    - Context object with database and optional team identifiers.
  */
 export function registerAllTools(server: McpServer, ctx: ToolContext): void {
+  instrumentServer(server, ctx.db);
+
   registerLearnTool(server, ctx);
   registerRecallTool(server, ctx);
   registerConventionsTool(server, ctx);
@@ -107,4 +110,43 @@ To be effective, you must follow these behavioral rules:
       ],
     }),
   );
+}
+
+/**
+ * Instruments the McpServer by wrapping its `tool` method.
+ *
+ * Every tool registered AFTER this call will have its handler wrapped to
+ * emit a `tool_use` event to the database upon completion.
+ */
+export function instrumentServer(server: McpServer, db: Database): void {
+  const original = server.tool.bind(server) as typeof server.tool;
+
+  // @ts-expect-error — re-typing the method to preserve all overload shapes.
+  server.tool = (...args: unknown[]) => {
+    const name = args[0] as string;
+    const last = args[args.length - 1];
+
+    if (typeof last === "function") {
+      const cb = last as (...cbArgs: unknown[]) => Promise<unknown> | unknown;
+      const wrapped = async (...cbArgs: unknown[]) => {
+        try {
+          return await cb(...cbArgs);
+        } finally {
+          try {
+            emitEvent(db, "tool_use" as EventType, {
+              tool: name,
+              args: cbArgs[0] ?? {},
+              ts: Date.now(),
+            });
+          } catch {
+            // fire-and-forget
+          }
+        }
+      };
+      args[args.length - 1] = wrapped;
+    }
+
+    // @ts-expect-error — pass-through
+    return original(...args);
+  };
 }
