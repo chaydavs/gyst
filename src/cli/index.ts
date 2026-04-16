@@ -440,6 +440,27 @@ program.command("consolidate").description("Run maintenance pipeline").action(as
   process.stdout.write(`Consolidation complete (Merged: ${report.duplicatesMerged})\n`);
 });
 
+program.command("process-events").description("Promote high-signal events to knowledge entries").option("-l, --limit <limit>", "Max events to process", "50").option("-t, --threshold <threshold>", "Signal threshold (0..1)", "0.5").action(async (opts) => {
+  try {
+    const config = loadConfig();
+    const db = initDatabase(config.dbPath);
+    const { processEvents } = await import("../compiler/process-events.js");
+    const report = await processEvents(db, {
+      limit: parseInt(opts.limit, 10),
+      signalThreshold: parseFloat(opts.threshold),
+    });
+    db.close();
+    process.stdout.write(`Processed ${report.processed} event(s):\n`);
+    process.stdout.write(`  Entries created: ${report.entriesCreated}\n`);
+    process.stdout.write(`  Skipped:         ${report.skipped}\n`);
+    process.stdout.write(`  Failed:          ${report.failed}\n`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    process.stdout.write(`Error: ${message}\n`);
+    process.exit(1);
+  }
+});
+
 program.command("harvest-session").description("Harvest from Claude Code").action(async () => {
   const { runHarvestSession } = await import("./harvest.js");
   await runHarvestSession();
@@ -478,6 +499,25 @@ program.command("sync").description("Alias for rebuild").action(async () => {
   const stats = await rebuildFromMarkdown(config);
   process.stdout.write(`Rebuild complete (Total: ${stats.total})\n`);
 });
+
+program
+  .command("recap")
+  .description("Summarize recent session activity")
+  .option("-s, --since <minutes>", "Look back window in minutes", "60")
+  .action(async (options: { since: string }) => {
+    try {
+      const config = loadConfig();
+      const db = initDatabase(config.dbPath);
+      const { renderRecap } = await import("./recap.js");
+      const recap = renderRecap(db, { sinceMinutes: parseInt(options.since, 10) });
+      db.close();
+      process.stdout.write(recap + "\n");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stdout.write(`Error: ${message}\n`);
+      process.exit(1);
+    }
+  });
 
 program.command("inject-context").description("Inject session context").option("--always-on").option("--graph-traverse").action(async (opts) => {
   const config = loadConfig();
