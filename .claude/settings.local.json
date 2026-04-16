@@ -130,7 +130,8 @@
       "Bash(awk NR>=469 && NR<=492 *)",
       "Bash(awk NR>=146 && NR<=155 *)",
       "Bash(grep -n \"hook\" plugin/scripts/*.js)",
-      "Bash(grep *)"
+      "Bash(grep *)",
+      "Bash(gh api *)"
     ]
   }
 }
