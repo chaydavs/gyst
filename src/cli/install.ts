@@ -113,7 +113,9 @@ export function detectTools(): ToolInfo[] {
     {
       name: "Claude Code",
       detected: existsSync(join(home, ".claude")),
-      configPath: join(home, ".claude", "settings.json"),
+      // Claude Code reads user-level MCPs from ~/.claude.json (shown in /mcp dialog).
+      // Hooks live in ~/.claude/settings.json — registerHooks() handles that separately.
+      configPath: join(home, ".claude.json"),
     },
     {
       name: "Cursor",
@@ -556,8 +558,10 @@ async function registerHooks(tools: ToolInfo[]): Promise<void> {
     }
 
     try {
-      const existing = readJsonConfig(claude.configPath);
-      writeJsonConfig(claude.configPath, mergeClaudeHooks(existing));
+      // Hooks always go to ~/.claude/settings.json (not ~/.claude.json which is for MCPs)
+      const settingsPath = join(homedir(), ".claude", "settings.json");
+      const existing = readJsonConfig(settingsPath);
+      writeJsonConfig(settingsPath, mergeClaudeHooks(existing));
       process.stdout.write("    Claude Code settings.json hooks  ✓ (SessionStart, PreCompact)\n");
       totalRegistered += 2;
     } catch (err) {
