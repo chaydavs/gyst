@@ -135,7 +135,9 @@ export function detectTools(): ToolInfo[] {
     {
       name: "Codex CLI",
       detected: existsSync(join(home, ".codex")) || hasCli("codex"),
-      configPath: join(home, ".codex", "config.json"),
+      // Codex v0.121+ uses config.toml; we register via `codex mcp add` CLI
+      // rather than writing JSON. configPath is kept as a sentinel for detection.
+      configPath: join(home, ".codex", "config.toml"),
     },
     {
       name: "OpenCode",
@@ -411,6 +413,30 @@ async function registerMcpForTools(
   const configured: string[] = [];
 
   for (const tool of tools.filter((t) => t.detected)) {
+    // Codex CLI v0.121+ uses config.toml and a native `codex mcp add` command
+    if (tool.name === "Codex CLI") {
+      try {
+        // Check if already registered
+        const checkResult = spawnSync("codex", ["mcp", "list"], { encoding: "utf-8" });
+        const alreadyRegistered = checkResult.stdout?.includes("gyst");
+        if (alreadyRegistered) {
+          process.stdout.write(`    ${tool.name}: already configured\n`);
+        } else {
+          const addResult = spawnSync("codex", ["mcp", "add", "gyst", "--", "bunx", "gyst-mcp", "serve"], { encoding: "utf-8" });
+          if (addResult.status === 0) {
+            process.stdout.write(`    ${tool.name}: registered via codex mcp add ✓\n`);
+          } else {
+            process.stdout.write(`    ${tool.name}: codex mcp add failed — ${addResult.stderr ?? ""}\n`);
+          }
+        }
+        configured.push(tool.name);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stdout.write(`    ${tool.name}: failed (${msg})\n`);
+      }
+      continue;
+    }
+
     const existing = readJsonConfig(tool.configPath);
     const alreadyConfigured =
       typeof existing.mcpServers === "object" &&
