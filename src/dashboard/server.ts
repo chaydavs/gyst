@@ -132,17 +132,17 @@ function broadcastSSE(data: Record<string, unknown>): void {
 // ---------------------------------------------------------------------------
 
 const CreateEntrySchema = z.object({
-  type: z.enum(["error_pattern", "convention", "decision", "learning"]),
-  title: z.string().min(5),
-  content: z.string().min(10),
+  type: z.enum(["error_pattern", "convention", "decision", "learning", "ghost_knowledge"]),
+  title: z.string().min(1),
+  content: z.string().min(1),
   scope: z.string(),
   tags: z.array(z.string()).optional(),
   files: z.array(z.string()).optional(),
 });
 
 const UpdateEntrySchema = z.object({
-  title: z.string().min(5).optional(),
-  content: z.string().min(10).optional(),
+  title: z.string().min(1).optional(),
+  content: z.string().min(1).optional(),
   scope: z.string().optional(),
   tags: z.array(z.string()).optional(),
 });
@@ -345,6 +345,7 @@ export async function startDashboardServer(
     try {
       return Bun.serve({
         port,
+        idleTimeout: 0,   // disable per-request timeout so SSE streams don't get killed
         async fetch(req: Request): Promise<Response> {
           const requestId = crypto.randomUUID();
           const start = performance.now();
@@ -537,6 +538,14 @@ export async function startDashboardServer(
               // /api/review-queue
               if (path === "/api/review-queue") {
                 try {
+                  // Table may not exist on fresh installs before `gyst setup`
+                  const tableExists = db
+                    .query<{ n: number }, []>("SELECT COUNT(*) as n FROM sqlite_master WHERE type='table' AND name='review_queue'")
+                    .get();
+                  if (!tableExists || tableExists.n === 0) {
+                    logAccess(requestId, method, path, start, 200);
+                    return jsonResponse([], 200, requestId);
+                  }
                   interface ReviewQueueRow {
                     id: string;
                     entry_id: string;
@@ -1064,6 +1073,21 @@ export async function startDashboardServer(
               // /api/team/invite
               if (path === "/api/team/invite") {
                 try {
+                  // Ensure teams + api_keys tables exist on installs that skipped `gyst setup`
+                  db.run(`CREATE TABLE IF NOT EXISTS teams (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                  )`);
+                  db.run(`CREATE TABLE IF NOT EXISTS api_keys (
+                    key_hash TEXT NOT NULL PRIMARY KEY,
+                    team_id TEXT NOT NULL,
+                    type TEXT NOT NULL DEFAULT 'invite',
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT,
+                    revoked INTEGER NOT NULL DEFAULT 0,
+                    developer_id TEXT
+                  )`);
                   interface TeamRow { id: string }
                   let team = db
                     .query<TeamRow, []>("SELECT id FROM teams LIMIT 1")
