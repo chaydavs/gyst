@@ -105,12 +105,37 @@
     .node.ghost path.shape { animation: ghost-pulse 2.2s ease-in-out infinite; }
 
     #tooltip { position: fixed; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 12px; pointer-events: none; display: none; max-width: 280px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+
+    /* Queue badge */
+    .queue-badge { display: inline-flex; align-items: center; justify-content: center; background: var(--danger); color: #000; font-size: 10px; font-weight: 700; min-width: 18px; height: 18px; border-radius: 9px; padding: 0 5px; margin-left: 4px; }
+
+    /* Queue view */
+    .queue-container { padding: 24px; overflow-y: auto; height: 100%; }
+    .queue-container h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--text); }
+    .queue-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; transition: opacity 0.3s, transform 0.3s; }
+    .queue-card.removing { opacity: 0; transform: translateX(40px); }
+    .queue-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+    .queue-card-title { font-size: 14px; font-weight: 600; color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .queue-type-badge { display: inline-block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 10px; border: 1px solid; }
+    .queue-reason { font-size: 11px; color: var(--muted); background: var(--bg); border: 1px solid var(--border); display: inline-block; padding: 2px 8px; border-radius: 10px; margin-bottom: 8px; }
+    .queue-content { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 10px; word-break: break-word; }
+    .queue-meta { display: flex; align-items: center; gap: 12px; font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+    .queue-confidence-bar { width: 60px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; }
+    .queue-confidence-fill { height: 100%; border-radius: 3px; }
+    .queue-actions { display: flex; gap: 8px; }
+    .queue-actions button { border: 1px solid var(--border); background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: border-color 0.15s, color 0.15s, background 0.15s; }
+    .queue-actions button:hover { border-color: var(--accent); color: var(--text); }
+    .queue-actions button.confirm-btn:hover { background: rgba(123, 216, 143, 0.15); border-color: #7bd88f; color: #7bd88f; }
+    .queue-actions button.archive-btn:hover { background: rgba(255, 85, 85, 0.15); border-color: var(--danger); color: var(--danger); }
+    .queue-empty { color: var(--muted); display: flex; align-items: center; justify-content: center; height: 60%; font-size: 14px; flex-direction: column; gap: 8px; text-align: center; }
+    .queue-empty .sub { font-size: 12px; opacity: 0.7; }
   </style>
 </head>
 <body>
   <nav>
     <h1>Gyst</h1>
     <button class="view-btn active" data-view="graph">Graph</button>
+    <button class="view-btn" data-view="queue">Queue <span id="queue-badge" class="queue-badge" style="display:none"></span></button>
     <button class="view-btn" data-view="files">Files</button>
     <button class="view-btn" data-view="timeline">Timeline</button>
     
@@ -613,6 +638,203 @@
         });
     }
 
+    // ─── Queue view ──────────────────────────────────────────────────────────
+    let queueData = [];
+    let skippedIds = new Set();
+
+    function confidenceColor(c) {
+      if (c < 0.3) return 'var(--danger)';
+      if (c < 0.6) return '#ffb454';
+      return '#7bd88f';
+    }
+
+    function typeColor(type) {
+      return NODE_COLORS[type] || DEFAULT_COLOR;
+    }
+
+    async function loadQueueBadge() {
+      try {
+        const data = await fetch('/api/review-queue').then(r => r.json());
+        queueData = data;
+        const badge = document.getElementById('queue-badge');
+        if (data.length > 0) {
+          badge.textContent = data.length;
+          badge.style.display = 'inline-flex';
+        } else {
+          badge.style.display = 'none';
+        }
+      } catch (_e) {
+        /* badge stays hidden */
+      }
+    }
+
+    async function handleQueueAction(entryId, action, cardEl) {
+      cardEl.classList.add('removing');
+      try {
+        await fetch(
+          '/api/review-queue/' + encodeURIComponent(entryId) + '/' + action,
+          { method: 'POST' },
+        );
+      } catch (_e) { /* best-effort */ }
+      if (action === 'skip') skippedIds.add(entryId);
+      setTimeout(() => {
+        cardEl.remove();
+        const remaining = document.querySelectorAll('.queue-card:not(.removing)').length;
+        const badge = document.getElementById('queue-badge');
+        if (remaining > 0) {
+          badge.textContent = remaining;
+          badge.style.display = 'inline-flex';
+        } else {
+          badge.style.display = 'none';
+          const container = document.querySelector('.queue-container');
+          if (container && container.querySelectorAll('.queue-card').length === 0) {
+            container.querySelector('h2')?.remove();
+            const empty = document.createElement('div');
+            empty.className = 'queue-empty';
+            empty.appendChild(Object.assign(document.createElement('div'), { textContent: 'Nothing to review' }));
+            const sub = document.createElement('div');
+            sub.className = 'sub';
+            sub.textContent = 'Your knowledge base is clean';
+            empty.appendChild(sub);
+            container.appendChild(empty);
+          }
+        }
+      }, 300);
+    }
+
+    function buildQueueCard(item) {
+      const card = document.createElement('div');
+      card.className = 'queue-card';
+      card.dataset.id = item.id;
+
+      const tc = typeColor(item.type);
+      const cc = confidenceColor(item.confidence);
+      const pct = Math.round(item.confidence * 100);
+      const created = new Date(item.createdAt).toLocaleDateString();
+
+      // Header
+      const header = document.createElement('div');
+      header.className = 'queue-card-header';
+      const title = document.createElement('span');
+      title.className = 'queue-card-title';
+      title.textContent = item.title;
+      const typeBadge = document.createElement('span');
+      typeBadge.className = 'queue-type-badge';
+      typeBadge.style.color = tc;
+      typeBadge.style.borderColor = tc;
+      typeBadge.textContent = item.type;
+      header.appendChild(title);
+      header.appendChild(typeBadge);
+
+      // Reason
+      const reason = document.createElement('span');
+      reason.className = 'queue-reason';
+      reason.textContent = item.reason;
+
+      // Content
+      const content = document.createElement('div');
+      content.className = 'queue-content';
+      content.textContent = item.content;
+
+      // Meta
+      const meta = document.createElement('div');
+      meta.className = 'queue-meta';
+      const confLabel = document.createElement('span');
+      confLabel.textContent = 'Confidence: ' + pct + '%';
+      const bar = document.createElement('span');
+      bar.className = 'queue-confidence-bar';
+      const fill = document.createElement('span');
+      fill.className = 'queue-confidence-fill';
+      fill.style.width = pct + '%';
+      fill.style.background = cc;
+      bar.appendChild(fill);
+      const dateLabel = document.createElement('span');
+      dateLabel.textContent = 'Created ' + created;
+      meta.appendChild(confLabel);
+      meta.appendChild(bar);
+      meta.appendChild(dateLabel);
+
+      // Actions
+      const actions = document.createElement('div');
+      actions.className = 'queue-actions';
+
+      const confirmBtn = document.createElement('button');
+      confirmBtn.className = 'confirm-btn';
+      confirmBtn.textContent = 'Confirm \u2713';
+      confirmBtn.addEventListener('click', () => handleQueueAction(item.id, 'confirm', card));
+
+      const archiveBtn = document.createElement('button');
+      archiveBtn.className = 'archive-btn';
+      archiveBtn.textContent = 'Archive \u2717';
+      archiveBtn.addEventListener('click', () => handleQueueAction(item.id, 'archive', card));
+
+      const skipBtn = document.createElement('button');
+      skipBtn.textContent = 'Skip \u2192';
+      skipBtn.addEventListener('click', () => handleQueueAction(item.id, 'skip', card));
+
+      actions.appendChild(confirmBtn);
+      actions.appendChild(archiveBtn);
+      actions.appendChild(skipBtn);
+
+      card.appendChild(header);
+      card.appendChild(reason);
+      card.appendChild(content);
+      card.appendChild(meta);
+      card.appendChild(actions);
+      return card;
+    }
+
+    async function renderQueue() {
+      canvas.textContent = '';
+      const loading = document.createElement('div');
+      loading.style.cssText = 'color:var(--muted);display:flex;align-items:center;justify-content:center;height:100%';
+      loading.textContent = 'Loading queue\u2026';
+      canvas.appendChild(loading);
+
+      try {
+        queueData = await fetch('/api/review-queue').then(r => r.json());
+      } catch (_e) {
+        canvas.textContent = '';
+        const err = document.createElement('div');
+        err.style.cssText = 'color:var(--muted);padding:24px';
+        err.textContent = 'Review queue unavailable.';
+        canvas.appendChild(err);
+        return;
+      }
+
+      const visible = queueData.filter(item => !skippedIds.has(item.id));
+      const badge = document.getElementById('queue-badge');
+
+      if (visible.length === 0) {
+        canvas.textContent = '';
+        const empty = document.createElement('div');
+        empty.className = 'queue-empty';
+        empty.appendChild(Object.assign(document.createElement('div'), { textContent: 'Nothing to review' }));
+        const sub = document.createElement('div');
+        sub.className = 'sub';
+        sub.textContent = 'Your knowledge base is clean';
+        empty.appendChild(sub);
+        canvas.appendChild(empty);
+        badge.style.display = 'none';
+        return;
+      }
+
+      badge.textContent = visible.length;
+      badge.style.display = 'inline-flex';
+
+      canvas.textContent = '';
+      const container = document.createElement('div');
+      container.className = 'queue-container';
+      const heading = document.createElement('h2');
+      heading.textContent = 'Review Queue (' + visible.length + ')';
+      container.appendChild(heading);
+
+      for (const item of visible) {
+        container.appendChild(buildQueueCard(item));
+      }
+      canvas.appendChild(container);
+    }
+
     // ─── View switching ───────────────────────────────────────────────────────
     function setView(v) {
       currentView = v;
@@ -627,6 +849,8 @@
         setView(btn.dataset.view);
         if (currentView === 'graph') {
           renderGraph();
+        } else if (currentView === 'queue') {
+          await renderQueue();
         } else if (currentView === 'files') {
           await renderFiles();
         } else if (currentView === 'timeline') {
@@ -688,7 +912,7 @@
 
     // ─── Boot ─────────────────────────────────────────────────────────────────
     (async () => {
-      await loadStats();
+      await Promise.all([loadStats(), loadQueueBadge()]);
       const graphData = await fetch('/api/graph').then(r => r.json());
       renderGraph(graphData);
     })();

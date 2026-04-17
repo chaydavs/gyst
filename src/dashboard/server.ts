@@ -182,10 +182,147 @@ function getEntriesByScope(db: Database, scope?: string, limit: number = 100): a
 }
 
 // ---------------------------------------------------------------------------
+// Review queue helpers
+// ---------------------------------------------------------------------------
+
+/** A single item in the review queue. */
+interface ReviewItem {
+  readonly id: string;
+  readonly title: string;
+  readonly content: string;
+  readonly type: string;
+  readonly confidence: number;
+  readonly reason: string;
+  readonly reasonCode: string;
+  readonly createdAt: string;
+  readonly lastConfirmed: string | null;
+}
+
+interface EntryRow {
+  id: string;
+  title: string;
+  content: string;
+  type: string;
+  confidence: number;
+  created_at: string;
+  last_confirmed: string | null;
+}
+
+/**
+ * Builds the review queue by gathering entries from four sources:
+ * low confidence, stale, borderline, and flagged. De-duplicates by entry ID
+ * and preserves source-priority ordering. Returns at most 50 items.
+ */
+function buildReviewQueue(db: Database): ReadonlyArray<ReviewItem> {
+  const seen = new Set<string>();
+  const items: ReviewItem[] = [];
+
+  const toItem = (row: EntryRow, reason: string, reasonCode: string): ReviewItem => ({
+    id: row.id,
+    title: row.title,
+    content: row.content.length > 200 ? row.content.slice(0, 200) : row.content,
+    type: row.type,
+    confidence: row.confidence,
+    reason,
+    reasonCode,
+    createdAt: row.created_at,
+    lastConfirmed: row.last_confirmed ?? null,
+  });
+
+  const push = (rows: readonly EntryRow[], reason: string, reasonCode: string): void => {
+    for (const row of rows) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      items.push(toItem(row, reason, reasonCode));
+    }
+  };
+
+  // 1. Low confidence
+  const lowConf = db
+    .query<EntryRow, []>(
+      "SELECT id, title, content, type, confidence, created_at, last_confirmed FROM entries WHERE status = 'active' AND confidence < 0.4 ORDER BY confidence ASC",
+    )
+    .all();
+  push(lowConf, "Low confidence \u2014 needs review", "low_confidence");
+
+  // 2. Stale (last_confirmed is NULL or older than 60 days)
+  const stale = db
+    .query<EntryRow, []>(
+      `SELECT id, title, content, type, confidence, created_at, last_confirmed
+       FROM entries
+       WHERE status = 'active'
+         AND (last_confirmed IS NULL OR last_confirmed < datetime('now', '-60 days'))
+       ORDER BY last_confirmed ASC`,
+    )
+    .all();
+  push(stale, "Not confirmed in 60+ days", "stale");
+
+  // 3. Borderline classifier
+  const borderline = db
+    .query<EntryRow, []>(
+      "SELECT id, title, content, type, confidence, created_at, last_confirmed FROM entries WHERE status = 'active' AND confidence >= 0.4 AND confidence <= 0.6 ORDER BY confidence ASC",
+    )
+    .all();
+  push(borderline, "Borderline classification", "borderline");
+
+  // 4. Flagged (notes contain 'flagged' or received negative feedback)
+  const flagged = db
+    .query<EntryRow, []>(
+      `SELECT DISTINCT e.id, e.title, e.content, e.type, e.confidence, e.created_at, e.last_confirmed
+       FROM entries e
+       INNER JOIN feedback f ON f.entry_id = e.id
+       WHERE e.status = 'active'
+         AND (LOWER(f.note) LIKE '%flagged%' OR f.helpful = 0)
+       ORDER BY f.timestamp DESC`,
+    )
+    .all();
+  push(flagged, "Flagged by teammate", "flagged");
+
+  return items.slice(0, 50);
+}
+
+/**
+ * Confirms a review-queue entry: bumps confidence and updates last_confirmed.
+ */
+function confirmEntry(db: Database, entryId: string): boolean {
+  const row = db
+    .query<{ id: string; confidence: number }, [string]>(
+      "SELECT id, confidence FROM entries WHERE id = ? AND status = 'active'",
+    )
+    .get(entryId);
+  if (!row) return false;
+
+  const newConfidence = Math.max(row.confidence + 0.15, 0.8);
+  const now = new Date().toISOString();
+  db.query<void, [number, string, string]>(
+    "UPDATE entries SET confidence = ?, last_confirmed = ? WHERE id = ?",
+  ).run(newConfidence, now, entryId);
+  return true;
+}
+
+/**
+ * Archives a review-queue entry by setting its status to 'archived'.
+ */
+function archiveEntry(db: Database, entryId: string): boolean {
+  const row = db
+    .query<{ id: string }, [string]>(
+      "SELECT id FROM entries WHERE id = ? AND status = 'active'",
+    )
+    .get(entryId);
+  if (!row) return false;
+
+  db.query<void, [string]>(
+    "UPDATE entries SET status = 'archived' WHERE id = ?",
+  ).run(entryId);
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Route regex helpers
 // ---------------------------------------------------------------------------
 
 const GRAPH_NODE_RE = /^\/api\/graph\/([^/]+)$/;
+const REVIEW_ACTION_RE = /^\/api\/review-queue\/([^/]+)\/(confirm|archive|skip)$/;
 
 // ---------------------------------------------------------------------------
 // Main export
@@ -224,13 +361,55 @@ export async function startDashboardServer(
                 status: 204,
                 headers: {
                   "Access-Control-Allow-Origin": CORS_ORIGIN,
-                  "Access-Control-Allow-Methods": "GET, OPTIONS",
+                  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
                   "Access-Control-Allow-Headers": "Content-Type",
                   "X-Request-Id": requestId,
                 },
               });
               logAccess(requestId, method, path, start, 204);
               return res;
+            }
+
+            // POST: review-queue actions (confirm / archive / skip)
+            if (method === "POST") {
+              const actionMatch = REVIEW_ACTION_RE.exec(path);
+              if (actionMatch !== null) {
+                const entryId = decodeURIComponent(actionMatch[1] ?? "");
+                const action = actionMatch[2];
+
+                if (action === "skip") {
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse({ ok: true }, 200, requestId);
+                }
+
+                if (action === "confirm") {
+                  const ok = confirmEntry(db, entryId);
+                  if (!ok) {
+                    logAccess(requestId, method, path, start, 404);
+                    return jsonResponse(
+                      { error: "Entry not found" },
+                      404,
+                      requestId,
+                    );
+                  }
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse({ ok: true }, 200, requestId);
+                }
+
+                if (action === "archive") {
+                  const ok = archiveEntry(db, entryId);
+                  if (!ok) {
+                    logAccess(requestId, method, path, start, 404);
+                    return jsonResponse(
+                      { error: "Entry not found" },
+                      404,
+                      requestId,
+                    );
+                  }
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse({ ok: true }, 200, requestId);
+                }
+              }
             }
 
             // Static HTML root — served from inlined bundle string (no file dependency)
@@ -339,6 +518,11 @@ export async function startDashboardServer(
                 return jsonResponse(data, 200, requestId);
               }
 
+              if (path === "/api/review-queue") {
+                const data = buildReviewQueue(db);
+                logAccess(requestId, method, path, start, 200);
+                return jsonResponse(data, 200, requestId);
+              }
             }
 
             // 404 fallthrough
