@@ -1261,9 +1261,16 @@ export async function startDashboardServer(
   if (options.openBrowser !== false) {
     const platform = process.platform;
     if (platform === "darwin") {
-      await Bun.$`open ${boundUrl}`.quiet().nothrow();
+      // -u treats the argument as a URL (avoids path ambiguity).
+      // Fallback to plain open if -u isn't supported on older macOS.
+      const result = await Bun.$`open -u ${boundUrl}`.quiet().nothrow();
+      if (result.exitCode !== 0) {
+        await Bun.$`open ${boundUrl}`.quiet().nothrow();
+      }
     } else if (platform === "linux") {
       await Bun.$`xdg-open ${boundUrl}`.quiet().nothrow();
+    } else if (platform === "win32") {
+      await Bun.$`cmd /c start ${boundUrl}`.quiet().nothrow();
     }
   }
 
