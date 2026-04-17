@@ -356,6 +356,15 @@ export function initDatabase(path: string = ".gyst/wiki.db"): Database {
       db.run(pragma);
     }
 
+    // Pre-migrations: ensure columns exist BEFORE SCHEMA_STATEMENTS runs,
+    // because some statements create indexes on those columns and will fail
+    // if an old DB is missing them.
+    try {
+      db.run("ALTER TABLE event_queue ADD COLUMN session_id TEXT");
+    } catch {
+      // Column already exists on newer DBs — safe to ignore.
+    }
+
     // Apply schema idempotently. Wrapped in withRetry because concurrent
     // `initDatabase` calls (e.g. from hook + dashboard in the same second)
     // can still trip SQLITE_BUSY on the first CREATE TABLE despite the
