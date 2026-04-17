@@ -292,7 +292,7 @@ const program = new Command();
 program.name("gyst").description("Team knowledge compiler").version(_pkgVersion);
 
 program
-  .command("show [resource]")
+  .command("show [resource]", { hidden: true })
   .description("Visualize Gyst resources (memory|members)")
   .action(async (resource: string | undefined) => {
     if (resource?.toLowerCase() === "memory") {
@@ -311,13 +311,13 @@ program
   });
 
 program
-  .command("probe [dir]")
+  .command("probe [dir]", { hidden: true })
   .description("Technically scan for patterns/conventions")
   .option("--dry-run")
   .action(detectConventionsAction);
 
 program
-  .command("audit <file>")
+  .command("audit <file>", { hidden: true })
   .description("Audit a file against the knowledge graph")
   .action(async (file: string) => {
     const config = loadConfig();
@@ -335,12 +335,12 @@ program
   });
 
 program
-  .command("emit <type> [payload]")
+  .command("emit <type> [payload]", { hidden: true })
   .description("Emit a universal hook event")
   .action(emitAction);
 
 program
-  .command("heartbeat")
+  .command("heartbeat", { hidden: true })
   .description("Start Gyst MCP server (Alias for serve)")
   .action(serveAction);
 
@@ -365,7 +365,7 @@ program
   });
 
 program.command("recall <query>").description("Search memory").option("-t, --type <type>", "Filter", "all").option("-n, --max <max>", "Limit", "5").action(searchAction);
-program.command("search <query>").description("Alias for recall").option("-t, --type <type>", "Filter", "all").option("-n, --max <max>", "Limit", "5").action(searchAction);
+program.command("search <query>", { hidden: true }).description("Alias for recall").option("-t, --type <type>", "Filter", "all").option("-n, --max <max>", "Limit", "5").action(searchAction);
 
 program.command("add [title] [content...]").description("Add knowledge (content can be unquoted; remaining args are joined)").option("-t, --type <type>", "Type", "learning").option("-f, --files <files...>", "Files").option("--tags <tags...>", "Tags").action(async (posTitle, posContentParts, options) => {
   try {
@@ -407,7 +407,7 @@ team
   });
 
 program
-  .command("create [keyword] [nameParts...]")
+  .command("create [keyword] [nameParts...]", { hidden: true })
   .description("Create a new team (e.g. `gyst create team Acme` or `gyst create Acme`)")
   .action((keyword: string | undefined, nameParts: string[] | undefined) => {
     const rest = (nameParts ?? []).join(" ").trim();
@@ -429,7 +429,7 @@ program
   });
 
 program
-  .command("create-team <nameParts...>")
+  .command("create-team <nameParts...>", { hidden: true })
   .description("Alias for `gyst create team <name>`")
   .action((nameParts: string[]) => {
     const teamName = nameParts.join(" ").trim();
@@ -440,8 +440,8 @@ program
     createTeamAction(teamName);
   });
 
-program.command("invite").description("Alias for team invite").action(inviteTeamAction);
-program.command("members").description("Alias for team members").action(membersTeamAction);
+program.command("invite", { hidden: true }).description("Alias for team invite").action(inviteTeamAction);
+program.command("members", { hidden: true }).description("Alias for team members").action(membersTeamAction);
 
 program.command("join <inviteKey> <displayName>").description("Join team").action(async (key, name) => {
   try {
@@ -455,12 +455,12 @@ program.command("join <inviteKey> <displayName>").description("Join team").actio
   }
 });
 
-program.command("ghost-init").description("Interactive onboarding").action(async () => {
+program.command("ghost-init", { hidden: true }).description("Interactive onboarding").action(async () => {
   const { runGhostInit } = await import("./ghost-init.js");
   await runGhostInit();
 });
 
-program.command("consolidate").description("Run maintenance pipeline").action(async () => {
+program.command("consolidate", { hidden: true }).description("Run maintenance pipeline").action(async () => {
   const config = loadConfig();
   const db = initDatabase(config.dbPath);
   const { consolidate } = await import("../compiler/consolidate.js");
@@ -469,7 +469,7 @@ program.command("consolidate").description("Run maintenance pipeline").action(as
   process.stdout.write(`Consolidation complete (Merged: ${report.duplicatesMerged})\n`);
 });
 
-program.command("process-events").description("Promote high-signal events to knowledge entries").option("-l, --limit <limit>", "Max events to process", "50").option("-t, --threshold <threshold>", "Signal threshold (0..1)", "0.5").action(async (opts) => {
+program.command("process-events", { hidden: true }).description("Promote high-signal events to knowledge entries").option("-l, --limit <limit>", "Max events to process", "50").option("-t, --threshold <threshold>", "Signal threshold (0..1)", "0.5").action(async (opts) => {
   try {
     const config = loadConfig();
     const db = initDatabase(config.dbPath);
@@ -491,7 +491,7 @@ program.command("process-events").description("Promote high-signal events to kno
 });
 
 program
-  .command("distill")
+  .command("distill", { hidden: true })
   .description("Deactivate Stage 2 distillation over completed events using an LLM")
   .option("-l, --limit <limit>", "Max events to process", "100")
   .option("-s, --session <id>", "Only distill specific session")
@@ -517,13 +517,13 @@ program
   });
 
 program
-  .command("sync-graph")
+  .command("sync-graph", { hidden: true })
   .description("Update the structural code graph using Graphify and sync it to Gyst")
   .action(async () => {
     try {
       const { spawnSync } = await import("node:child_process");
       process.stdout.write("Running Graphify update...\n");
-      
+
       const result = spawnSync("graphify", ["update", "."], { stdio: "inherit" });
       if (result.status !== 0) {
         throw new Error(`Graphify failed with exit code ${result.status}`);
@@ -532,7 +532,7 @@ program
       const config = loadConfig();
       const db = initDatabase(config.dbPath);
       const { transformGraphify } = await import("../compiler/graphify-transformer.js");
-      
+
       process.stdout.write("Transforming Graphify data into Gyst...\n");
       const report = transformGraphify(db);
       db.close();
@@ -547,16 +547,16 @@ program
     }
   });
 
-program.command("harvest-session").description("Harvest from Claude Code").action(async () => {
+program.command("harvest-session", { hidden: true }).description("Harvest from Claude Code").action(async () => {
   const { runHarvestSession } = await import("./harvest.js");
   await runHarvestSession();
 });
 
-program.command("detect-conventions [dir]").description("Auto-detect conventions").option("--dry-run").action(detectConventionsAction);
-program.command("detect [dir]").description("Alias for detect-conventions").option("--dry-run").action(detectConventionsAction);
+program.command("detect-conventions [dir]", { hidden: true }).description("Auto-detect conventions").option("--dry-run").action(detectConventionsAction);
+program.command("detect [dir]").description("Scan for coding conventions").option("--dry-run").action(detectConventionsAction);
 
-program.command("check-conventions [file]").description("Show path conventions").action(checkConventionsAction);
-program.command("check [file]").description("Alias for check-conventions").action(checkConventionsAction);
+program.command("check-conventions [file]", { hidden: true }).description("Show path conventions").action(checkConventionsAction);
+program.command("check [file]").description("Check a file against the knowledge graph").action(checkConventionsAction);
 
 program.command("dashboard").description("Start UI").option("-p, --port <port>", "Port", "3579").option("--no-open").action(async (opts) => {
   const config = loadConfig();
@@ -565,7 +565,7 @@ program.command("dashboard").description("Start UI").option("-p, --port <port>",
   const { url } = await startDashboardServer({ db, port: Number(opts.port), openBrowser: opts.open });
   process.stdout.write(`\nGyst dashboard: ${url}\nPress Ctrl+C to stop.\n`);
 });
-program.command("ui").description("Alias for dashboard").option("-p, --port <port>", "Port", "3579").option("--no-open").action(async (opts) => {
+program.command("ui", { hidden: true }).description("Alias for dashboard").option("-p, --port <port>", "Port", "3579").option("--no-open").action(async (opts) => {
   const config = loadConfig();
   const db = initDatabase(config.dbPath);
   const { startDashboardServer } = await import("../dashboard/server.js");
@@ -573,13 +573,13 @@ program.command("ui").description("Alias for dashboard").option("-p, --port <por
   process.stdout.write(`\nGyst dashboard: ${url}\nPress Ctrl+C to stop.\n`);
 });
 
-program.command("rebuild").description("Rebuild index").action(async () => {
+program.command("rebuild", { hidden: true }).description("Rebuild index").action(async () => {
   const config = loadConfig();
   const { rebuildFromMarkdown } = await import("../store/rebuild.js");
   const stats = await rebuildFromMarkdown(config);
   process.stdout.write(`Rebuild complete (Total: ${stats.total})\n`);
 });
-program.command("sync").description("Alias for rebuild").action(async () => {
+program.command("sync", { hidden: true }).description("Alias for rebuild").action(async () => {
   const config = loadConfig();
   const { rebuildFromMarkdown } = await import("../store/rebuild.js");
   const stats = await rebuildFromMarkdown(config);
@@ -605,7 +605,7 @@ program
     }
   });
 
-program.command("inject-context").description("Inject session context").option("--always-on").option("--graph-traverse").action(async (opts) => {
+program.command("inject-context", { hidden: true }).description("Inject session context").option("--always-on").option("--graph-traverse").action(async (opts) => {
   const config = loadConfig();
   const db = initDatabase(config.dbPath);
   
@@ -637,7 +637,7 @@ program.command("inject-context").description("Inject session context").option("
   }
 });
 
-program.command("inject").description("Alias for inject-context").option("--always-on").option("--graph-traverse").action(async (opts) => {
+program.command("inject", { hidden: true }).description("Alias for inject-context").option("--always-on").option("--graph-traverse").action(async (opts) => {
   const config = loadConfig();
   const db = initDatabase(config.dbPath);
   
@@ -670,10 +670,10 @@ program.command("inject").description("Alias for inject-context").option("--alwa
 });
 
 program.command("serve").description("Start Gyst MCP server").action(serveAction);
-program.command("start").description("Alias for serve").action(serveAction);
+program.command("start", { hidden: true }).description("Alias for serve").action(serveAction);
 
 program
-  .command("export")
+  .command("export", { hidden: true })
   .description("Export all active knowledge entries to markdown files (derived from DB)")
   .action(async () => {
     try {
