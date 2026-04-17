@@ -66,6 +66,83 @@ test("decision-phrased prompt without 'we' still becomes decision candidate (loo
   expect(r.signalStrength).toBeGreaterThanOrEqual(0.6);
 });
 
+// ─── Reject filter pack ────────────────────────────────────────────────
+// These cases used to promote to convention/decision/learning because
+// they hit TEAM_SIGNAL + CONVENTION/DECISION patterns. The filter pack
+// short-circuits them BEFORE positive matching.
+
+test("question with trailing ? is rejected even when it mentions camelCase", () => {
+  const r = classifyEvent({
+    type: "prompt",
+    payload: { text: "should we use camelCase or snake_case for constants?" },
+  });
+  expect(r.candidateType).toBeNull();
+  expect(r.ruleIds).toContain("prompt-question");
+});
+
+test("interrogative + 'we' opening rejects even without trailing ?", () => {
+  const r = classifyEvent({
+    type: "prompt",
+    payload: { text: "could we standardise on pnpm workspaces instead of bun" },
+  });
+  expect(r.candidateType).toBeNull();
+  expect(r.ruleIds).toContain("prompt-question");
+});
+
+test("historical 'we used to' rejects as null", () => {
+  const r = classifyEvent({
+    type: "prompt",
+    payload: { text: "we used to use snake_case but migrated to camelCase last year" },
+  });
+  expect(r.candidateType).toBeNull();
+  expect(r.ruleIds).toContain("prompt-historical");
+});
+
+test("historical 'we stopped ... because' rejects as null (no decision)", () => {
+  const r = classifyEvent({
+    type: "prompt",
+    payload: { text: "we stopped mocking the DB in integration tests because prod kept drifting" },
+  });
+  expect(r.candidateType).toBeNull();
+  expect(r.ruleIds).toContain("prompt-historical");
+});
+
+test("'anymore' marker rejects even with assertive phrasing", () => {
+  const r = classifyEvent({
+    type: "prompt",
+    payload: { text: "we don't use class components in React anymore" },
+  });
+  expect(r.candidateType).toBeNull();
+  expect(r.ruleIds).toContain("prompt-historical");
+});
+
+test("soft qualifier 'usually' rejects convention candidacy", () => {
+  const r = classifyEvent({
+    type: "prompt",
+    payload: { text: "we usually go camelCase but there are exceptions" },
+  });
+  expect(r.candidateType).toBeNull();
+  expect(r.ruleIds).toContain("prompt-soft-qualifier");
+});
+
+test("explicit 'not a rule' phrase rejects", () => {
+  const r = classifyEvent({
+    type: "prompt",
+    payload: { text: "we often prefer const over let but it's not a rule" },
+  });
+  expect(r.candidateType).toBeNull();
+  expect(r.ruleIds).toContain("prompt-soft-qualifier");
+});
+
+test("positive convention anchor still classifies as convention (no regression)", () => {
+  const r = classifyEvent({
+    type: "prompt",
+    payload: { text: "we always use camelCase for function names in this repo" },
+  });
+  expect(r.candidateType).toBe("convention");
+  expect(r.scopeHint).toBe("team");
+});
+
 test("code-grounded prompts are boosted over bare natural-language prompts of similar length", () => {
   // When the enrichment step attaches promptContext with files/symbols,
   // classifier weighs the prompt as code-grounded learning.

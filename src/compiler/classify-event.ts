@@ -71,6 +71,42 @@ const LOW_SIGNAL_PROMPTS: readonly RegExp[] = [
   /^(thanks?|cool|nice|great)\.?$/i,
 ];
 
+// Reject filters run BEFORE any positive-signal rule. Without them,
+// "should we use camelCase?" hits both TEAM_SIGNAL and CONVENTION_PATTERN
+// and promotes a *question* into a team convention — the exact bloat
+// failure mode the adversarial fixture was built to pin down.
+
+// Interrogatives — trailing '?' or an interrogative + "we" opening. The
+// second form catches "could we standardise on pnpm" (no '?', but still
+// a proposal not an assertion).
+const QUESTION_PATTERNS: readonly RegExp[] = [
+  /\?\s*$/,
+  /^\s*(should|could|would|can|does|did|how|why|when|where|which|who)\s+we\b/i,
+];
+
+// Historical/past-tense statements — describe what WAS true, not what
+// the current convention is. "we used to X" is not a convention to adopt.
+const HISTORICAL_PATTERNS: readonly RegExp[] = [
+  /\b(we|they|i)\s+used\s+to\b/i,
+  /\b(we|they|i)\s+stopped\b/i,
+  /\banymore\b/i,
+  /\bmoved\s+(away\s+from|from)\b/i,
+  /\bback\s+when\b/i,
+  /\b(last|two|three|several)\s+(year|quarter|quarters|month|months|sprint|sprints)\s+ago\b/i,
+  /\b(previously|formerly)\b/i,
+];
+
+// Soft qualifiers make an assertion non-binding — "usually", "sometimes",
+// explicit "not a rule". These shouldn't surface as hard conventions even
+// if CONVENTION_PATTERN matches downstream.
+const SOFT_QUALIFIER_PATTERNS: readonly RegExp[] = [
+  /\b(sometimes|usually|often|occasionally|typically|generally|mostly)\b/i,
+  /\btends?\s+to\b/i,
+  /\bnot\s+a\s+(hard\s+)?(rule|convention|standard)\b/i,
+  /\bit\s+varies\b/i,
+  /\b(but\s+)?(there\s+are\s+)?exceptions?\b/i,
+];
+
 function anyMatch(patterns: readonly RegExp[], text: string): boolean {
   for (const p of patterns) if (p.test(text)) return true;
   return false;
@@ -99,6 +135,9 @@ const RULE_IDS = {
   EMPTY_PROMPT: "prompt-empty",
   EMPTY_COMMIT: "commit-empty",
   NON_CARRIER_EVENT: "event-non-carrier",
+  QUESTION: "prompt-question",
+  HISTORICAL: "prompt-historical",
+  SOFT_QUALIFIER: "prompt-soft-qualifier",
 } as const;
 
 interface PromptContext {
@@ -131,6 +170,35 @@ function classifyPrompt(text: string, ctx: PromptContext): Classification {
       scopeHint: "personal",
       candidateType: null,
       ruleIds: [RULE_IDS.LOW_SIGNAL_PROMPT],
+    };
+  }
+
+  // Reject filters — take precedence over positive signals below.
+  // Order matters: question first (cheapest test), then historical,
+  // then soft qualifier. Each returns a low non-zero signal so the
+  // event is still recorded in the activity log, just not promoted.
+  if (anyMatch(QUESTION_PATTERNS, trimmed)) {
+    return {
+      signalStrength: 0.1,
+      scopeHint: "uncertain",
+      candidateType: null,
+      ruleIds: [RULE_IDS.QUESTION],
+    };
+  }
+  if (anyMatch(HISTORICAL_PATTERNS, trimmed)) {
+    return {
+      signalStrength: 0.1,
+      scopeHint: "uncertain",
+      candidateType: null,
+      ruleIds: [RULE_IDS.HISTORICAL],
+    };
+  }
+  if (anyMatch(SOFT_QUALIFIER_PATTERNS, trimmed)) {
+    return {
+      signalStrength: 0.15,
+      scopeHint: "uncertain",
+      candidateType: null,
+      ruleIds: [RULE_IDS.SOFT_QUALIFIER],
     };
   }
 
