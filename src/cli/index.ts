@@ -349,18 +349,49 @@ program
   .alias("setup")
   .description("First-time setup (detects tools, registers MCP + 6 hooks, scans conventions)")
   .option("--minimal", "Use the minimal, non-interactive setup path")
-  .action(async (opts: { minimal?: boolean }) => {
+  .option("--team <name>", "Create or join a team during setup (pass a team name or an invite key)")
+  .action(async (opts: { minimal?: boolean; team?: string }) => {
     if (opts.minimal) {
       await setupAction();
-      return;
+    } else {
+      try {
+        const { runInstall } = await import("./install.js");
+        await runInstall();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`\nInstall failed: ${msg}\n`);
+        process.exit(1);
+      }
     }
-    try {
-      const { runInstall } = await import("./install.js");
-      await runInstall();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`\nInstall failed: ${msg}\n`);
-      process.exit(1);
+    // If --team was passed, handle team creation/joining after install
+    if (opts.team) {
+      const teamArg = opts.team.trim();
+      const config = loadConfig();
+      const db = initDatabase(config.dbPath);
+      initTeamSchema(db);
+      initActivitySchema(db);
+      // Invite keys are 40+ character hex strings; team names are shorter human strings
+      const looksLikeInviteKey = /^[0-9a-f]{32,}$/i.test(teamArg);
+      try {
+        if (looksLikeInviteKey) {
+          const defaultName = process.env["USER"] ?? "Developer";
+          const { joinTeam } = await import("../server/auth.js");
+          const { memberKey } = await joinTeam(db, teamArg, defaultName);
+          db.close();
+          process.stdout.write(`\n  ✓ Joined team. Member key: ${memberKey}\n`);
+          process.stdout.write(`  Add to your shell: export GYST_API_KEY="${memberKey}"\n\n`);
+        } else {
+          const { createTeam } = await import("../server/auth.js");
+          const { teamId, adminKey } = createTeam(db, teamArg);
+          db.close();
+          process.stdout.write(`\n  ✓ Team "${teamArg}" created (ID: ${teamId})\n`);
+          process.stdout.write(`  Admin key: ${adminKey}\n`);
+          process.stdout.write(`  Add to your shell: export GYST_API_KEY="${adminKey}"\n\n`);
+        }
+      } catch (err) {
+        db.close();
+        process.stdout.write(`\n  Team setup failed: ${(err as Error).message}\n`);
+      }
     }
   });
 
