@@ -69,8 +69,8 @@ gyst/
 
 ## Current Phase: V1 (Complete)
 
-### MCP Tools (14 total — both stdio and HTTP transports)
-- `learn` — record team knowledge with entity extraction, style fingerprint, auto-linking
+### MCP Tools (13 total — both stdio and HTTP transports)
+- `learn` — record team knowledge with entity extraction, auto-linking
 - `recall` — ranked search with RRF fusion, intent boost, ghost_knowledge tier 0
 - `search` — compact index (id/type/confidence/title) for progressive disclosure
 - `get_entry` — full markdown for a single entry by ID
@@ -78,7 +78,6 @@ gyst/
 - `check_conventions` — check a file against stored conventions
 - `failures` — match known error patterns by signature or BM25
 - `check` — run all violation detectors against a file
-- `score` — uniformity score for the codebase
 - `graph` — query the relationship graph (neighbors, path, similar)
 - `feedback` — rate an entry helpful/unhelpful (adjusts confidence ±0.02/0.05)
 - `harvest` — extract knowledge from a session transcript
@@ -89,7 +88,6 @@ gyst/
 - `gyst setup` — detect conventions from a sample project
 - `gyst ghost-init` — create ghost knowledge entries interactively
 - `gyst onboard` — generate onboarding document for new developers
-- `gyst score` — print uniformity score
 - `gyst detect-conventions` — run convention detectors and print results
 - `gyst check <file>` — check a file for convention violations
 - `gyst export` — export all active knowledge entries to markdown files (derived from DB)
@@ -149,12 +147,6 @@ Pre-process all text with codeTokenize() before FTS5 insertion:
 Ghost knowledge entries get a +0.15 RRF boost and always surface in tier 0.
 Co-retrieval is recorded after every search; 3+ co-retrievals auto-creates a
 relationship edge (processed during consolidation Stage 2.5).
-
-## Style Fingerprinting
-When learn() receives code content (contains `;` or `{`), a StyleFingerprint
-is computed (indentation, semicolons, quotes, trailing commas) and stored as
-JSON in the entries.metadata column. The uniformity score aggregates these
-over all entries to compute team-wide style dominance.
 
 ## Confidence Decay Half-Lives
 - error_pattern: 30 days

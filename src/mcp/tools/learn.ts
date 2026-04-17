@@ -20,7 +20,6 @@ import {
   extractEntitiesFromTitle,
 } from "../../compiler/entities.js";
 import { canLoadExtensions, withRetry } from "../../store/database.js";
-import { fingerprintFile } from "../../compiler/style-fingerprint.js";
 import { embedAndStore } from "../../store/embeddings.js";
 import { loadConfig } from "../../utils/config.js";
 import { logger } from "../../utils/logger.js";
@@ -352,14 +351,6 @@ export function registerLearnTool(server: McpServer, ctx: ToolContext): void {
       const dedupedEntityTags = [...new Set(entityTags)];
       const mergedTags = [...valid.tags, ...dedupedEntityTags];
 
-      // Compute a style fingerprint when the content looks like source code.
-      // Any content with a semicolon or brace is treated as code.
-      const looksLikeCode =
-        safeContent.includes(";") || safeContent.includes("{");
-      const styleMetadata = looksLikeCode
-        ? JSON.stringify(fingerprintFile(safeContent))
-        : null;
-
       persistEntry(
         db,
         {
@@ -375,7 +366,7 @@ export function registerLearnTool(server: McpServer, ctx: ToolContext): void {
           tags: mergedTags,
           now,
           scope: resolvedScope,
-          metadata: styleMetadata,
+          metadata: null,
         },
         config.wikiDir,
         config.autoExport,
@@ -400,7 +391,7 @@ export function registerLearnTool(server: McpServer, ctx: ToolContext): void {
               tags: mergedTags,
               now,
               scope: "personal", // Always personal in the global store
-              metadata: styleMetadata,
+              metadata: null,
             },
             config.wikiDir, // Markdown still goes to current project wiki
             config.autoExport,

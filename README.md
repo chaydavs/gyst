@@ -69,7 +69,7 @@ This starts a local HTTP server at **[localhost:4242](http://localhost:4242)**. 
 - A D3 force-directed graph of every knowledge entry and how they're connected
 - Filter by type: `convention`, `error_pattern`, `decision`, `learning`, `ghost_knowledge`
 - Click any node to read the full entry
-- Uniformity score and entry counts at the top
+- Entry counts at the top
 
 ### Step 4 — Add team members (optional)
 
@@ -123,7 +123,6 @@ From this point, knowledge grows automatically:
 - **Agent calls** — any agent with the MCP config can call `learn()` at any time
 
 ```bash
-gyst score          # uniformity score — how consistent is your codebase? (0–100)
 gyst onboard        # generate a markdown onboarding doc from everything Gyst knows
 gyst audit src/api/auth.ts  # fail if a file violates stored conventions
 ```
@@ -159,7 +158,6 @@ The knowledge base lives in your git repo (zero infrastructure) or on a shared H
 | `check_conventions` | Which conventions apply to a file |
 | `check` | Run all violation detectors against a file |
 | `failures` | Match a known error pattern by signature or keywords |
-| `score` | Team knowledge uniformity score (0–100) |
 | `graph` | Query the relationship graph — curated edges plus a structural (AST) sidecar |
 | `feedback` | Rate an entry helpful/unhelpful — adjusts confidence ±0.02/0.05 |
 | `harvest` | Extract knowledge from a session transcript |
@@ -433,7 +431,6 @@ Model: `all-MiniLM-L6-v2` (22MB, same model used in production). **4 of 10 subta
 - `gyst audit <file>` — Check a file against all knowledge rules (fails on violations).
 - `gyst check <file>` — Show conventions applicable to a specific file or path.
 - `gyst probe [dir]` — Technically scan for patterns/conventions (supports `--dry-run`). Alias: `detect`.
-- `gyst score` — Print the team knowledge uniformity score (0–100).
 - `gyst onboard` — Generate a markdown onboarding doc from the knowledge base.
 
 ### Team & Collaboration
@@ -455,7 +452,7 @@ Model: `all-MiniLM-L6-v2` (22MB, same model used in production). **4 of 10 subta
 gyst/
 ├── src/
 │   ├── mcp/           # MCP server + 14 tools (stdio + HTTP)
-│   ├── compiler/      # Extract, normalize, deduplicate, link, style-fingerprint
+│   ├── compiler/      # Extract, normalize, deduplicate, link
 │   ├── store/         # SQLite + FTS5, 5-strategy search, RRF fusion, graph, confidence
 │   ├── server/        # HTTP server, auth (API keys), activity logging, dashboard
 │   ├── capture/       # Git hooks, session harvesting, context injection

@@ -123,7 +123,7 @@ entries (
   confidence REAL DEFAULT 0.5, -- [0.0, 1.0]
   source_count INTEGER DEFAULT 1,
   fingerprint TEXT,             -- SHA-256 for dedup
-  metadata TEXT,                -- JSON blob (style fingerprint, entities, etc.)
+  metadata TEXT,                -- JSON blob (entities, etc.)
   markdown_path TEXT,           -- Derived export path in gyst-wiki/
   created_at TEXT,
   last_confirmed TEXT,
@@ -170,7 +170,7 @@ Raw input (learn tool / git hook / harvest)
     ▼
 ┌─────────────┐
 │   Extract    │ → Validate with Zod, extract entities (regex-based),
-│              │   compute style fingerprint, generate fingerprint hash
+│              │   generate fingerprint hash
 └──────┬──────┘
        ▼
 ┌─────────────┐
@@ -217,16 +217,6 @@ Seven-step pipeline, order matters:
 7. Replace numbers with `<N>` (LAST — prevents clobbering UUIDs/timestamps)
 
 The normalized signature gets SHA-256 hashed into a fingerprint for exact-match deduplication.
-
-### Style Fingerprinting
-
-When `learn()` receives code content (contains `;` or `{`), a `StyleFingerprint` is computed:
-- Indentation style (tabs vs spaces, width)
-- Semicolons (always / never / mixed)
-- Quote style (single / double)
-- Trailing commas
-
-Stored in `entries.metadata`. Aggregated across all entries to compute a team-wide **uniformity score** — how consistently the team follows a single style.
 
 ---
 
@@ -421,7 +411,7 @@ Early consolidation grouped by `directory`. This collapsed distinct patterns tha
 
 | Tool | Purpose | Key behavior |
 |------|---------|-------------|
-| `learn` | Record team knowledge | Entity extraction, style fingerprint, auto-linking, dedup |
+| `learn` | Record team knowledge | Entity extraction, auto-linking, dedup |
 | `recall` | Search knowledge base | 5-strategy RRF fusion, ghost_knowledge boost, context budgeting |
 | `search` | Compact index view | Returns id/type/confidence/title for progressive disclosure |
 | `get_entry` | Full entry by ID | Markdown content + relationships + sources |
@@ -429,12 +419,11 @@ Early consolidation grouped by `directory`. This collapsed distinct patterns tha
 | `check_conventions` | Check file against rules | Returns violations with confidence scores |
 | `failures` | Match error patterns | By signature fingerprint or BM25 keyword match |
 | `check` | Pre-flight validation | Run all violation detectors against a file |
-| `score` | Uniformity score | Codebase-wide style consistency metric |
 | `graph` | Explore relationships | Neighbors, path between entries, similar entries |
 | `feedback` | Rate an entry | +0.02 (helpful) / -0.05 (unhelpful) confidence adjustment |
 | `harvest` | Batch import | Extract knowledge from session transcript |
 | `activity` | Team activity log | Who learned/recalled what, when |
-| `status` | Health check | Entry counts, last updated, uniformity score |
+| `status` | Health check | Entry counts, last updated |
 
 ### Tool Design Principles
 
@@ -460,7 +449,6 @@ gyst ghost-init         — Create ghost knowledge entries interactively
 gyst onboard            — Generate onboarding document for new devs
 gyst harvest            — Batch import from session transcript
 gyst team-init          — Initialize team mode
-gyst score              — Print uniformity score
 gyst dashboard          — Start the dashboard HTTP server
 ```
 
@@ -489,7 +477,7 @@ Single-page app at `http://localhost:3579` served by `gyst dashboard`.
 | `GET /api/entries` | All active entries with relationships |
 | `GET /api/entries?type=convention` | Filtered by entry type |
 | `GET /api/structural` | Structural graph (from Graphify) |
-| `GET /api/stats` | Entry counts, uniformity score, age distribution |
+| `GET /api/stats` | Entry counts, age distribution |
 
 ### Visualization
 
@@ -649,7 +637,7 @@ Research conducted April 2026 across four competitors:
 
 **How they eval:** LLM-as-judge (Gemini 3 Flash judge + Pro justifier, T=0). 92.8% LongMemEval-S, 96.1% LoCoMo.
 
-**What Gyst does differently:** Typed taxonomy (5 types vs. none), automatic capture from git/sessions (vs. user-invoked only), deterministic classifier with rule IDs (vs. LLM-primary), style fingerprinting, ghost knowledge tier.
+**What Gyst does differently:** Typed taxonomy (5 types vs. none), automatic capture from git/sessions (vs. user-invoked only), deterministic classifier with rule IDs (vs. LLM-primary), ghost knowledge tier.
 
 **Source:** CLI is Elastic License 2.0 (github.com/campfirein/byterover-cli). Paper: arXiv:2604.01599.
 
@@ -749,7 +737,6 @@ src/
 │   ├── store-conventions.ts   Persist detected conventions
 │   ├── graphify-transformer.ts  Graphify AST → structural index
 │   ├── security.ts        Sensitive data stripping
-│   ├── style-fingerprint.ts  Code style fingerprinting
 │   ├── check-violations.ts   Convention violation checking
 │   ├── entities.ts        Named entity extraction
 │   ├── patterns.ts        Pattern detection
@@ -791,7 +778,6 @@ src/
 │   ├── rebuild.ts         Schema migration utilities
 │   ├── structural.ts      Structural AST node indexing
 │   ├── temporal.ts        Time-based filtering
-│   └── uniformity.ts      Convention uniformity scoring
 └── utils/             ← Shared utilities
     ├── config.ts
     ├── logger.ts
