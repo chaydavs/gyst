@@ -104,6 +104,30 @@ function serveDistFile(filePath: string, requestId: string): Response | null {
 }
 
 // ---------------------------------------------------------------------------
+// Server-Sent Events — real-time push to connected dashboard tabs
+// ---------------------------------------------------------------------------
+
+/** Live SSE client controllers. Module-level so all request handlers share it. */
+const sseClients = new Set<ReadableStreamDefaultController<Uint8Array>>();
+const sseEncoder = new TextEncoder();
+
+/**
+ * Broadcasts a JSON payload to all connected SSE clients.
+ * Stale controllers (closed tabs) are automatically removed.
+ */
+function broadcastSSE(data: Record<string, unknown>): void {
+  if (sseClients.size === 0) return;
+  const msg = sseEncoder.encode(`data: ${JSON.stringify(data)}\n\n`);
+  for (const ctrl of sseClients) {
+    try {
+      ctrl.enqueue(msg);
+    } catch {
+      sseClients.delete(ctrl);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Zod schemas for write endpoints
 // ---------------------------------------------------------------------------
 
@@ -364,6 +388,34 @@ export async function startDashboardServer(
               }
               logAccess(requestId, method, path, start, 404);
               return jsonResponse({ error: "Asset not found" }, 404, requestId);
+            }
+
+            // SSE — real-time event stream for connected dashboard tabs
+            if (method === "GET" && path === "/api/stream") {
+              let ctrl!: ReadableStreamDefaultController<Uint8Array>;
+              const stream = new ReadableStream<Uint8Array>({
+                start(c) {
+                  ctrl = c;
+                  sseClients.add(c);
+                  // Send an immediate ping so the client knows the connection is live
+                  c.enqueue(sseEncoder.encode(`: connected\n\n`));
+                },
+                cancel() {
+                  sseClients.delete(ctrl);
+                },
+              });
+              logAccess(requestId, method, path, start, 200);
+              return new Response(stream, {
+                status: 200,
+                headers: {
+                  "Content-Type": "text/event-stream",
+                  "Cache-Control": "no-cache",
+                  "Connection": "keep-alive",
+                  "X-Accel-Buffering": "no",
+                  "X-Request-Id": requestId,
+                  "Access-Control-Allow-Origin": CORS_ORIGIN,
+                },
+              });
             }
 
             // JSON API routes
@@ -747,6 +799,7 @@ export async function startDashboardServer(
                     "UPDATE review_queue SET status = ? WHERE id = ?",
                     [newStatus, queueId],
                   );
+                  broadcastSSE({ type: "queue_changed" });
                   logAccess(requestId, method, path, start, 200);
                   return jsonResponse({ ok: true }, 200, requestId);
                 } catch (err) {
@@ -825,6 +878,7 @@ export async function startDashboardServer(
                       "UPDATE entries SET scope = 'team' WHERE id = ? AND scope = 'personal'",
                       [entryId],
                     );
+                    broadcastSSE({ type: "entries_changed" });
                     logAccess(requestId, method, path, start, 200);
                     return jsonResponse({ ok: true, id: entryId }, 200, requestId);
                   } catch (err) {
@@ -880,6 +934,7 @@ export async function startDashboardServer(
                       );
                     }
                   }
+                  broadcastSSE({ type: "entries_changed" });
                   logAccess(requestId, method, path, start, 201);
                   return jsonResponse({ id, title, type, scope }, 201, requestId);
                 } catch (err) {
@@ -1066,6 +1121,36 @@ export async function startDashboardServer(
   const server = tryStart(options.port);
   const boundUrl = `http://localhost:${server.port}`;
 
+  // Background watcher: poll DB every 5s for externally-added entries
+  // (written by MCP tools, git hooks, or the queue consumer — not via HTTP).
+  // If counts change, broadcast so connected tabs refresh automatically.
+  let _lastEntryCount = -1;
+  let _lastEventId = -1;
+  const _watcher = setInterval(() => {
+    try {
+      const entryRow = db
+        .query<{ n: number }, []>("SELECT COUNT(*) AS n FROM entries WHERE status='active'")
+        .get();
+      const n = entryRow?.n ?? 0;
+      if (_lastEntryCount >= 0 && n !== _lastEntryCount) {
+        broadcastSSE({ type: "entries_changed", count: n });
+      }
+      _lastEntryCount = n;
+
+      // Also watch event_queue for newly promoted entries (queue consumer ran)
+      const evtRow = db
+        .query<{ maxId: number }, []>("SELECT MAX(id) AS maxId FROM event_queue")
+        .get();
+      const maxId = evtRow?.maxId ?? 0;
+      if (_lastEventId >= 0 && maxId > _lastEventId) {
+        broadcastSSE({ type: "activity_changed" });
+      }
+      _lastEventId = maxId;
+    } catch {
+      // DB may not be ready yet — ignore
+    }
+  }, 5000);
+
   logger.info("dashboard-server-started", { url: boundUrl });
 
   if (options.openBrowser !== false) {
@@ -1080,6 +1165,7 @@ export async function startDashboardServer(
   return {
     url: boundUrl,
     stop: () => {
+      clearInterval(_watcher);
       server.stop();
     },
   };

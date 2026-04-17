@@ -20,6 +20,11 @@ export default function App() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [reviewQueue, setReviewQueue] = useState<ReviewItem[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [isLive, setIsLive] = useState(false);
+
+  // Incrementing key triggers re-fetch in Feed without unmounting it
+  const [feedRefreshKey, setFeedRefreshKey] = useState(0);
+  const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -28,24 +33,54 @@ export default function App() {
     setView('search');
   }, []);
 
+  // ── Initial data load ──────────────────────────────────────────────────────
   useEffect(() => {
-    const loadInitialData = async () => {
+    const load = async () => {
       const results = await Promise.allSettled([
         api.getStats(),
         api.getTeamInfo(),
         api.getTeamMembers(),
         api.getReviewQueue(),
       ]);
-
       if (results[0].status === 'fulfilled') setStats(results[0].value);
       if (results[1].status === 'fulfilled') setTeamInfo(results[1].value);
       if (results[2].status === 'fulfilled') setTeamMembers(results[2].value);
       if (results[3].status === 'fulfilled') setReviewQueue(results[3].value);
     };
-
-    void loadInitialData();
+    void load();
   }, []);
 
+  // ── SSE real-time subscription ─────────────────────────────────────────────
+  useEffect(() => {
+    const es = new EventSource('/api/stream');
+
+    es.onopen = () => setIsLive(true);
+    es.onerror = () => setIsLive(false);
+
+    es.onmessage = (e: MessageEvent<string>) => {
+      try {
+        const data = JSON.parse(e.data) as { type: string };
+        if (data.type === 'entries_changed') {
+          setFeedRefreshKey(k => k + 1);
+          api.getStats().then(setStats).catch(() => undefined);
+        }
+        if (data.type === 'queue_changed') {
+          api.getReviewQueue().then(setReviewQueue).catch(() => undefined);
+        }
+        if (data.type === 'activity_changed') {
+          setSidebarRefreshKey(k => k + 1);
+          setFeedRefreshKey(k => k + 1);
+          api.getStats().then(setStats).catch(() => undefined);
+        }
+      } catch {
+        // ignore malformed SSE frames
+      }
+    };
+
+    return () => es.close();
+  }, []);
+
+  // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -66,33 +101,30 @@ export default function App() {
         setShowInvite(true);
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showCapture, showInvite, selectedEntryId, focusSearch]);
 
+  // ── Action handlers ────────────────────────────────────────────────────────
   const handleReviewAction = useCallback(async (id: string, action: 'confirm' | 'archive') => {
     try {
-      if (action === 'confirm') {
-        await api.confirmEntry(id);
-      } else {
-        await api.archiveEntry(id);
-      }
+      if (action === 'confirm') await api.confirmEntry(id);
+      else await api.archiveEntry(id);
       setReviewQueue(prev => prev.filter(item => item.id !== id));
     } catch {
-      // silently ignore — UI stays in place
+      // best-effort
     }
   }, []);
 
   const handleEntrySaved = useCallback((_entry: Entry) => {
-    // Refresh stats after a new entry is saved
+    setFeedRefreshKey(k => k + 1);
     api.getStats().then(setStats).catch(() => undefined);
     setShowCapture(false);
   }, []);
 
   const handlePromote = useCallback((_promotedId: string) => {
     setSelectedEntryId(null);
-    // Refresh stats
+    setFeedRefreshKey(k => k + 1);
     api.getStats().then(setStats).catch(() => undefined);
   }, []);
 
@@ -100,6 +132,7 @@ export default function App() {
     <div style={{ position: 'fixed', inset: 0, background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
       <Masthead
         reviewQueueCount={reviewQueue.length}
+        isLive={isLive}
         onCapture={() => setShowCapture(true)}
         onInvite={() => setShowInvite(true)}
       />
@@ -120,6 +153,7 @@ export default function App() {
             mode={mode}
             searchQuery={searchQuery}
             onEntryClick={setSelectedEntryId}
+            refreshKey={feedRefreshKey}
           />
         </div>
         <Sidebar
@@ -127,6 +161,7 @@ export default function App() {
           reviewQueue={reviewQueue}
           teamMembers={teamMembers}
           onReviewAction={handleReviewAction}
+          refreshKey={sidebarRefreshKey}
         />
       </div>
 

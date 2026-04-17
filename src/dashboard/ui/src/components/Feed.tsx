@@ -7,6 +7,7 @@ interface FeedProps {
   mode: Mode;
   searchQuery: string;
   onEntryClick: (id: string) => void;
+  refreshKey?: number;
 }
 
 type FilterType = 'all' | EntryType;
@@ -36,7 +37,7 @@ function searchResultToEntry(r: SearchResult): Entry {
   };
 }
 
-export default function Feed({ mode, searchQuery, onEntryClick }: FeedProps) {
+export default function Feed({ mode, searchQuery, onEntryClick, refreshKey }: FeedProps) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +73,7 @@ export default function Feed({ mode, searchQuery, onEntryClick }: FeedProps) {
 
     void load();
     return () => { cancelled = true; };
-  }, [mode, searchQuery]);
+  }, [mode, searchQuery, refreshKey]);
 
   const filtered = filter === 'all' ? entries : entries.filter(e => e.type === filter);
 

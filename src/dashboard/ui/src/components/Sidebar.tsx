@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react';
+import { api } from '../api';
 import type { Stats, ReviewItem, TeamMember } from '../types';
 
 interface SidebarProps {
@@ -5,6 +7,14 @@ interface SidebarProps {
   reviewQueue: ReviewItem[];
   teamMembers: TeamMember[];
   onReviewAction: (id: string, action: 'confirm' | 'archive') => void;
+  refreshKey?: number;
+}
+
+interface ActivityEvent {
+  id: number;
+  event: string;
+  developerId: string | null;
+  createdAt: string;
 }
 
 function getInitials(name: string): string {
@@ -27,9 +37,17 @@ const REASON_COLORS: Record<string, string> = {
   flagged: '#D4412B',
 };
 
-export default function Sidebar({ stats, reviewQueue, teamMembers, onReviewAction }: SidebarProps) {
+export default function Sidebar({ stats, reviewQueue, teamMembers, onReviewAction, refreshKey }: SidebarProps) {
   const shownQueue = reviewQueue.slice(0, 3);
   const shownMembers = teamMembers.slice(0, 6);
+
+  const [recentEvents, setRecentEvents] = useState<ActivityEvent[]>([]);
+
+  useEffect(() => {
+    api.getActivity({ limit: 8 })
+      .then(setRecentEvents)
+      .catch(() => undefined);
+  }, [refreshKey]);
 
   return (
     <aside
@@ -131,7 +149,7 @@ export default function Sidebar({ stats, reviewQueue, teamMembers, onReviewActio
       </section>
 
       {/* ── Team Members card ── */}
-      <section style={{ padding: '20px 20px 16px' }}>
+      <section style={{ padding: '20px 20px 16px', borderBottom: '1px solid var(--line-soft)' }}>
         <span
           style={{
             fontFamily: 'var(--font-mono)',
@@ -161,6 +179,56 @@ export default function Sidebar({ stats, reviewQueue, teamMembers, onReviewActio
                 +{teamMembers.length - 6} more
               </span>
             )}
+          </div>
+        )}
+      </section>
+
+      {/* ── Hook Activity card ── */}
+      <section style={{ padding: '20px 20px 16px' }}>
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            color: 'var(--ink-faint)',
+            display: 'block',
+            marginBottom: '12px',
+          }}
+        >
+          Hook Activity
+        </span>
+        {recentEvents.length === 0 ? (
+          <p style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', color: 'var(--ink-faint)', fontStyle: 'italic' }}>
+            No hooks fired yet.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {recentEvents.map(ev => (
+              <div key={ev.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '10px',
+                    color: 'var(--accent)',
+                    background: 'var(--sunken)',
+                    padding: '1px 5px',
+                    borderRadius: '3px',
+                    flexShrink: 0,
+                  }}
+                >
+                  {ev.event}
+                </span>
+                {ev.developerId && (
+                  <span style={{ fontFamily: 'var(--font-sans)', fontSize: '11px', color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {ev.developerId}
+                  </span>
+                )}
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ink-faint)', marginLeft: 'auto', flexShrink: 0 }}>
+                  {new Date(ev.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </section>

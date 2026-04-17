@@ -2,6 +2,7 @@ import { Bell } from 'lucide-react';
 
 interface MastheadProps {
   reviewQueueCount: number;
+  isLive: boolean;
   onCapture: () => void;
   onInvite: () => void;
 }
@@ -16,7 +17,7 @@ function formatDate(): string {
   }).toUpperCase();
 }
 
-export default function Masthead({ reviewQueueCount, onCapture, onInvite }: MastheadProps) {
+export default function Masthead({ reviewQueueCount, isLive, onCapture, onInvite }: MastheadProps) {
   return (
     <header
       style={{
@@ -72,8 +73,34 @@ export default function Masthead({ reviewQueueCount, onCapture, onInvite }: Mast
         </span>
       </div>
 
-      {/* Right: bell + invite + capture */}
+      {/* Right: live dot + bell + invite + capture */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Live indicator */}
+        <span
+          title={isLive ? 'Live — updates automatically' : 'Connecting…'}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            color: isLive ? '#1E7A3F' : '#8B8172',
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+          }}
+        >
+          <span
+            style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: isLive ? '#1E7A3F' : '#8B8172',
+              boxShadow: isLive ? '0 0 0 2px #1E7A3F33' : 'none',
+              animation: isLive ? 'livePulse 2s ease-in-out infinite' : 'none',
+            }}
+          />
+          {isLive ? 'Live' : 'Offline'}
+        </span>
         {/* Notification bell */}
         <button
           style={{
@@ -154,4 +181,17 @@ export default function Masthead({ reviewQueueCount, onCapture, onInvite }: Mast
       </div>
     </header>
   );
+}
+
+// Inject the live-pulse keyframe once
+if (typeof document !== 'undefined' && !document.getElementById('gyst-live-pulse')) {
+  const style = document.createElement('style');
+  style.id = 'gyst-live-pulse';
+  style.textContent = `
+    @keyframes livePulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+  `;
+  document.head.appendChild(style);
 }

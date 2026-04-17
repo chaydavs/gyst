@@ -52,6 +52,14 @@ export const api = {
   getTeamMembers: () => apiFetch<TeamMember[]>('/api/team/members'),
   createInvite: () => apiFetch<{ inviteCode: string; expiresAt: string; installCommand: string }>('/api/team/invite', { method: 'POST', body: '{}' }),
 
+  // Activity
+  getActivity: (params?: { limit?: number; developerId?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set('limit', String(params.limit));
+    if (params?.developerId) q.set('developerId', params.developerId);
+    return apiFetch<Array<{ id: number; event: string; developerId: string | null; createdAt: string }>>(`/api/events?${q}`);
+  },
+
   // Misc
   getDetectedTools: () => apiFetch<Array<{ name: string; detected: boolean; configPath: string }>>('/api/tools/detected'),
   getHealth: () => apiFetch<{ status: string; version: string; entriesCount: number }>('/api/health'),
