@@ -69,3 +69,9 @@ tests/benchmark/coir/results/
 
 # Graphify structural graph output (derived — regenerate with `graphify`)
 graphify-out/
+
+# Dashboard UI build output (built by npm run build:dashboard, ships in npm package)
+src/dashboard/dist/
+
+# Dashboard UI dependencies
+src/dashboard/ui/node_modules/

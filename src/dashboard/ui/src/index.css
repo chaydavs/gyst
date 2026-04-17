@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #F5F1E8;
+  --elevated: #FFFCF5;
+  --sunken: #EDE7D6;
+  --ink: #1A1712;
+  --ink-soft: #4A4438;
+  --ink-faint: #8B8172;
+  --line: #D4CBB5;
+  --line-soft: #E5DEC9;
+  --accent: #D4412B;
+  --font-serif: 'Fraunces', Georgia, serif;
+  --font-sans: 'Inter Tight', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-serif { font-family: var(--font-serif); }
+.font-mono  { font-family: var(--font-mono); }

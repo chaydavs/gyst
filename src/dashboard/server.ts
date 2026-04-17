@@ -7,6 +7,10 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { existsSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { z } from "zod";
 // @ts-ignore — Bun bundler resolves this as a text import (inlined at build time)
 import DASHBOARD_HTML from "./index.html" with { type: "text" };
 import { logger } from "../utils/logger.js";
@@ -19,6 +23,13 @@ import {
   findPath,
 } from "../store/graph.js";
 import { getRecentActivity, initActivitySchema } from "../server/activity.js";
+import { searchByBM25 } from "../store/search.js";
+
+// ---------------------------------------------------------------------------
+// Path resolution for React UI build output
+// ---------------------------------------------------------------------------
+
+const DIST_DIR = join(dirname(fileURLToPath(import.meta.url)), "dist");
 
 // ---------------------------------------------------------------------------
 // Public interfaces
@@ -42,6 +53,66 @@ export interface DashboardServerOptions {
 // ---------------------------------------------------------------------------
 
 const CORS_ORIGIN = process.env["GYST_CORS_ORIGIN"] ?? "*";
+
+// ---------------------------------------------------------------------------
+// Static file helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the Content-Type header value for a given file extension.
+ */
+function contentTypeFor(filePath: string): string {
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+  switch (ext) {
+    case "html": return "text/html; charset=utf-8";
+    case "js":   return "application/javascript";
+    case "css":  return "text/css";
+    case "map":  return "application/json";
+    default:     return "application/octet-stream";
+  }
+}
+
+/**
+ * Serves a file from the dist directory with appropriate Content-Type.
+ * Returns null if the file does not exist.
+ */
+function serveDistFile(filePath: string, requestId: string): Response | null {
+  if (!existsSync(filePath)) {
+    return null;
+  }
+  return new Response(Bun.file(filePath), {
+    headers: {
+      "Content-Type": contentTypeFor(filePath),
+      "X-Request-Id": requestId,
+      "Access-Control-Allow-Origin": CORS_ORIGIN,
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Zod schemas for write endpoints
+// ---------------------------------------------------------------------------
+
+const CreateEntrySchema = z.object({
+  type: z.enum(["error_pattern", "convention", "decision", "learning"]),
+  title: z.string().min(5),
+  content: z.string().min(10),
+  scope: z.string(),
+  tags: z.array(z.string()).optional(),
+  files: z.array(z.string()).optional(),
+});
+
+const UpdateEntrySchema = z.object({
+  title: z.string().min(5).optional(),
+  content: z.string().min(10).optional(),
+  scope: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+const FeedbackSchema = z.object({
+  helpful: z.boolean(),
+  note: z.string().optional(),
+});
 
 /**
  * Builds a JSON response with standard CORS and request-id headers.
@@ -186,6 +257,10 @@ function getEntriesByScope(db: Database, scope?: string, limit: number = 100): a
 // ---------------------------------------------------------------------------
 
 const GRAPH_NODE_RE = /^\/api\/graph\/([^/]+)$/;
+const ENTRY_ID_RE = /^\/api\/entries\/([^/]+)$/;
+const ENTRY_ACTION_RE = /^\/api\/entries\/([^/]+)\/(feedback|promote)$/;
+const REVIEW_ACTION_RE = /^\/api\/review-queue\/([^/]+)\/(confirm|archive|skip)$/;
+const ASSETS_RE = /^\/assets\//;
 
 // ---------------------------------------------------------------------------
 // Main export
@@ -224,7 +299,7 @@ export async function startDashboardServer(
                 status: 204,
                 headers: {
                   "Access-Control-Allow-Origin": CORS_ORIGIN,
-                  "Access-Control-Allow-Methods": "GET, OPTIONS",
+                  "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
                   "Access-Control-Allow-Headers": "Content-Type",
                   "X-Request-Id": requestId,
                 },
@@ -233,8 +308,8 @@ export async function startDashboardServer(
               return res;
             }
 
-            // Static HTML root — served from inlined bundle string (no file dependency)
-            if (method === "GET" && path === "/") {
+            // Legacy D3 dashboard — keep old inlined HTML accessible at /legacy
+            if (method === "GET" && path === "/legacy") {
               const res = new Response(DASHBOARD_HTML as unknown as string, {
                 headers: {
                   "Content-Type": "text/html; charset=utf-8",
@@ -243,6 +318,38 @@ export async function startDashboardServer(
               });
               logAccess(requestId, method, path, start, 200);
               return res;
+            }
+
+            // React root — serve dist/index.html if available, fall back to old HTML
+            if (method === "GET" && path === "/") {
+              const indexPath = join(DIST_DIR, "index.html");
+              const distRes = serveDistFile(indexPath, requestId);
+              if (distRes !== null) {
+                logAccess(requestId, method, path, start, 200);
+                return distRes;
+              }
+              // Fallback: legacy inlined HTML
+              const res = new Response(DASHBOARD_HTML as unknown as string, {
+                headers: {
+                  "Content-Type": "text/html; charset=utf-8",
+                  "X-Request-Id": requestId,
+                },
+              });
+              logAccess(requestId, method, path, start, 200);
+              return res;
+            }
+
+            // Static assets from dist/assets/
+            if (method === "GET" && ASSETS_RE.test(path)) {
+              const filename = path.replace(/^\/assets\//, "");
+              const assetPath = join(DIST_DIR, "assets", filename);
+              const assetRes = serveDistFile(assetPath, requestId);
+              if (assetRes !== null) {
+                logAccess(requestId, method, path, start, 200);
+                return assetRes;
+              }
+              logAccess(requestId, method, path, start, 404);
+              return jsonResponse({ error: "Asset not found" }, 404, requestId);
             }
 
             // JSON API routes
@@ -339,6 +446,585 @@ export async function startDashboardServer(
                 return jsonResponse(data, 200, requestId);
               }
 
+              // /api/review-queue
+              if (path === "/api/review-queue") {
+                try {
+                  interface ReviewQueueRow {
+                    id: string;
+                    entry_id: string;
+                    action: string;
+                    reason: string;
+                    confidence_before: number;
+                    created_at: string;
+                    status: string;
+                  }
+                  const rows = db
+                    .query<ReviewQueueRow, []>(
+                      "SELECT * FROM review_queue WHERE status = 'pending' ORDER BY created_at DESC LIMIT 50",
+                    )
+                    .all();
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse(rows, 200, requestId);
+                } catch (err) {
+                  logger.error("review-queue error", {
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                  logAccess(requestId, method, path, start, 500);
+                  return jsonResponse({ error: "internal" }, 500, requestId);
+                }
+              }
+
+              // /api/search?q=&scope=&limit=
+              if (path === "/api/search") {
+                const q = url.searchParams.get("q") ?? "";
+                const scope = url.searchParams.get("scope") || undefined;
+                const limitParam = url.searchParams.get("limit");
+                const limit = limitParam !== null ? parseInt(limitParam, 10) || 20 : 20;
+
+                if (q.trim().length === 0) {
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse([], 200, requestId);
+                }
+
+                try {
+                  const bm25Results = searchByBM25(db, q, scope);
+                  const topIds = bm25Results.slice(0, limit).map((r) => r.id);
+
+                  interface EntrySnippetRow {
+                    id: string;
+                    title: string;
+                    type: string;
+                    scope: string;
+                    confidence: number;
+                    content: string;
+                  }
+
+                  const results = topIds.map((entryId) => {
+                    const row = db
+                      .query<EntrySnippetRow, [string]>(
+                        "SELECT id, title, type, scope, confidence, content FROM entries WHERE id = ?",
+                      )
+                      .get(entryId);
+                    if (row === null || row === undefined) {
+                      return null;
+                    }
+                    const snippet =
+                      typeof row.content === "string"
+                        ? row.content.slice(0, 200).replace(/\n/g, " ")
+                        : "";
+                    const score =
+                      bm25Results.find((r) => r.id === entryId)?.score ?? 0;
+                    return {
+                      id: row.id,
+                      title: row.title,
+                      type: row.type,
+                      scope: row.scope,
+                      confidence: row.confidence,
+                      snippet,
+                      score,
+                    };
+                  }).filter(Boolean);
+
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse(results, 200, requestId);
+                } catch (err) {
+                  logger.error("search error", {
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                  logAccess(requestId, method, path, start, 500);
+                  return jsonResponse({ error: "internal" }, 500, requestId);
+                }
+              }
+
+              // /api/team/members
+              if (path === "/api/team/members") {
+                try {
+                  interface MemberRow {
+                    team_id: string;
+                    developer_id: string;
+                    display_name: string;
+                    role: string;
+                    joined_at: string;
+                  }
+                  const rows = db
+                    .query<MemberRow, []>(
+                      "SELECT team_id, developer_id, display_name, role, joined_at FROM team_members ORDER BY joined_at ASC",
+                    )
+                    .all();
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse(rows, 200, requestId);
+                } catch (_err) {
+                  // team_members table may not exist yet
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse([], 200, requestId);
+                }
+              }
+
+              // /api/team/info
+              if (path === "/api/team/info") {
+                try {
+                  interface TeamInfoRow {
+                    id: string;
+                    name: string;
+                    created_at: string;
+                    member_count: number;
+                  }
+                  const row = db
+                    .query<TeamInfoRow, []>(
+                      `SELECT t.id, t.name, t.created_at, COUNT(m.developer_id) AS member_count
+                       FROM teams t
+                       LEFT JOIN team_members m ON m.team_id = t.id
+                       GROUP BY t.id
+                       LIMIT 1`,
+                    )
+                    .get();
+                  if (row === null || row === undefined) {
+                    logAccess(requestId, method, path, start, 200);
+                    return jsonResponse(null, 200, requestId);
+                  }
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse(
+                    {
+                      id: row.id,
+                      name: row.name,
+                      createdAt: row.created_at,
+                      memberCount: row.member_count,
+                    },
+                    200,
+                    requestId,
+                  );
+                } catch (_err) {
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse(null, 200, requestId);
+                }
+              }
+
+              // /api/health
+              if (path === "/api/health") {
+                try {
+                  interface HealthRow {
+                    entries_count: number;
+                    last_updated: string | null;
+                  }
+                  const row = db
+                    .query<HealthRow, []>(
+                      `SELECT COUNT(*) AS entries_count, MAX(created_at) AS last_updated
+                       FROM entries
+                       WHERE status = 'active'`,
+                    )
+                    .get();
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse(
+                    {
+                      status: "ok",
+                      version: "0.1.15",
+                      entriesCount: row?.entries_count ?? 0,
+                      lastUpdated: row?.last_updated ?? null,
+                    },
+                    200,
+                    requestId,
+                  );
+                } catch (err) {
+                  logger.error("health error", {
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                  logAccess(requestId, method, path, start, 500);
+                  return jsonResponse({ error: "internal" }, 500, requestId);
+                }
+              }
+
+              // /api/tools/detected
+              if (path === "/api/tools/detected") {
+                const home = process.env["HOME"] ?? "";
+                const tools = [
+                  {
+                    name: "Claude Code",
+                    configPath: join(home, ".claude", "settings.json"),
+                  },
+                  {
+                    name: "Cursor",
+                    configPath: join(home, ".cursor", "mcp.json"),
+                  },
+                  {
+                    name: "Codex",
+                    configPath: join(home, ".codex", "config.yaml"),
+                  },
+                  {
+                    name: "Windsurf",
+                    configPath: join(home, ".codeium", "windsurf", "mcp_config.json"),
+                  },
+                ];
+                const detected = tools.map((t) => ({
+                  name: t.name,
+                  detected: existsSync(t.configPath),
+                  configPath: t.configPath,
+                }));
+                logAccess(requestId, method, path, start, 200);
+                return jsonResponse(detected, 200, requestId);
+              }
+
+              // /api/entries/:id — single entry with relationships
+              // (must come after all specific /api/entries/... paths)
+              const entryIdGetMatch = ENTRY_ID_RE.exec(path);
+              if (entryIdGetMatch !== null) {
+                const id = decodeURIComponent(entryIdGetMatch[1] ?? "");
+                try {
+                  const entry = db
+                    .query("SELECT * FROM entries WHERE id = ?")
+                    .get(id);
+                  if (entry === null || entry === undefined) {
+                    logAccess(requestId, method, path, start, 404);
+                    return jsonResponse({ error: "Entry not found" }, 404, requestId);
+                  }
+                  const tags = db
+                    .query("SELECT tag FROM entry_tags WHERE entry_id = ?")
+                    .all(id);
+                  const files = db
+                    .query("SELECT file_path FROM entry_files WHERE entry_id = ?")
+                    .all(id);
+                  const relationships = db
+                    .query(
+                      "SELECT * FROM relationships WHERE source_id = ? OR target_id = ?",
+                    )
+                    .all(id, id);
+                  const sources = db
+                    .query("SELECT * FROM sources WHERE entry_id = ?")
+                    .all(id);
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse(
+                    { ...(entry as object), tags, files, relationships, sources },
+                    200,
+                    requestId,
+                  );
+                } catch (err) {
+                  logger.error("entries/:id error", {
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                  logAccess(requestId, method, path, start, 500);
+                  return jsonResponse({ error: "internal" }, 500, requestId);
+                }
+              }
+
+              // SPA fallback — any non-API GET serves dist/index.html
+              if (!path.startsWith("/api/")) {
+                const indexPath = join(DIST_DIR, "index.html");
+                const spaRes = serveDistFile(indexPath, requestId);
+                if (spaRes !== null) {
+                  logAccess(requestId, method, path, start, 200);
+                  return spaRes;
+                }
+              }
+
+            }
+
+            // ------------------------------------------------------------------
+            // POST routes
+            // ------------------------------------------------------------------
+
+            if (method === "POST") {
+              // /api/review-queue/:id/(confirm|archive|skip)
+              const reviewActionMatch = REVIEW_ACTION_RE.exec(path);
+              if (reviewActionMatch !== null) {
+                const queueId = decodeURIComponent(reviewActionMatch[1] ?? "");
+                const action = reviewActionMatch[2] as "confirm" | "archive" | "skip";
+                try {
+                  const newStatus = action === "confirm" ? "confirmed" : action;
+                  db.run(
+                    "UPDATE review_queue SET status = ? WHERE id = ?",
+                    [newStatus, queueId],
+                  );
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse({ ok: true }, 200, requestId);
+                } catch (err) {
+                  logger.error("review-queue action error", {
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                  logAccess(requestId, method, path, start, 500);
+                  return jsonResponse({ error: "internal" }, 500, requestId);
+                }
+              }
+
+              // /api/entries/:id/(feedback|promote)
+              const entryActionMatch = ENTRY_ACTION_RE.exec(path);
+              if (entryActionMatch !== null) {
+                const entryId = decodeURIComponent(entryActionMatch[1] ?? "");
+                const action = entryActionMatch[2] as "feedback" | "promote";
+
+                if (action === "feedback") {
+                  let body: unknown;
+                  try {
+                    body = await req.json();
+                  } catch (_err) {
+                    logAccess(requestId, method, path, start, 400);
+                    return jsonResponse({ error: "Invalid JSON body" }, 400, requestId);
+                  }
+                  const parsed = FeedbackSchema.safeParse(body);
+                  if (!parsed.success) {
+                    logAccess(requestId, method, path, start, 400);
+                    return jsonResponse(
+                      { error: "Validation failed", details: parsed.error.flatten() },
+                      400,
+                      requestId,
+                    );
+                  }
+                  const { helpful, note } = parsed.data;
+                  const now = new Date().toISOString();
+                  try {
+                    db.run(
+                      `CREATE TABLE IF NOT EXISTS feedback (
+                         id INTEGER PRIMARY KEY AUTOINCREMENT,
+                         entry_id TEXT NOT NULL,
+                         helpful INTEGER NOT NULL,
+                         note TEXT,
+                         created_at TEXT NOT NULL
+                       )`,
+                    );
+                    db.run(
+                      "INSERT INTO feedback (entry_id, helpful, note, created_at) VALUES (?, ?, ?, ?)",
+                      [entryId, helpful ? 1 : 0, note ?? null, now],
+                    );
+                    if (helpful) {
+                      db.run(
+                        "UPDATE entries SET confidence = MIN(1.0, confidence + 0.02) WHERE id = ?",
+                        [entryId],
+                      );
+                    } else {
+                      db.run(
+                        "UPDATE entries SET confidence = MAX(0.0, confidence - 0.05) WHERE id = ?",
+                        [entryId],
+                      );
+                    }
+                    logAccess(requestId, method, path, start, 200);
+                    return jsonResponse({ ok: true }, 200, requestId);
+                  } catch (err) {
+                    logger.error("feedback error", {
+                      error: err instanceof Error ? err.message : String(err),
+                    });
+                    logAccess(requestId, method, path, start, 500);
+                    return jsonResponse({ error: "internal" }, 500, requestId);
+                  }
+                }
+
+                if (action === "promote") {
+                  try {
+                    db.run(
+                      "UPDATE entries SET scope = 'team' WHERE id = ? AND scope = 'personal'",
+                      [entryId],
+                    );
+                    logAccess(requestId, method, path, start, 200);
+                    return jsonResponse({ ok: true, id: entryId }, 200, requestId);
+                  } catch (err) {
+                    logger.error("promote error", {
+                      error: err instanceof Error ? err.message : String(err),
+                    });
+                    logAccess(requestId, method, path, start, 500);
+                    return jsonResponse({ error: "internal" }, 500, requestId);
+                  }
+                }
+              }
+
+              // /api/entries — create entry
+              if (path === "/api/entries") {
+                let body: unknown;
+                try {
+                  body = await req.json();
+                } catch (_err) {
+                  logAccess(requestId, method, path, start, 400);
+                  return jsonResponse({ error: "Invalid JSON body" }, 400, requestId);
+                }
+                const parsed = CreateEntrySchema.safeParse(body);
+                if (!parsed.success) {
+                  logAccess(requestId, method, path, start, 400);
+                  return jsonResponse(
+                    { error: "Validation failed", details: parsed.error.flatten() },
+                    400,
+                    requestId,
+                  );
+                }
+                const { type, title, content, scope, tags, files } = parsed.data;
+                const id = crypto.randomUUID();
+                const now = new Date().toISOString();
+                try {
+                  db.run(
+                    `INSERT INTO entries (id, type, title, content, scope, status, confidence, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, 'active', 0.7, ?, ?)`,
+                    [id, type, title, content, scope, now, now],
+                  );
+                  if (tags !== undefined && tags.length > 0) {
+                    for (const tag of tags) {
+                      db.run(
+                        "INSERT INTO entry_tags (entry_id, tag) VALUES (?, ?)",
+                        [id, tag],
+                      );
+                    }
+                  }
+                  if (files !== undefined && files.length > 0) {
+                    for (const filePath of files) {
+                      db.run(
+                        "INSERT INTO entry_files (entry_id, file_path) VALUES (?, ?)",
+                        [id, filePath],
+                      );
+                    }
+                  }
+                  logAccess(requestId, method, path, start, 201);
+                  return jsonResponse({ id, title, type, scope }, 201, requestId);
+                } catch (err) {
+                  logger.error("create entry error", {
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                  logAccess(requestId, method, path, start, 500);
+                  return jsonResponse({ error: "internal" }, 500, requestId);
+                }
+              }
+
+              // /api/team/invite/email (must come before /api/team/invite)
+              if (path === "/api/team/invite/email") {
+                try {
+                  interface TeamRow { id: string }
+                  const team = db
+                    .query<TeamRow, []>("SELECT id FROM teams LIMIT 1")
+                    .get();
+                  if (team === null || team === undefined) {
+                    logAccess(requestId, method, path, start, 404);
+                    return jsonResponse({ error: "No team configured" }, 404, requestId);
+                  }
+                  const inviteCode = crypto.randomUUID();
+                  const now = new Date().toISOString();
+                  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+                  db.run(
+                    `INSERT INTO api_keys (key_hash, team_id, type, created_at, expires_at, revoked, developer_id)
+                     VALUES (?, ?, 'invite', ?, ?, 0, NULL)`,
+                    [inviteCode, team.id, now, expiresAt],
+                  );
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse(
+                    {
+                      inviteCode,
+                      expiresAt,
+                      installCommand: `npx gyst-mcp install --team ${team.id} --invite ${inviteCode}`,
+                      emailSent: false,
+                      note: "No mailer configured — share the install command directly",
+                    },
+                    200,
+                    requestId,
+                  );
+                } catch (err) {
+                  logger.error("team/invite/email error", {
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                  logAccess(requestId, method, path, start, 500);
+                  return jsonResponse({ error: "internal" }, 500, requestId);
+                }
+              }
+
+              // /api/team/invite
+              if (path === "/api/team/invite") {
+                try {
+                  interface TeamRow { id: string }
+                  const team = db
+                    .query<TeamRow, []>("SELECT id FROM teams LIMIT 1")
+                    .get();
+                  if (team === null || team === undefined) {
+                    logAccess(requestId, method, path, start, 404);
+                    return jsonResponse({ error: "No team configured" }, 404, requestId);
+                  }
+                  const inviteCode = crypto.randomUUID();
+                  const now = new Date().toISOString();
+                  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+                  db.run(
+                    `INSERT INTO api_keys (key_hash, team_id, type, created_at, expires_at, revoked, developer_id)
+                     VALUES (?, ?, 'invite', ?, ?, 0, NULL)`,
+                    [inviteCode, team.id, now, expiresAt],
+                  );
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse(
+                    {
+                      inviteCode,
+                      expiresAt,
+                      installCommand: `npx gyst-mcp install --team ${team.id} --invite ${inviteCode}`,
+                    },
+                    200,
+                    requestId,
+                  );
+                } catch (err) {
+                  logger.error("team/invite error", {
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                  logAccess(requestId, method, path, start, 500);
+                  return jsonResponse({ error: "internal" }, 500, requestId);
+                }
+              }
+            }
+
+            // ------------------------------------------------------------------
+            // PATCH routes
+            // ------------------------------------------------------------------
+
+            if (method === "PATCH") {
+              // /api/entries/:id — update entry
+              const entryIdPatchMatch = ENTRY_ID_RE.exec(path);
+              if (entryIdPatchMatch !== null) {
+                const id = decodeURIComponent(entryIdPatchMatch[1] ?? "");
+                let body: unknown;
+                try {
+                  body = await req.json();
+                } catch (_err) {
+                  logAccess(requestId, method, path, start, 400);
+                  return jsonResponse({ error: "Invalid JSON body" }, 400, requestId);
+                }
+                const parsed = UpdateEntrySchema.safeParse(body);
+                if (!parsed.success) {
+                  logAccess(requestId, method, path, start, 400);
+                  return jsonResponse(
+                    { error: "Validation failed", details: parsed.error.flatten() },
+                    400,
+                    requestId,
+                  );
+                }
+                const { title, content, scope, tags } = parsed.data;
+                const now = new Date().toISOString();
+                try {
+                  const setClauses: string[] = ["updated_at = ?"];
+                  const params: unknown[] = [now];
+                  if (title !== undefined) {
+                    setClauses.push("title = ?");
+                    params.push(title);
+                  }
+                  if (content !== undefined) {
+                    setClauses.push("content = ?");
+                    params.push(content);
+                  }
+                  if (scope !== undefined) {
+                    setClauses.push("scope = ?");
+                    params.push(scope);
+                  }
+                  params.push(id);
+                  db.run(
+                    `UPDATE entries SET ${setClauses.join(", ")} WHERE id = ?`,
+                    params as any[],
+                  );
+                  if (tags !== undefined) {
+                    db.run("DELETE FROM entry_tags WHERE entry_id = ?", [id]);
+                    for (const tag of tags) {
+                      db.run(
+                        "INSERT INTO entry_tags (entry_id, tag) VALUES (?, ?)",
+                        [id, tag],
+                      );
+                    }
+                  }
+                  const updated = db
+                    .query("SELECT * FROM entries WHERE id = ?")
+                    .get(id);
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse(updated, 200, requestId);
+                } catch (err) {
+                  logger.error("update entry error", {
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                  logAccess(requestId, method, path, start, 500);
+                  return jsonResponse({ error: "internal" }, 500, requestId);
+                }
+              }
             }
 
             // 404 fallthrough

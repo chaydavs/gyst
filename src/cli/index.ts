@@ -558,19 +558,19 @@ program.command("detect [dir]").description("Alias for detect-conventions").opti
 program.command("check-conventions [file]").description("Show path conventions").action(checkConventionsAction);
 program.command("check [file]").description("Alias for check-conventions").action(checkConventionsAction);
 
-program.command("dashboard").description("Start UI").option("-p, --port <port>", "Port", "37778").option("--no-open").action(async (opts) => {
+program.command("dashboard").description("Start UI").option("-p, --port <port>", "Port", "3579").option("--no-open").action(async (opts) => {
   const config = loadConfig();
   const db = initDatabase(config.dbPath);
   const { startDashboardServer } = await import("../dashboard/server.js");
   const { url } = await startDashboardServer({ db, port: Number(opts.port), openBrowser: opts.open });
-  process.stdout.write(`Dashboard: ${url}\n`);
+  process.stdout.write(`\nGyst dashboard: ${url}\nPress Ctrl+C to stop.\n`);
 });
-program.command("ui").description("Alias for dashboard").option("-p, --port <port>", "Port", "37778").option("--no-open").action(async (opts) => {
+program.command("ui").description("Alias for dashboard").option("-p, --port <port>", "Port", "3579").option("--no-open").action(async (opts) => {
   const config = loadConfig();
   const db = initDatabase(config.dbPath);
   const { startDashboardServer } = await import("../dashboard/server.js");
   const { url } = await startDashboardServer({ db, port: Number(opts.port), openBrowser: opts.open });
-  process.stdout.write(`Dashboard: ${url}\n`);
+  process.stdout.write(`\nGyst dashboard: ${url}\nPress Ctrl+C to stop.\n`);
 });
 
 program.command("rebuild").description("Rebuild index").action(async () => {

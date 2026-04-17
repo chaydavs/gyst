@@ -9,6 +9,7 @@
   },
   "files": [
     "dist/",
+    "src/dashboard/dist/",
     "plugin/",
     "scripts/postinstall.mjs",
     "README.md",
@@ -45,8 +46,9 @@
   "scripts": {
     "dev": "bun run --watch src/mcp/server.ts",
     "postinstall": "node ./scripts/postinstall.mjs",
+    "build:dashboard": "cd src/dashboard/ui && npm install && npm run build",
     "build": "bun build src/cli/index.ts --outfile dist/cli.js --target bun --external @huggingface/transformers && bun build src/mcp/server.ts --outfile dist/server.js --target bun --external @huggingface/transformers && node -e \"const fs=require('fs'),f='dist/cli.js',c=fs.readFileSync(f,'utf8');if(!c.startsWith('#!'))fs.writeFileSync(f,'#!/usr/bin/env bun\\n'+c);\" && chmod +x dist/cli.js",
-    "prepublishOnly": "bun run build && bun test ./tests/mcp/ && bun test ./tests/compiler/ && bun test ./tests/store/ && bun test ./tests/cli/ && bun test ./tests/dashboard/ && (bun test ./tests/collaborative/ || [ $? -eq 133 ]) && (bun test ./tests/integration/ || true)",
+    "prepublishOnly": "bun run build:dashboard && bun run build && bun test ./tests/mcp/ && bun test ./tests/compiler/ && bun test ./tests/store/ && bun test ./tests/cli/ && bun test ./tests/dashboard/ && (bun test ./tests/collaborative/ || [ $? -eq 133 ]) && (bun test ./tests/integration/ || true)",
     "test": "bun test",
     "setup": "bun run src/cli/index.ts setup",
     "install-hooks": "bash scripts/install-hooks.sh",
