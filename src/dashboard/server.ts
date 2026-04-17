@@ -662,8 +662,15 @@ export async function startDashboardServer(
                       "SELECT team_id, developer_id, display_name, role, joined_at FROM team_members ORDER BY joined_at ASC",
                     )
                     .all();
+                  const members = rows.map(r => ({
+                    teamId: r.team_id,
+                    developerId: r.developer_id,
+                    displayName: r.display_name,
+                    role: r.role,
+                    joinedAt: r.joined_at,
+                  }));
                   logAccess(requestId, method, path, start, 200);
-                  return jsonResponse(rows, 200, requestId);
+                  return jsonResponse(members, 200, requestId);
                 } catch (_err) {
                   // team_members table may not exist yet
                   logAccess(requestId, method, path, start, 200);
