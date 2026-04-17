@@ -238,7 +238,11 @@ async function resolveTeamFromEnv(db: any): Promise<string> {
   }
   const rows = db.query("SELECT key_hash, team_id FROM api_keys WHERE revoked = 0").all();
   for (const row of rows) {
-    if (await Bun.password.verify(rawKey, row.key_hash)) return row.team_id;
+    try {
+      if (await Bun.password.verify(rawKey, row.key_hash)) return row.team_id;
+    } catch {
+      // legacy row with non-bcrypt hash — skip it
+    }
   }
   process.stdout.write("Error: GYST_API_KEY is invalid.\n");
   process.exit(1);

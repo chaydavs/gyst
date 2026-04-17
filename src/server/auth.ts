@@ -125,7 +125,12 @@ export async function hashApiKey(key: string): Promise<string> {
  * @param hash - Stored bcrypt hash to compare against.
  */
 async function verifyApiKey(key: string, hash: string): Promise<boolean> {
-  return Bun.password.verify(key, hash);
+  try {
+    return await Bun.password.verify(key, hash);
+  } catch {
+    // hash is not a valid bcrypt/argon2 string (e.g. legacy UUID rows) — treat as no match.
+    return false;
+  }
 }
 
 /**
