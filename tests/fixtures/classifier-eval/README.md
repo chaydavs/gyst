@@ -69,7 +69,7 @@ adversarial rows just train the rules to overfit the fixture.
 Run the export tool against your local DB:
 
 ```
-bun run scripts/export-classifier-labels.ts \
+bun run label:export \
   --db .gyst/wiki.db \
   --since 30d \
   --out /tmp/labels-to-fill.jsonl
@@ -80,8 +80,28 @@ leaf string — parsing the JSON first so the output stays structurally
 valid (a naive blob-strip breaks parsing by replacing `"foo":"bar"` with
 `"foo":[REDACTED]`).
 
+### Option A — hand-label
+
 Paste the output into a Google Sheet for labelling, fill the `expected.*`
 fields, then append the labelled rows back to `labels.jsonl`.
+
+### Option B — LLM pre-label, human spot-check (faster)
+
+```
+ANTHROPIC_API_KEY=... bun run label:auto \
+  --in /tmp/labels-to-fill.jsonl \
+  --out /tmp/labels-auto.jsonl \
+  --budget 200
+```
+
+Haiku proposes `candidateType`/`scopeHint`/`subcategory` for each row. Every
+auto-labelled row carries `notes: "auto-labelled — review: <reasoning>"` so
+you can grep for unreviewed rows. Spot-check the borderline categories
+(questions, historical, soft qualifiers) — the rules-level classifier misfires
+on those, which is where the LLM labels are most likely wrong too.
+
+**Always spot-check before appending:** the LLM labeller carries the same
+blind spots the classifier does; it is an acceleration, not ground truth.
 
 Before committing, **scrub home-directory paths by hand** (search/replace
 your home prefix). The bundled `stripSensitiveData` targets secrets and
