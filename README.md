@@ -2,17 +2,13 @@
 
 **Team knowledge compiler for AI coding agents.**
 
-> Every AI tool makes individual developers faster. Gyst makes the team smarter by giving every agent a shared memory of the team's past fixes, decisions, and conventions.
-
-Your Claude Code doesn't know what your teammate's Cursor learned yesterday. Gyst fixes that — without infrastructure, without a SaaS subscription, without data leaving your network.
+> Every AI tool makes individual developers faster. Gyst makes the team smarter — shared memory of past fixes, decisions, and conventions across Claude Code, Cursor, Codex, Gemini, and any MCP-compatible tool.
 
 ---
 
 ## Install
 
-One command. Detects Claude Code, Cursor, Codex CLI, Gemini CLI, Windsurf, OpenCode, and Continue automatically.
-
-**Requires Bun.** Install it first if you haven't:
+**Requires Bun:**
 ```bash
 curl -fsSL https://bun.sh/install | bash
 ```
@@ -21,225 +17,159 @@ curl -fsSL https://bun.sh/install | bash
 npx gyst-mcp install
 ```
 
-This runs the full setup: detects your AI tools → registers the MCP server → initializes your knowledge base → optionally scans for conventions → optionally captures team rules.
-
-After install, every `gyst` command is available and your AI agents have 14 new tools via MCP.
+Detects Claude Code, Cursor, Codex CLI, Gemini CLI, Windsurf, OpenCode, VS Code, and Continue automatically. Registers the MCP server, initializes the database, scans for conventions, and installs git hooks. Restart your AI tool when it finishes.
 
 ---
 
 ## Getting Started
 
-Dropping Gyst into an existing project takes about 5 minutes.
-
-### Step 1 — Install
+### 1. Install
 
 ```bash
 npx gyst-mcp install
 ```
 
-This detects your AI tools, writes the MCP config, initializes the database, scans for conventions, and installs git hooks. Restart your AI tool when it finishes.
+### 2. Populate the knowledge base
 
-### Step 2 — Let your agent populate the knowledge base
-
-On your next session, paste this into your AI tool:
+On your next session, tell your agent:
 
 ```
 Scan this project with Gyst. Read the README, package.json, recent git
-history, and key source files. Use the learn tool to record important
-conventions, decisions, error patterns, and anything a new developer
-should know.
+history, and key source files. Use the learn tool to record conventions,
+decisions, error patterns, and anything a new developer should know.
 ```
 
-The agent calls `learn()` for each piece of knowledge it finds. It understands context — commit messages, error patterns, architectural decisions — better than any script can. A typical codebase produces 20–60 entries in one pass.
-
-### Step 3 — Check what was captured
+### 3. Use it
 
 ```bash
 gyst recall "what should I know about this codebase"
+gyst dashboard   # knowledge UI at localhost:3579
 ```
 
-Or open the team knowledge UI:
+---
+
+## Team Mode
+
+### Solo / git-sync (zero infrastructure)
+
+The wiki lives in your repo. `git pull` syncs knowledge automatically via the `post-merge` hook. Works out of the box.
+
+### Remote teams (shared HTTP server)
+
+**Admin — set up the team and start the server:**
 
 ```bash
-gyst dashboard
+gyst create team "Acme Engineering"        # prints admin key
+GYST_API_KEY=gyst_admin_... gyst team invite  # prints invite key
+gyst serve --http --port 3456              # start shared MCP server
 ```
 
-This starts a local server at **[localhost:3579](http://localhost:3579)**. You'll see:
-
-- Editorial newspaper-style UI with Team/Personal mode and a chronological knowledge feed
-- Capture modal (⌘N) to add entries with 5-type picker and Personal/Team scope selector
-- Invite modal (⌘I) for 3-step onboarding of new team members
-- Review Queue sidebar for entries needing attention, Team Pulse stats, and Team Members list
-- Legacy D3 force-directed graph still accessible at `/legacy`
-
-### Step 4 — Add team members (optional)
-
-> Skip this if you're working solo. The git-sync mode (wiki files in repo) works out of the box with no server.
-
-**On the admin machine — create the team and generate an invite:**
+**Each developer joins remotely:**
 
 ```bash
-gyst team create "Acme Engineering"
-gyst team invite
-# Prints: gyst_invite_abc123...
+gyst join gyst_invite_abc123... "Alice" --server http://your-host:3456
+# prints: member key + MCP config instructions
 ```
 
-**Each developer joins with the invite key:**
-
-```bash
-gyst join gyst_invite_abc123 "Alice"
-```
-
-This registers their developer ID and links their agent sessions to the shared team log.
-
-### Step 5 — Start the shared HTTP server (team mode)
-
-```bash
-GYST_PORT=3000 bun run src/server/http.ts
-```
-
-Then update each developer's MCP config to point at the server instead of the local stdio server:
+The member key is all they need. Configure their MCP client:
 
 ```json
 {
   "mcpServers": {
     "gyst": {
-      "type": "streamable-http",
-      "url": "http://your-server:3000/mcp",
+      "url": "http://your-host:3456/mcp",
       "headers": { "Authorization": "Bearer gyst_member_..." }
     }
   }
 }
 ```
 
-The bearer token is printed when you run `gyst join`. All 14 tools work identically over HTTP.
-
-### Step 6 — Keep the knowledge base growing
-
-From this point, knowledge grows automatically:
-
-- **Git hooks** — `post-commit` triggers `gyst harvest-session` after every commit
-- **Session hooks** — Claude Code runs `gyst inject-context` at session start (injects ghost rules + conventions automatically)
-- **Manual entries** — `gyst ghost-init` for unwritten team rules
-- **Agent calls** — any agent with the MCP config can call `learn()` at any time
-
-```bash
-gyst onboard        # generate a markdown onboarding doc from everything Gyst knows
-gyst audit src/api/auth.ts  # fail if a file violates stored conventions
-```
+All 14 tools work identically over HTTP and stdio.
 
 ---
 
 ## What it does
 
-Every time a developer learns something — a bug fix, a deploy rule, a decision — their AI agent calls `learn()`. The knowledge is indexed into a shared SQLite database with full-text search, a relationship graph, and semantic embeddings. The next developer who hits the same situation — in any AI tool — calls `recall()` and gets it back.
-
 ```
 Developer A (Claude Code) ──┐
 Developer B (Cursor)       ──┤  learn() ──► Team Knowledge Base ──► recall()
-Developer C (Codex CLI)    ──┤                                         │
-Developer D (self-hosted)  ──┘                           every agent reads this
+Developer C (Codex CLI)    ──┘                                   every agent reads this
 ```
 
-The knowledge base lives in your git repo (zero infrastructure) or on a shared HTTP server (team mode). Nothing leaves your infrastructure unless you choose otherwise.
+Knowledge lives in your git repo or on a shared HTTP server. Nothing leaves your infrastructure unless you choose otherwise.
 
 ---
 
-## Features
-
-### 14 MCP Tools
+## MCP Tools (14)
 
 | Tool | Purpose |
 |------|---------|
 | `learn` | Record knowledge: errors, conventions, decisions, learnings |
 | `recall` | Ranked search — returns full entries within a token budget |
-| `search` | Compact index (id · type · confidence · age) — 7× more token-efficient |
-| `get_entry` | Full markdown for one entry by ID — use after `search` |
+| `search` | Compact index (7× more token-efficient) — browse then `get_entry` |
+| `get_entry` | Full markdown for one entry by ID |
 | `conventions` | Coding standards for a file path or directory |
 | `check_conventions` | Which conventions apply to a file |
 | `check` | Run all violation detectors against a file |
 | `failures` | Match a known error pattern by signature or keywords |
-| `graph` | Query the relationship graph — curated edges plus a structural (AST) sidecar |
-| `feedback` | Rate an entry helpful/unhelpful — adjusts confidence ±0.02/0.05 |
+| `graph` | Query the relationship graph |
+| `feedback` | Rate an entry helpful/unhelpful — adjusts confidence |
 | `harvest` | Extract knowledge from a session transcript |
 | `activity` | Recent team activity log |
 | `status` | Health check and database stats |
 
 ### Ghost Knowledge
 
-The most important feature. Ghost knowledge entries have infinite confidence and always surface first — they encode things your team knows but never wrote down:
-
-- "Don't deploy between 2–4pm, batch job runs"
-- "The billing service must never be changed without Alice"
-- "Express.json() breaks webhooks — use raw body parser"
+Ghost entries have infinite confidence and always surface first — they encode things your team knows but never wrote down:
 
 ```bash
 gyst ghost-init   # interactive Q&A to capture tribal knowledge
 ```
 
-Agents see ghost knowledge in every `recall()` regardless of what they're searching for.
+---
 
-### ⚡️ Zero-Config Synchronization
+## CLI Commands
 
-Gyst eliminates the "Rebuild Tax." Your knowledge base stays in sync with your code automatically:
-
-- **Git-Native:** A built-in `post-merge` hook triggers a database rebuild every time you `git pull`, so teammates' new knowledge is immediately searchable.
-- **Self-Healing Server:** On startup, the MCP server compares markdown file mtimes against the database. If any wiki file is newer, it rebuilds before serving the first query.
-- **Stale-State Detection:** If `recall()` returns zero results on a non-trivial query, agents are notified when the local index is missing files from Git, prompting a self-fix.
-
-```bash
-gyst rebuild   # manually force-sync the DB with your markdown files
-```
-
-### 🧠 Usage-Based Learning
-
-Gyst isn't just a passive index — it builds "Team Intuition" through usage:
-
-- **Co-Retrieval Strengthening:** If your team frequently looks at a "Database Error" and an "API Convention" in the same session, Gyst automatically builds a relationship between them. After 3 co-retrievals, a permanent graph edge is created.
-- **Dynamic Knowledge Graph:** Over time, Gyst identifies "Hubs" — files or patterns that cause the most friction — helping you prioritize refactoring where it matters most.
-- **Confidence Decay:** Entries that haven't been confirmed recently lose confidence gradually, so stale knowledge naturally falls out of results without manual curation.
-
-### 📊 Visualizing Team Friction
-
-```bash
-gyst dashboard   # launch the team knowledge UI at localhost:3579
-```
-
-- **Team/Personal feeds:** Switch between shared team knowledge and your personal entries, with inline search and type-filter chips.
-- **Capture (⌘N):** Add entries with a 5-type picker (convention, decision, error pattern, learning, ghost knowledge) and Personal/Team scope.
-- **Review Queue:** Sidebar card surfaces entries awaiting review or confirmation.
-- **Team Pulse:** Stats grid showing recent activity, member contributions, and confidence distribution.
-- **Structural Sidecar (graphify):** AST-derived structural context is available via the legacy graph at `/legacy` — dashed edges and muted colors keep curated and structural layers visually distinct. Toggle `Curated` / `Structural` / `All` to focus each layer independently. Recall results surface the matching structural context as a post-ranked sidecar; it never pollutes BM25 or RRF scoring.
-
-### Convention Detection
-
-```bash
-gyst detect-conventions   # auto-scans your codebase
-gyst check src/api/auth.ts  # enforce conventions against a file
-```
-
-Detects naming, imports, error handling, exports, testing style, file naming, and import ordering. Stored conventions become enforceable rules agents check before writing code.
-
-### Progressive Disclosure
-
-`recall()` returns full entries (expensive). `search()` returns a compact index at 1/7th the token cost. Use `search` to browse, then `get_entry(id)` for the ones that matter. Agents on small context windows (Ollama @ 4096 tokens) can pass `context_budget: 2000` to get compressed results automatically.
+| Command | What it does |
+|---------|-------------|
+| `gyst install` | First-time setup |
+| `gyst serve` | Start MCP server (stdio) |
+| `gyst serve --http [--port N]` | Start shared HTTP team server |
+| `gyst recall <query>` | Search the knowledge base |
+| `gyst add <title> [content]` | Manually add a knowledge entry |
+| `gyst check <file>` | Check a file against stored conventions |
+| `gyst detect-conventions` | Scan codebase for conventions |
+| `gyst dashboard` | Launch knowledge UI at localhost:3579 |
+| `gyst create team <name>` | Create a team and get an admin key |
+| `gyst team invite` | Generate an invite key for a new member |
+| `gyst team members` | List all team members |
+| `gyst join <key> <name> [--server <url>]` | Join a team (local or remote) |
+| `gyst ghost-init` | Interactive tribal knowledge capture |
+| `gyst onboard` | Generate onboarding doc from knowledge base |
 
 ---
 
-## Natural Language Queries
+## Benchmarks
 
-Agents ask Gyst questions in plain English. The right tool fires automatically based on the description it reads.
+### Internal eval (50 queries)
+| Metric | Score |
+|--------|------:|
+| MRR@5 | 0.977 |
+| Recall@5 | 0.983 |
+| NDCG@5 | 0.962 |
 
-| Agent question | Tool called |
-|----------------|-------------|
-| "What did we decide about error handling?" | `search` → `get_entry` |
-| "What conventions does src/api/ follow?" | `conventions` |
-| "Has anyone seen this Postgres error before?" | `failures` |
-| "What should a new developer know?" | `onboard` |
-| "What changed this week?" | `search` (temporal intent) |
-| "Is this code following our conventions?" | `check` |
+### CodeMemBench — team knowledge retrieval (200 queries)
+| Metric | Score |
+|--------|------:|
+| NDCG@10 | 0.327 |
+| Hit Rate | 66.0% |
+| Ghost Knowledge Hit | **92.0%** |
 
-Each result includes a `ref: gyst://entry/{id}` citation URI agents can include in their responses.
+### LongMemEval (500 questions)
+| Metric | Score |
+|--------|------:|
+| Hit Rate @5 | **94.2%** |
+| MRR@5 | 0.837 |
 
 ---
 
@@ -247,226 +177,30 @@ Each result includes a `ref: gyst://entry/{id}` citation URI agents can include 
 
 Five search strategies run in parallel on every query, fused with Reciprocal Rank Fusion:
 
-1. **File path** — exact match on affected files (fastest)
-2. **BM25 via FTS5** — keyword search with porter stemmer + code tokenization (camelCase → separate tokens)
-3. **Graph traversal** — walk entity relationships from known nodes
-4. **Temporal** — recency-weighted, boosted for debugging/history queries
+1. **File path** — exact match on affected files
+2. **BM25 via FTS5** — keyword search with code tokenization (camelCase → separate tokens)
+3. **Graph traversal** — walk entity relationships
+4. **Temporal** — recency-weighted for debugging/history queries
 5. **Semantic** — 22MB local ONNX model, no API call required
 
-### Auto-injection at session start
-
-The `install` command wires a `SessionStart` hook into Claude Code (and other tools that support hooks). At the start of every session, `gyst inject-context` runs automatically and injects:
-
-- All ghost knowledge rules
-- Top 3 conventions for the current directory
-- Most recent error pattern
-
-Your agents know your team's rules before you type the first message.
-
----
-
-## 🚀 Scalability & Performance
-
-Gyst is stress-tested against 10,000+ entries.
-
-- **Ultra-Lean:** 10,000 entries consume only ~12MB of disk space.
-- **Mac Optimized:** Includes a custom `LIMIT` clause in FTS5 queries to bypass macOS-specific BM25 latency regressions in Homebrew SQLite 3.51.x (reduces search from 1.7–3.1s to sub-millisecond).
-- **Smart Consolidation:** Automated deduplication merges redundant learnings into single high-confidence summary entries. Incremental — only processes entries created or modified since the last run.
-- **Concurrent writes:** Three-layer protection against SQLite `SQLITE_BUSY` — WAL mode, `busy_timeout = 5000ms`, and exponential-backoff retry — handles 50+ concurrent agent writes without failures.
-
----
-
-## Self-hosted LLMs
-
-Gyst is designed for teams that don't want their knowledge leaving their infrastructure.
-
-- **No external API calls.** The 22MB `all-MiniLM-L6-v2` model runs locally via `@xenova/transformers`. No OpenAI, no Anthropic, no Cohere.
-- **No telemetry.** SQLite is local. The wiki lives in your git repo.
-- **Works with Ollama, vLLM, LM Studio, OpenCode, Continue.** Any MCP-compatible client connects.
-- **Adaptive context budget.** Self-hosted models with small context windows (4096 tokens) can request compressed output: `recall({query, context_budget: 2000})`.
-
----
-
-## Team mode
-
-**Git-sync (zero infrastructure):** The wiki lives in the repo. Everyone pulls the same knowledge via `git pull`. SQLite is local and gitignored. Works immediately with no server.
-
-**Shared HTTP server (multi-developer real-time):**
-
-```bash
-# Admin
-gyst team create "Acme Engineering"
-gyst team invite   # prints an invite key
-
-# Developer joins
-gyst join <invite-key> "Alice"
-
-# Start shared server
-GYST_PORT=3000 bun run src/server/http.ts
-```
-
-MCP config for the shared server:
-
-```json
-{
-  "mcpServers": {
-    "gyst": {
-      "type": "streamable-http",
-      "url": "https://gyst.your-team.internal/mcp",
-      "headers": { "Authorization": "Bearer gyst_member_..." }
-    }
-  }
-}
-```
-
-All 14 tools are available over both stdio and HTTP transports.
-
----
-
-## Benchmarks
-
-All numbers are retrieval metrics, not end-to-end QA accuracy.
-
-### Internal eval (50 code-specific queries)
-
-| Metric | Score |
-|--------|------:|
-| MRR@5 | 0.977 |
-| Recall@5 | 0.983 |
-| NDCG@5 | 0.962 |
-
-Hand-curated fixture of 50 queries across error patterns, conventions, decisions, and ghost knowledge. Used for per-PR regression testing — must not drop below 0.90.
-
-### Collaborative eval (5-developer simulation, 30 queries)
-
-MRR@5 = 0.967 — concurrent writes from 5 simulated developers, queries from a different developer than the one who learned.
-
-### LongMemEval — session-level retrieval (500 questions)
-
-| Metric | Score |
-|--------|------:|
-| Hit Rate @5 | **94.2%** |
-| MRR@5 | 0.837 |
-| Recall@5 | 0.868 |
-
-**What this measures:** Was the correct session in the top-5 retrieved results? Measured against LongMemEval_s (Wu et al., ICLR 2025), 6-category cleaned split, 500 questions.
-
-**What this does not measure:** End-to-end QA accuracy. Published competitor scores (Emergence AI 86%, Hindsight 91.4%) typically measure whether an LLM produced the correct text answer given the retrieved context — a harder task. Retrieval Hit@5 is an upper bound on QA accuracy; the actual QA number for Gyst is not yet measured and would be lower.
-
-Best category: `single-session-assistant` 98.2%, `knowledge-update` 98.7%. Weakest: `single-session-user` 82.9%, `single-session-preference` 83.3%.
-
-### CodeMemBench — team knowledge retrieval (200 queries, self-built)
-
-| Metric | Score |
-|--------|------:|
-| NDCG@10 | 0.327 |
-| Recall@10 | 0.601 |
-| MRR@10 | 0.256 |
-| Hit Rate | 66.0% |
-
-**Ghost Knowledge Hit Rate:** **92.0%** (target 90% met).
-
-**What this measures:** Can an agent find the right error pattern, convention, decision, or ghost rule for a real situation? 500 knowledge entries × 200 natural-language queries across 8 categories and 3 difficulty levels.
-
-**Fairness note:** We built this benchmark. The dataset is committed at [`tests/benchmark/codememb/dataset.json`](tests/benchmark/codememb/dataset.json) — run your system against it.
-
-**Ablation:** Semantic search carries this benchmark (disabling it drops hit rate from 78% to 10%). BM25 and graph contribute zero NDCG on natural-language paraphrased queries — different story on keyword queries. Full ablation in `benchmark-combined.json`.
-
-Best category: `onboarding` NDCG=0.428, `convention_lookup` NDCG=0.390. Weakest: `error_resolution` NDCG=0.257, `temporal` NDCG=0.276.
-
-### CoIR — code retrieval (4 of 10 subtasks, embedding-only)
-
-| Subtask | NDCG@10 |
-|---------|--------:|
-| stackoverflow-qa | 0.840 |
-| codefeedback-st | 0.660 |
-| codefeedback-mt | 0.356 |
-| cosqa | 0.327 |
-| **subset mean** | **0.546** |
-
-Model: `all-MiniLM-L6-v2` (22MB, same model used in production). **4 of 10 subtasks** — this mean is not directly comparable to the full CoIR leaderboard.
-
----
-
-## Comparison
-
-| | **Gyst** | claude-mem | mem0 | mcp-memory-service |
-|---|---|---|---|---|
-| Team sharing | ✓ | ✗ | ✓ (paid) | ✗ |
-| Self-hosted, no API keys | ✓ | ✓ | paid tier | ✓ |
-| Works with any MCP client | ✓ | ✓ | ✓ | ✓ |
-| Ghost knowledge (always-on rules) | ✓ | ✗ | ✗ | ✗ |
-| Convention detection + enforcement | ✓ | ✗ | ✗ | ✗ |
-| Hybrid search (5 strategies) | ✓ | vector only | vector only | simple |
-| Knowledge graph | ✓ | ✗ | ✗ | ✗ |
-| Dashboard | ✓ | ✗ | ✗ | ✗ |
-| Auto-sync on git pull | ✓ | ✗ | ✗ | ✗ |
-| MCP tools | 14 | 3 | varies | 1–2 |
-| License | MIT | check | Apache 2.0 | check |
-
-**Where competitors are better:**
-- Augment Code has deeper IDE integration, PR review, and a polished cloud product. If you want zero infrastructure and a supported SaaS, use Augment.
-- mem0 has a cloud service with zero-config setup. If you want managed infrastructure, use mem0.
-- claude-mem is simpler for personal single-developer use with no team sharing needed.
-
-**Gyst's moat:** open source + self-hosted + cross-tool + team-first + MIT license. No vendor lock-in, no data egress, works on air-gapped teams.
-
----
-
-## CLI Commands
-
-### Setup & Lifecycle
-- `gyst install` — First-time setup (detects tools, registers MCP, initializes).
-- `gyst setup` — Re-detect tools and reinstall git hooks.
-- `gyst serve` — Start the MCP server (stdio). Alias: `heartbeat`, `start`.
-
-### Knowledge Management
-- `gyst recall <query>` — Search knowledge base (semantic + keyword). Alias: `search`.
-- `gyst add <title> [content]` — Manually add a knowledge entry.
-- `gyst rebuild` — Sync the SQLite database from markdown files. Alias: `sync`.
-- `gyst consolidate` — Run maintenance pipeline (deduplication & cleanup).
-- `gyst harvest-session` — Extract knowledge from recent Claude Code transcripts.
-- `gyst inject` — Generate session context block for manual injection.
-- `gyst ghost-init` — Interactive onboarding for tribal knowledge.
-
-### Analysis & Enforcement
-- `gyst audit <file>` — Check a file against all knowledge rules (fails on violations).
-- `gyst check <file>` — Show conventions applicable to a specific file or path.
-- `gyst probe [dir]` — Technically scan for patterns/conventions (supports `--dry-run`). Alias: `detect`.
-- `gyst onboard` — Generate a markdown onboarding doc from the knowledge base.
-
-### Team & Collaboration
-- `gyst team create <name>` — Initialize a new team and get an admin key.
-- `gyst team invite` — Generate a temporary invite key for a new member.
-- `gyst team members` — List all registered team members.
-- `gyst join <key> <name>` — Join an existing team with an invite key.
-
-### Visualization
-- `gyst dashboard` — Launch the team knowledge UI at localhost:3579. Alias: `ui`.
-- `gyst show memory` — Alias for `dashboard`.
-- `gyst show members` — Alias for `team members`.
+The `install` command wires a `SessionStart` hook into your AI tools. At every session start, `gyst inject-context` automatically injects ghost knowledge rules and top conventions for the current directory.
 
 ---
 
 ## Architecture
 
 ```
-gyst/
-├── src/
-│   ├── mcp/           # MCP server + 14 tools (stdio + HTTP)
-│   ├── compiler/      # Extract, normalize, deduplicate, link
-│   ├── store/         # SQLite + FTS5, 5-strategy search, RRF fusion, graph, confidence
-│   ├── server/        # HTTP server, auth (API keys), activity logging
-│   ├── dashboard/     # HTTP server + React UI (src/dashboard/ui/)
-│   ├── capture/       # Git hooks, session harvesting, context injection
-│   ├── cli/           # Commander-based CLI (15 commands)
-│   └── utils/         # Config, logger, errors, token counting
-├── tests/             # 877 tests across 43 files
-├── gyst-wiki/         # Compiled knowledge base (markdown files)
-└── decisions/         # Architecture Decision Records (001–011)
+src/
+├── mcp/        # MCP server + 14 tools (stdio + HTTP)
+├── compiler/   # Extract, normalize, deduplicate, link
+├── store/      # SQLite + FTS5, 5-strategy search, RRF fusion, graph
+├── server/     # HTTP server, auth, activity logging
+├── dashboard/  # React knowledge UI
+├── capture/    # Git hooks, session harvesting, context injection
+└── cli/        # CLI commands
 ```
 
-**Tech stack:** Bun · TypeScript strict · SQLite via `bun:sqlite` with FTS5 · `@modelcontextprotocol/sdk` · Commander · Zod · `@xenova/transformers`
+**Stack:** Bun · TypeScript · SQLite (FTS5) · `@modelcontextprotocol/sdk` · Zod
 
 ---
 
@@ -474,25 +208,11 @@ gyst/
 
 ```bash
 bun install
-bun test                        # 877 tests, 43 files
-bun run lint                    # TypeScript type check (tsc --noEmit)
-bun run build                   # Bundle to dist/
-bun run benchmark:codememb      # CodeMemBench (NDCG@10=0.351, Hit=78%)
-bun run eval                    # Internal retrieval eval (MRR@5=0.977)
+bun test                    # 958 tests, 63 files
+bun run lint                # tsc --noEmit
+bun run build               # bundle to dist/
+bun run benchmark:codememb  # CodeMemBench
 ```
-
----
-
-## Contributing
-
-The highest-value contributions right now:
-
-1. **QA evaluation mode** — run an LLM over the top-5 retrieved entries and score text answers. This produces the apples-to-apples number vs. other memory systems.
-2. **CodeRankEmbed upgrade** — swap `all-MiniLM-L6-v2` for a code-specific embedding model to improve `error_resolution` and `temporal` categories.
-3. **More tool integrations** — Zed, Neovim+avante.nvim, JetBrains.
-4. **PostgreSQL backend** — for teams that need a real database server rather than SQLite.
-
-File a GitHub issue before starting large changes. Decision records in `decisions/` explain non-obvious choices — read them before changing retrieval code.
 
 ---
 
