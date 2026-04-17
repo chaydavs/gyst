@@ -79,35 +79,29 @@ The wiki lives in your repo. `git pull` syncs knowledge automatically via the `p
 
 ### Remote teams (shared HTTP server)
 
-**Admin — set up the team and start the server:**
+One person hosts. Everyone else joins with a single command — no local DB, no config editing, no shared filesystem required.
+
+**Admin — set up once:**
 
 ```bash
-gyst create team "Acme Engineering"        # prints admin key
-GYST_API_KEY=gyst_admin_... gyst team invite  # prints invite key
-gyst serve --http --port 3456              # start shared MCP server
+gyst create team "Acme Engineering"              # prints admin key
+GYST_API_KEY=gyst_admin_... gyst team invite     # prints invite key
+gyst serve --http --port 3456                    # start shared MCP server
 ```
 
-**Each developer joins remotely:**
+Expose the server publicly (ngrok for testing, fly.io/Railway for production) and share:
+- The server URL
+- The invite key
+
+**Each developer joins with one command:**
 
 ```bash
 gyst join gyst_invite_abc123... "Alice" --server http://your-host:3456
-# prints: member key + MCP config instructions
 ```
 
-The member key is all they need. Configure their MCP client:
+That's it. Gyst automatically detects and reconfigures every AI tool on the developer's machine (Claude Code, Cursor, Codex, Gemini, Windsurf, VS Code) to point at the shared server. Restart the AI tool and every agent is connected — reading and writing to the same team knowledge base.
 
-```json
-{
-  "mcpServers": {
-    "gyst": {
-      "url": "http://your-host:3456/mcp",
-      "headers": { "Authorization": "Bearer gyst_member_..." }
-    }
-  }
-}
-```
-
-All 14 tools work identically over HTTP and stdio.
+All 14 tools work identically over HTTP and stdio. Knowledge grows as the team grows.
 
 ---
 

@@ -257,6 +257,85 @@ export function mergeGystMcpEntry(config: McpConfig): McpConfig {
 }
 
 /**
+ * Returns a new config with the Gyst HTTP MCP entry merged into `mcpServers`.
+ *
+ * Used when a developer joins a team that hosts a shared gyst HTTP server.
+ * The HTTP entry replaces the stdio entry so the agent talks to the shared
+ * server instead of starting a local process.
+ *
+ * @param config     - Existing tool config.
+ * @param serverUrl  - Base URL of the shared gyst server (e.g. http://host:3456).
+ * @param memberKey  - The developer's Bearer token.
+ * @returns New config object with `mcpServers.gyst` pointing at the HTTP server.
+ */
+export function mergeGystHttpEntry(
+  config: McpConfig,
+  serverUrl: string,
+  memberKey: string,
+): McpConfig {
+  const existing =
+    typeof config.mcpServers === "object" && config.mcpServers !== null
+      ? config.mcpServers
+      : {};
+  const base = serverUrl.replace(/\/$/, "");
+  return {
+    ...config,
+    mcpServers: {
+      ...existing,
+      gyst: {
+        type: "streamable-http",
+        url: `${base}/mcp`,
+        headers: { Authorization: `Bearer ${memberKey}` },
+      },
+    },
+  };
+}
+
+/**
+ * Writes the Gyst HTTP MCP entry to every detected tool's config file.
+ *
+ * Called after a successful remote `gyst join --server` so the developer's
+ * agents automatically point at the shared server without manual config editing.
+ *
+ * @param serverUrl - Base URL of the shared gyst HTTP server.
+ * @param memberKey - The developer's Bearer token returned by join.
+ * @returns List of tool names that were successfully configured.
+ */
+export function writeHttpMcpConfig(serverUrl: string, memberKey: string): string[] {
+  const tools = detectTools();
+  const configured: string[] = [];
+
+  for (const tool of tools.filter((t) => t.detected)) {
+    try {
+      const existing = readJsonConfig(tool.configPath);
+      // VS Code uses the "servers" key — use mergeGystVSCodeEntry first, then
+      // patch the gyst entry to be HTTP instead of stdio.
+      const updated = tool.name === "VS Code"
+        ? {
+            ...existing,
+            servers: {
+              ...(typeof existing.servers === "object" && existing.servers !== null
+                ? (existing.servers as Record<string, unknown>)
+                : {}),
+              gyst: {
+                type: "streamable-http",
+                url: `${serverUrl.replace(/\/$/, "")}/mcp`,
+                headers: { Authorization: `Bearer ${memberKey}` },
+              },
+            },
+          }
+        : mergeGystHttpEntry(existing, serverUrl, memberKey);
+      writeJsonConfig(tool.configPath, updated);
+      configured.push(tool.name);
+    } catch {
+      // Non-fatal — tool config may be read-only or in an unexpected format.
+    }
+  }
+
+  return configured;
+}
+
+/**
  * Returns a new VS Code mcp.json config with the Gyst server merged.
  * VS Code uses `"servers"` (not `"mcpServers"`) and a `"type": "stdio"` field.
  *

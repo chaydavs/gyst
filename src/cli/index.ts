@@ -508,11 +508,20 @@ program
           process.exit(1);
         }
         process.stdout.write(`Joined! Member Key: ${data.memberKey}\n`);
-        process.stdout.write(`Add to your shell:  export GYST_API_KEY="${data.memberKey}"\n`);
-        process.stdout.write(`Set MCP server URL: export GYST_SERVER="${opts.server}"\n`);
-        process.stdout.write(`\nConfigure your MCP client to use:\n`);
-        process.stdout.write(`  URL:   ${opts.server.replace(/\/$/, "")}/mcp\n`);
-        process.stdout.write(`  Auth:  Bearer ${data.memberKey}\n`);
+        process.stdout.write(`Add to your shell:  export GYST_API_KEY="${data.memberKey}"\n\n`);
+
+        // Auto-configure every detected AI tool to point at the shared HTTP server.
+        const { writeHttpMcpConfig } = await import("./install.js");
+        const configured = writeHttpMcpConfig(opts.server, data.memberKey);
+        if (configured.length > 0) {
+          process.stdout.write(`Configured MCP clients: ${configured.join(", ")}\n`);
+          process.stdout.write(`All your agents now point at the shared team server.\n`);
+          process.stdout.write(`Restart your AI tools to activate.\n`);
+        } else {
+          process.stdout.write(`No AI tools detected — configure manually:\n`);
+          process.stdout.write(`  URL:  ${opts.server.replace(/\/$/, "")}/mcp\n`);
+          process.stdout.write(`  Auth: Bearer ${data.memberKey}\n`);
+        }
       } else {
         // Local join: use the local DB
         const db = openTeamDb();
