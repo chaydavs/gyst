@@ -17,6 +17,7 @@ import {
   initProject,
   writeHooksPlugin,
   installGitHooks,
+  writeAgentRules,
 } from "../../src/cli/install.js";
 import { loadConfig } from "../../src/utils/config.js";
 
@@ -58,8 +59,8 @@ describe("detectTools", () => {
     expect(claude).toBeDefined();
     // Claude Code is expected in this environment — assert detected is a boolean.
     expect(typeof claude!.detected).toBe("boolean");
-    // configPath should point to ~/.claude/settings.json
-    expect(claude!.configPath).toBe(join(homedir(), ".claude", "settings.json"));
+    // configPath should point to ~/.claude.json (user-level MCP config)
+    expect(claude!.configPath).toBe(join(homedir(), ".claude.json"));
   });
 
   test("all tools have a non-empty configPath", () => {
@@ -338,5 +339,78 @@ describe("installGitHooks", () => {
     expect(content).toContain("echo existing");
     expect(content).toContain("gyst emit commit");
     rmSync(appendDir, { recursive: true, force: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 9 — writeAgentRules
+// ---------------------------------------------------------------------------
+
+describe("writeAgentRules", () => {
+  let tmp: string;
+
+  beforeAll(() => {
+    tmp = mkdtempSync(join(tmpdir(), "gyst-rules-"));
+  });
+
+  afterAll(() => {
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  test("creates CLAUDE.md with Gyst block when absent", () => {
+    const written = writeAgentRules(tmp);
+    expect(written).toContain("CLAUDE.md");
+    expect(existsSync(join(tmp, "CLAUDE.md"))).toBe(true);
+    const content = readFileSync(join(tmp, "CLAUDE.md"), "utf-8");
+    expect(content).toContain("## Gyst — Team Knowledge Layer");
+    expect(content).toContain("recall");
+    expect(content).toContain("learn");
+    expect(content).toContain("check");
+  });
+
+  test("is idempotent — second call does not duplicate the block", () => {
+    const written2 = writeAgentRules(tmp);
+    // CLAUDE.md already has the sentinel, so it should be skipped
+    expect(written2).not.toContain("CLAUDE.md");
+    const content = readFileSync(join(tmp, "CLAUDE.md"), "utf-8");
+    const occurrences = (content.match(/## Gyst — Team Knowledge Layer/g) ?? []).length;
+    expect(occurrences).toBe(1);
+  });
+
+  test("appends to existing CLAUDE.md without losing original content", () => {
+    const dir = mkdtempSync(join(tmpdir(), "gyst-rules-append-"));
+    writeFileSync(join(dir, "CLAUDE.md"), "# My Project\n\nExisting content here.\n");
+    writeAgentRules(dir);
+    const content = readFileSync(join(dir, "CLAUDE.md"), "utf-8");
+    expect(content).toContain("# My Project");
+    expect(content).toContain("Existing content here.");
+    expect(content).toContain("## Gyst — Team Knowledge Layer");
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("creates .cursor/rules/gyst.mdc only when .cursor/rules/ exists", () => {
+    const dir = mkdtempSync(join(tmpdir(), "gyst-rules-cursor-"));
+    // Without .cursor/rules/ — should NOT create gyst.mdc
+    writeAgentRules(dir);
+    expect(existsSync(join(dir, ".cursor", "rules", "gyst.mdc"))).toBe(false);
+
+    // With .cursor/rules/ — should create gyst.mdc
+    mkdirSync(join(dir, ".cursor", "rules"), { recursive: true });
+    writeAgentRules(dir);
+    expect(existsSync(join(dir, ".cursor", "rules", "gyst.mdc"))).toBe(true);
+    const content = readFileSync(join(dir, ".cursor", "rules", "gyst.mdc"), "utf-8");
+    expect(content).toContain("## Gyst — Team Knowledge Layer");
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("creates .github/copilot-instructions.md only when .github/ exists", () => {
+    const dir = mkdtempSync(join(tmpdir(), "gyst-rules-copilot-"));
+    writeAgentRules(dir);
+    expect(existsSync(join(dir, ".github", "copilot-instructions.md"))).toBe(false);
+
+    mkdirSync(join(dir, ".github"), { recursive: true });
+    writeAgentRules(dir);
+    expect(existsSync(join(dir, ".github", "copilot-instructions.md"))).toBe(true);
+    rmSync(dir, { recursive: true, force: true });
   });
 });

@@ -690,6 +690,108 @@ async function registerHooks(tools: ToolInfo[]): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Agent rule file injection
+// ---------------------------------------------------------------------------
+
+/**
+ * Gyst usage block appended to agent rule files.
+ * Plain Markdown so it renders in every host that reads these files.
+ */
+const GYST_AGENT_BLOCK = `
+## Gyst — Team Knowledge Layer
+
+Gyst gives you access to your team's accumulated knowledge: conventions,
+decisions, known error patterns, and learnings from past sessions.
+
+**Always use Gyst when:**
+- Starting a new task → call \`recall\` with a description to surface relevant context
+- Discovering something important → call \`learn\` to record it for the team
+- Validating a file → call \`check\` to catch convention violations
+
+**Core tools:**
+- \`recall\` — search team knowledge before implementing anything
+- \`learn\` — record conventions, decisions, and learnings
+- \`check\` — validate a file against stored conventions
+- \`conventions\` — list coding standards for a directory
+- \`failures\` — look up known error patterns before debugging
+
+Run \`gyst status\` to confirm the MCP server is active.
+`;
+
+/**
+ * Describes a candidate rule file and whether to create it if absent.
+ */
+interface RuleFileSpec {
+  /** Path relative to the project root. */
+  readonly relPath: string;
+  /**
+   * When true, create the file even if it doesn't exist (parent dir must exist).
+   * When false, only append if the file already exists.
+   */
+  readonly createIfAbsent: boolean;
+}
+
+const RULE_FILE_SPECS: readonly RuleFileSpec[] = [
+  // Root-level rule files: create them in any project directory.
+  { relPath: "CLAUDE.md", createIfAbsent: true },
+  { relPath: "AGENTS.md", createIfAbsent: true },
+  { relPath: "GEMINI.md", createIfAbsent: true },
+  // Tool-specific files: createIfAbsent=true so we create when parent dir
+  // exists (parent existence = tool is installed). Guards are in writeAgentRules.
+  { relPath: join(".cursor", "rules", "gyst.mdc"), createIfAbsent: true },
+  { relPath: join(".github", "copilot-instructions.md"), createIfAbsent: true },
+  { relPath: join(".kiro", "steering", "gyst.md"), createIfAbsent: true },
+];
+
+/** Sentinel that marks an already-injected block — prevents duplicates. */
+const GYST_BLOCK_SENTINEL = "## Gyst — Team Knowledge Layer";
+
+/**
+ * Appends the Gyst usage block to agent rule files in the project root.
+ *
+ * Idempotent: re-running will not duplicate the block.
+ * For files that don't exist, we create them when `createIfAbsent` is true
+ * and the parent directory exists.
+ *
+ * Returns the list of file paths that were written.
+ */
+export function writeAgentRules(projectDir: string): string[] {
+  const written: string[] = [];
+
+  for (const spec of RULE_FILE_SPECS) {
+    const fullPath = join(projectDir, spec.relPath);
+    const parentDir = dirname(fullPath);
+
+    const fileExists = existsSync(fullPath);
+    const parentExists = existsSync(parentDir);
+
+    if (!fileExists && (!spec.createIfAbsent || !parentExists)) {
+      // Skip: file absent and we either shouldn't create it or the parent dir
+      // doesn't exist (tool not installed).
+      continue;
+    }
+
+    const existing = fileExists ? readFileSync(fullPath, "utf8") : "";
+
+    if (existing.includes(GYST_BLOCK_SENTINEL)) {
+      // Already injected — nothing to do.
+      continue;
+    }
+
+    const updated = existing.trimEnd() + "\n" + GYST_AGENT_BLOCK;
+
+    if (!parentExists) {
+      mkdirSync(parentDir, { recursive: true });
+    }
+
+    writeFileSync(fullPath, updated, "utf8");
+    written.push(spec.relPath);
+  }
+
+  return written;
+}
+
+// ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
 
@@ -774,7 +876,23 @@ export async function runInstall(): Promise<void> {
   process.stdout.write("\n  ✓ Registering session hooks...\n");
   await registerHooks(tools);
 
-  // Step 8: Agent instructions
+  // Step 8: Write agent rule files (CLAUDE.md, AGENTS.md, GEMINI.md, etc.)
+  process.stdout.write("\n  ✓ Writing agent rule files...\n");
+  try {
+    const ruleFilesWritten = writeAgentRules(process.cwd());
+    if (ruleFilesWritten.length === 0) {
+      process.stdout.write("    All rule files already have Gyst section — skipped\n");
+    } else {
+      for (const f of ruleFilesWritten) {
+        process.stdout.write(`    ${f} ✓\n`);
+      }
+    }
+  } catch (err) {
+    logger.warn("install: failed to write agent rule files", { error: err });
+    process.stdout.write("    ✗ Could not write agent rule files (see logs)\n");
+  }
+
+  // Step 9: Agent instructions
   const configuredNames = detectedTools.map((t) => t.name).join(", ") || "none";
   process.stdout.write(`
   ${"═".repeat(56)}
