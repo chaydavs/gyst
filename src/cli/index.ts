@@ -253,8 +253,17 @@ const createTeamAction = (name: string) => {
     const db = openTeamDb();
     const { teamId, adminKey } = createTeam(db, name.trim());
     db.close();
-    process.stdout.write(`Team created! ID: ${teamId}\nAdmin Key: ${adminKey}\n`);
-    process.stdout.write(`export GYST_API_KEY="${adminKey}"\n`);
+    const bar = "─".repeat(56);
+    process.stdout.write(`\n  ${bar}\n`);
+    process.stdout.write(`  ✓ Team "${name.trim()}" created\n\n`);
+    process.stdout.write(`  Team ID:   ${teamId}\n`);
+    process.stdout.write(`  Admin key: ${adminKey}\n\n`);
+    process.stdout.write(`  Add to your shell:\n`);
+    process.stdout.write(`    export GYST_API_KEY="${adminKey}"\n\n`);
+    process.stdout.write(`  Next — start the shared server and invite teammates:\n`);
+    process.stdout.write(`    gyst serve --http --port 3456\n`);
+    process.stdout.write(`    GYST_API_KEY="${adminKey}" gyst team invite\n`);
+    process.stdout.write(`  ${bar}\n\n`);
   } catch (err) {
     process.stdout.write(`Error: ${(err as Error).message}\n`);
     process.exit(1);
@@ -266,8 +275,34 @@ const inviteTeamAction = async () => {
     const db = openTeamDb();
     const teamId = await resolveTeamFromEnv(db);
     const inviteKey = createInviteKey(db, teamId);
+
+    // Look up the team name for display purposes.
+    const teamRow = db
+      .query<{ name: string }, [string]>("SELECT name FROM teams WHERE id = ?")
+      .get(teamId);
+    const teamName = teamRow?.name ?? teamId;
     db.close();
-    process.stdout.write(`Invite key: ${inviteKey}\ngyst join ${inviteKey} "Name"\n`);
+
+    // Server URL hint — use GYST_SERVER env var if set, otherwise show placeholder.
+    const serverUrl = process.env["GYST_SERVER"] ?? "http://<your-host>:3456";
+    const bar = "─".repeat(56);
+
+    process.stdout.write(`\n  ${bar}\n`);
+    process.stdout.write(`  Team:   ${teamName}\n`);
+    process.stdout.write(`  Server: ${serverUrl}\n`);
+    process.stdout.write(`  ${bar}\n\n`);
+    process.stdout.write(`  Share these steps with each teammate:\n\n`);
+    process.stdout.write(`  Step 1 — Install gyst:\n`);
+    process.stdout.write(`    npm install -g gyst-mcp\n\n`);
+    process.stdout.write(`  Step 2 — Join and auto-configure all AI tools:\n`);
+    process.stdout.write(`    gyst join ${inviteKey} "Their Name" --server ${serverUrl}\n\n`);
+    process.stdout.write(`  That's it. gyst join configures Claude Code, Cursor, Codex,\n`);
+    process.stdout.write(`  Gemini, Windsurf, and VS Code automatically.\n`);
+    process.stdout.write(`  ${bar}\n\n`);
+    process.stdout.write(`  Keep safe (don't share):\n`);
+    process.stdout.write(`    Admin key: ${process.env["GYST_API_KEY"] ?? "<your admin key>"}\n\n`);
+    process.stdout.write(`  Note: invite key expires in 24 hours. Run this to generate a new one:\n`);
+    process.stdout.write(`    GYST_API_KEY="<admin key>" gyst team invite\n\n`);
   } catch (err) {
     process.stdout.write(`Error: ${(err as Error).message}\n`);
     process.exit(1);
