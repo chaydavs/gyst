@@ -88,10 +88,10 @@ export default function Feed({ mode, searchQuery, onEntryClick, refreshKey }: Fe
       {/* Section header */}
       <h2
         style={{
-          fontFamily: 'var(--font-serif)',
-          fontSize: '24px',
+          fontFamily: 'var(--font-sans)',
+          fontSize: '14px',
           fontWeight: 600,
-          fontStyle: 'italic',
+          letterSpacing: '-0.01em',
           color: 'var(--ink)',
           marginBottom: '16px',
         }}
@@ -163,9 +163,9 @@ export default function Feed({ mode, searchQuery, onEntryClick, refreshKey }: Fe
         <div style={{ padding: '48px 0', textAlign: 'center' }}>
           <h3
             style={{
-              fontFamily: 'var(--font-serif)',
-              fontSize: '22px',
-              fontStyle: 'italic',
+              fontFamily: 'var(--font-sans)',
+              fontSize: '15px',
+              fontWeight: 600,
               color: 'var(--ink-soft)',
               marginBottom: '8px',
             }}

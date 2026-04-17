@@ -7,6 +7,7 @@ interface SidebarProps {
   reviewQueue: ReviewItem[];
   teamMembers: TeamMember[];
   onReviewAction: (id: string, action: 'confirm' | 'archive') => void;
+  onInvite: () => void;
   refreshKey?: number;
 }
 
@@ -25,29 +26,68 @@ function getInitials(name: string): string {
     .join('');
 }
 
-function confidenceAvg(_byType: Record<string, number>): string {
-  // Stats API doesn't expose raw confidence values; placeholder for V2
-  return '—';
+function confidenceAvg(byType: Record<string, number>): string {
+  const values = Object.values(byType);
+  if (values.length === 0) return '—';
+  const sum = values.reduce((a, b) => a + b, 0);
+  const avg = Math.round((sum / values.length) * 100);
+  return `${avg}%`;
 }
 
 const REASON_COLORS: Record<string, string> = {
-  decay: '#C27B0E',
-  low_confidence: '#D4412B',
-  stale: '#8B8172',
-  flagged: '#D4412B',
+  decay: '#888',
+  low_confidence: '#cc0000',
+  stale: '#888',
+  flagged: '#cc0000',
 };
 
-export default function Sidebar({ stats, reviewQueue, teamMembers, onReviewAction, refreshKey }: SidebarProps) {
-  const shownQueue = reviewQueue.slice(0, 3);
-  const shownMembers = teamMembers.slice(0, 6);
+function timeAgo(dateStr: string): string {
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  return `${Math.floor(diffHr / 24)}d ago`;
+}
+
+const SECTION_HEADER_STYLE: React.CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: '10px',
+  textTransform: 'uppercase',
+  letterSpacing: '0.10em',
+  color: 'var(--ink-faint)',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  marginBottom: '14px',
+};
+
+export default function Sidebar({
+  stats,
+  reviewQueue,
+  teamMembers,
+  onReviewAction,
+  onInvite,
+  refreshKey,
+}: SidebarProps) {
+  const shownQueue = reviewQueue.slice(0, 4);
+  const shownMembers = teamMembers.slice(0, 8);
+  const extraMembers = teamMembers.length > 8 ? teamMembers.length - 8 : 0;
 
   const [recentEvents, setRecentEvents] = useState<ActivityEvent[]>([]);
 
   useEffect(() => {
-    api.getActivity({ limit: 8 })
+    api
+      .getActivity({ limit: 8 })
       .then(setRecentEvents)
       .catch(() => undefined);
   }, [refreshKey]);
+
+  const entriesThisWeek = stats?.byType
+    ? Object.values(stats.byType).reduce((a, b) => a + b, 0)
+    : 0;
 
   return (
     <aside
@@ -59,175 +99,147 @@ export default function Sidebar({ stats, reviewQueue, teamMembers, onReviewActio
         overflowY: 'auto',
         display: 'flex',
         flexDirection: 'column',
-        gap: '0',
+        height: '100%',
       }}
     >
-      {/* ── Review Queue card ── */}
-      <section style={{ padding: '20px 20px 16px', borderBottom: '1px solid var(--line-soft)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-          <span
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '11px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              color: 'var(--ink-faint)',
-            }}
-          >
-            Review Queue
-          </span>
+      {/* ── 1. Review Queue ── */}
+      <section style={{ padding: '20px 20px 18px', borderBottom: '1px solid var(--line-soft)' }}>
+        <header style={SECTION_HEADER_STYLE}>
+          <span>Needs Review</span>
           {reviewQueue.length > 0 && (
             <span
               style={{
-                background: '#D4412B',
-                color: '#FFFFFF',
-                fontSize: '10px',
+                background: '#cc0000',
+                color: '#fff',
                 fontFamily: 'var(--font-mono)',
-                borderRadius: '10px',
-                padding: '1px 6px',
-                fontWeight: 600,
+                fontSize: '10px',
+                fontWeight: 700,
+                width: '18px',
+                height: '18px',
+                borderRadius: '50%',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                lineHeight: 1,
               }}
             >
               {reviewQueue.length}
             </span>
           )}
-        </div>
+        </header>
 
         {reviewQueue.length === 0 ? (
-          <p style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', color: 'var(--ink-faint)', fontStyle: 'italic' }}>
-            All caught up.
+          <p
+            style={{
+              fontFamily: 'var(--font-sans)',
+              fontSize: '12px',
+              color: 'var(--ink-faint)',
+              fontStyle: 'italic',
+              margin: 0,
+            }}
+          >
+            All clear.
           </p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {shownQueue.map(item => (
               <ReviewQueueItem key={item.id} item={item} onAction={onReviewAction} />
             ))}
-            {reviewQueue.length > 3 && (
-              <span
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '11px',
-                  color: 'var(--accent)',
-                  marginTop: '4px',
-                  cursor: 'pointer',
-                }}
-              >
-                View all {reviewQueue.length} items →
-              </span>
-            )}
           </div>
         )}
       </section>
 
-      {/* ── Team Pulse card ── */}
-      <section style={{ padding: '20px 20px 16px', borderBottom: '1px solid var(--line-soft)' }}>
-        <span
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: '11px',
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            color: 'var(--ink-faint)',
-            display: 'block',
-            marginBottom: '16px',
-          }}
-        >
-          Team Pulse
-        </span>
+      {/* ── 2. Team Pulse ── */}
+      <section style={{ padding: '20px 20px 18px', borderBottom: '1px solid var(--line-soft)' }}>
+        <header style={SECTION_HEADER_STYLE}>
+          <span>Team Pulse</span>
+        </header>
         <div
           style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr',
-            gap: '16px',
+            gap: '16px 12px',
           }}
         >
           <PulseMetric value={stats?.entries ?? 0} label="Entries" />
-          <PulseMetric value={stats?.relationships ?? 0} label="Relationships" />
+          <PulseMetric value={entriesThisWeek} label="This Week" />
           <PulseMetric value={stats?.coRetrievals ?? 0} label="Co-retrievals" />
-          <PulseMetric value={confidenceAvg(stats?.byType ?? {})} label="Confidence avg" />
+          <PulseMetric value={confidenceAvg(stats?.byType ?? {})} label="Confidence" />
         </div>
       </section>
 
-      {/* ── Team Members card ── */}
-      <section style={{ padding: '20px 20px 16px', borderBottom: '1px solid var(--line-soft)' }}>
-        <span
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: '11px',
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            color: 'var(--ink-faint)',
-            display: 'block',
-            marginBottom: '12px',
-          }}
-        >
-          Team Members
-        </span>
-        {shownMembers.length === 0 ? (
-          <p style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', color: 'var(--ink-faint)', fontStyle: 'italic' }}>
-            No members yet.
-          </p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {shownMembers.map(member => (
-              <MemberChip key={member.developerId} member={member} />
-            ))}
-            {teamMembers.length > 6 && (
-              <span
-                style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-faint)' }}
-              >
-                +{teamMembers.length - 6} more
-              </span>
-            )}
-          </div>
-        )}
+      {/* ── 3. Team Members ── */}
+      <section style={{ padding: '20px 20px 18px', borderBottom: '1px solid var(--line-soft)' }}>
+        <header style={SECTION_HEADER_STYLE}>
+          <span>Team</span>
+        </header>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {shownMembers.map(member => (
+            <MemberChip key={member.developerId} member={member} />
+          ))}
+          {extraMembers > 0 && (
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '10px',
+                color: 'var(--ink-faint)',
+                paddingLeft: '2px',
+              }}
+            >
+              +{extraMembers} more
+            </span>
+          )}
+          <button
+            onClick={onInvite}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: 'transparent',
+              border: '1px dashed var(--line)',
+              borderRadius: '4px',
+              padding: '5px 10px',
+              cursor: 'pointer',
+              marginTop: '2px',
+              width: '100%',
+            }}
+          >
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '10px',
+                color: 'var(--ink-faint)',
+                letterSpacing: '0.06em',
+              }}
+            >
+              + Add
+            </span>
+          </button>
+        </div>
       </section>
 
-      {/* ── Hook Activity card ── */}
-      <section style={{ padding: '20px 20px 16px' }}>
-        <span
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: '11px',
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            color: 'var(--ink-faint)',
-            display: 'block',
-            marginBottom: '12px',
-          }}
-        >
-          Hook Activity
-        </span>
+      {/* ── 4. Activity ── */}
+      <section style={{ padding: '20px 20px 18px' }}>
+        <header style={SECTION_HEADER_STYLE}>
+          <span>Activity</span>
+        </header>
         {recentEvents.length === 0 ? (
-          <p style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', color: 'var(--ink-faint)', fontStyle: 'italic' }}>
-            No hooks fired yet.
+          <p
+            style={{
+              fontFamily: 'var(--font-sans)',
+              fontSize: '12px',
+              color: 'var(--ink-faint)',
+              fontStyle: 'italic',
+              margin: 0,
+            }}
+          >
+            No recent activity.
           </p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
             {recentEvents.map(ev => (
-              <div key={ev.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span
-                  style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '10px',
-                    color: 'var(--accent)',
-                    background: 'var(--sunken)',
-                    padding: '1px 5px',
-                    borderRadius: '3px',
-                    flexShrink: 0,
-                  }}
-                >
-                  {ev.event}
-                </span>
-                {ev.developerId && (
-                  <span style={{ fontFamily: 'var(--font-sans)', fontSize: '11px', color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {ev.developerId}
-                  </span>
-                )}
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ink-faint)', marginLeft: 'auto', flexShrink: 0 }}>
-                  {new Date(ev.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
+              <ActivityRow key={ev.id} event={ev} />
             ))}
           </div>
         )}
@@ -236,16 +248,19 @@ export default function Sidebar({ stats, reviewQueue, teamMembers, onReviewActio
   );
 }
 
+/* ─── Sub-components ─────────────────────────────────────────────────── */
+
 function PulseMetric({ value, label }: { value: number | string; label: string }) {
   return (
     <div>
       <div
         style={{
-          fontFamily: 'var(--font-serif)',
-          fontSize: '36px',
-          fontWeight: 600,
+          fontFamily: 'var(--font-sans)',
+          fontSize: '28px',
+          fontWeight: 700,
           color: 'var(--ink)',
           lineHeight: 1,
+          letterSpacing: '-0.02em',
         }}
       >
         {typeof value === 'number' ? value.toLocaleString() : value}
@@ -255,9 +270,9 @@ function PulseMetric({ value, label }: { value: number | string; label: string }
           fontFamily: 'var(--font-mono)',
           fontSize: '10px',
           textTransform: 'uppercase',
-          letterSpacing: '0.06em',
+          letterSpacing: '0.08em',
           color: 'var(--ink-faint)',
-          marginTop: '4px',
+          marginTop: '5px',
         }}
       >
         {label}
@@ -273,58 +288,79 @@ function ReviewQueueItem({
   item: ReviewItem;
   onAction: (id: string, action: 'confirm' | 'archive') => void;
 }) {
-  const reasonColor = REASON_COLORS[item.reason] ?? '#8B8172';
+  const reasonColor = REASON_COLORS[item.reason] ?? '#888';
 
   return (
     <div
       style={{
-        padding: '8px 10px',
+        padding: '9px 10px',
         background: 'var(--bg)',
-        borderRadius: '6px',
         border: '1px solid var(--line-soft)',
+        borderRadius: '4px',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', marginBottom: '7px' }}>
+        {/* Red dot */}
+        <span
+          style={{
+            width: '5px',
+            height: '5px',
+            borderRadius: '50%',
+            background: '#cc0000',
+            flexShrink: 0,
+            marginTop: '4px',
+          }}
+        />
+        {/* Title */}
         <p
           style={{
             fontFamily: 'var(--font-sans)',
             fontSize: '12px',
             color: 'var(--ink)',
             lineHeight: 1.4,
-            overflow: 'hidden',
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical' as const,
             flex: 1,
+            margin: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
           }}
         >
           {item.title}
         </p>
+        {/* Reason chip */}
         <span
           style={{
             fontFamily: 'var(--font-mono)',
             fontSize: '9px',
-            color: reasonColor,
             textTransform: 'uppercase',
-            letterSpacing: '0.06em',
+            letterSpacing: '0.07em',
+            color: reasonColor,
+            background: 'var(--sunken)',
+            padding: '2px 5px',
+            borderRadius: '3px',
             flexShrink: 0,
+            lineHeight: '14px',
           }}
         >
-          {item.reason}
+          {item.reason.replace(/_/g, ' ')}
         </span>
       </div>
-      <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+      {/* Action buttons */}
+      <div style={{ display: 'flex', gap: '6px' }}>
         <button
           onClick={() => onAction(item.id, 'confirm')}
           style={{
-            padding: '2px 8px',
-            fontSize: '10px',
             fontFamily: 'var(--font-mono)',
+            fontSize: '9px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            padding: '3px 8px',
             background: 'transparent',
-            border: '1px solid #1E7A3F',
-            color: '#1E7A3F',
-            borderRadius: '4px',
+            border: '1px solid var(--ink-soft)',
+            color: 'var(--ink-soft)',
+            borderRadius: '3px',
             cursor: 'pointer',
+            lineHeight: 1.4,
           }}
         >
           Confirm
@@ -332,14 +368,17 @@ function ReviewQueueItem({
         <button
           onClick={() => onAction(item.id, 'archive')}
           style={{
-            padding: '2px 8px',
-            fontSize: '10px',
             fontFamily: 'var(--font-mono)',
+            fontSize: '9px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            padding: '3px 8px',
             background: 'transparent',
             border: '1px solid var(--line)',
             color: 'var(--ink-faint)',
-            borderRadius: '4px',
+            borderRadius: '3px',
             cursor: 'pointer',
+            lineHeight: 1.4,
           }}
         >
           Archive
@@ -349,21 +388,13 @@ function ReviewQueueItem({
   );
 }
 
-const ROLE_COLORS: Record<string, { bg: string; text: string }> = {
-  admin: { bg: '#2B5DD41A', text: '#2B5DD4' },
-  member: { bg: '#1E7A3F1A', text: '#1E7A3F' },
-  viewer: { bg: '#8B81721A', text: '#8B8172' },
-};
-
 function MemberChip({ member }: { member: TeamMember }) {
-  const roleStyle = ROLE_COLORS[member.role] ?? ROLE_COLORS['member'];
-
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
       <div
         style={{
-          width: '28px',
-          height: '28px',
+          width: '22px',
+          height: '22px',
           borderRadius: '50%',
           background: 'var(--sunken)',
           border: '1px solid var(--line)',
@@ -371,42 +402,83 @@ function MemberChip({ member }: { member: TeamMember }) {
           alignItems: 'center',
           justifyContent: 'center',
           fontFamily: 'var(--font-mono)',
-          fontSize: '10px',
-          fontWeight: 500,
+          fontSize: '9px',
+          fontWeight: 600,
           color: 'var(--ink-soft)',
           flexShrink: 0,
+          letterSpacing: '0.04em',
         }}
       >
         {getInitials(member.displayName)}
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p
-          style={{
-            fontFamily: 'var(--font-sans)',
-            fontSize: '13px',
-            color: 'var(--ink)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {member.displayName}
-        </p>
-      </div>
+      <span
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '11px',
+          color: 'var(--ink-soft)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {member.displayName}
+      </span>
+    </div>
+  );
+}
+
+function ActivityRow({ event }: { event: ActivityEvent }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+      {/* Event pill */}
       <span
         style={{
           fontFamily: 'var(--font-mono)',
           fontSize: '9px',
           textTransform: 'uppercase',
-          letterSpacing: '0.05em',
-          color: roleStyle.text,
-          background: roleStyle.bg,
-          padding: '2px 5px',
+          letterSpacing: '0.06em',
+          color: 'var(--ink-soft)',
+          background: 'var(--sunken)',
+          border: '1px solid var(--line-soft)',
+          padding: '2px 6px',
           borderRadius: '3px',
           flexShrink: 0,
+          lineHeight: '14px',
+          maxWidth: '110px',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
         }}
       >
-        {member.role}
+        {event.event}
+      </span>
+      {/* Developer name */}
+      {event.developerId && (
+        <span
+          style={{
+            fontFamily: 'var(--font-sans)',
+            fontSize: '11px',
+            color: 'var(--ink-faint)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            flex: 1,
+          }}
+        >
+          {event.developerId}
+        </span>
+      )}
+      {/* Time */}
+      <span
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '10px',
+          color: 'var(--ink-faint)',
+          flexShrink: 0,
+          marginLeft: 'auto',
+        }}
+      >
+        {timeAgo(event.createdAt)}
       </span>
     </div>
   );

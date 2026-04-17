@@ -38,6 +38,60 @@ const TOOL_DISPLAY: Array<{ name: string; label: string }> = [
   { name: 'cline', label: 'Cline' },
 ];
 
+function CodeBlock({
+  code,
+  onCopy,
+  copied,
+}: {
+  code: string;
+  onCopy: (text: string) => void;
+  copied: boolean;
+}) {
+  return (
+    <div
+      style={{
+        background: '#111',
+        borderRadius: '4px',
+        padding: '10px 14px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+      }}
+    >
+      <code
+        style={{
+          fontFamily: 'var(--font-sans)',
+          fontSize: '12px',
+          color: '#e8e8e8',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {code}
+      </code>
+      <button
+        onClick={() => onCopy(code)}
+        style={{
+          background: 'transparent',
+          border: '1px solid #333',
+          borderRadius: '3px',
+          padding: '3px 8px',
+          fontFamily: 'var(--font-sans)',
+          fontSize: '10px',
+          color: copied ? '#6ee06e' : '#888',
+          cursor: 'pointer',
+          flexShrink: 0,
+          transition: 'color 150ms',
+        }}
+      >
+        {copied ? <Check size={10} /> : 'Copy'}
+      </button>
+    </div>
+  );
+}
+
 export default function InviteModal({ onClose, teamInfo }: InviteModalProps) {
   const [detectedTools, setDetectedTools] = useState<DetectedTool[]>([]);
   const [inviteData, setInviteData] = useState<InviteData | null>(null);
@@ -60,68 +114,56 @@ export default function InviteModal({ onClose, teamInfo }: InviteModalProps) {
   }, []);
 
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.4)',
-        backdropFilter: 'blur(4px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 50,
-      }}
-    >
+    <>
+      {/* Backdrop — clicking it closes the panel */}
       <div
-        onClick={e => e.stopPropagation()}
+        onClick={onClose}
         style={{
-          background: 'var(--elevated)',
-          borderRadius: '12px',
-          width: '100%',
-          maxWidth: '560px',
-          margin: '0 16px',
-          boxShadow: '0 24px 64px rgba(26,23,18,0.25)',
-          maxHeight: '90vh',
-          overflow: 'hidden',
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.25)',
+          zIndex: 49,
+        }}
+      />
+
+      {/* Right-side panel */}
+      <div
+        style={{
+          position: 'fixed',
+          right: 0,
+          top: 0,
+          height: '100%',
+          width: '380px',
+          background: 'var(--bg)',
+          borderLeft: '1px solid var(--line)',
+          zIndex: 50,
           display: 'flex',
           flexDirection: 'column',
+          boxShadow: '-4px 0 24px rgba(0,0,0,0.08)',
         }}
       >
         {/* Header */}
         <div
           style={{
             display: 'flex',
-            alignItems: 'flex-start',
+            alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '24px 24px 16px',
-            borderBottom: '1px solid var(--line-soft)',
+            padding: '16px 20px',
+            borderBottom: '1px solid var(--line)',
+            flexShrink: 0,
           }}
         >
-          <div>
-            <h2
-              style={{
-                fontFamily: 'var(--font-serif)',
-                fontSize: '28px',
-                fontWeight: 600,
-                fontStyle: 'italic',
-                color: 'var(--ink)',
-                lineHeight: 1.2,
-                marginBottom: '6px',
-              }}
-            >
-              Let's get your team on the same page.
-            </h2>
-            <p
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '12px',
-                color: 'var(--ink-faint)',
-              }}
-            >
-              Each teammate's AI agent contributes to your shared knowledge base.
-            </p>
-          </div>
+          <span
+            style={{
+              fontFamily: 'var(--font-sans)',
+              fontSize: '14px',
+              fontWeight: 700,
+              color: 'var(--ink)',
+              letterSpacing: '-0.01em',
+            }}
+          >
+            Invite to team
+          </span>
           <button
             onClick={onClose}
             style={{
@@ -132,244 +174,218 @@ export default function InviteModal({ onClose, teamInfo }: InviteModalProps) {
               display: 'flex',
               alignItems: 'center',
               padding: '4px',
-              flexShrink: 0,
-              marginLeft: '16px',
+              borderRadius: '4px',
             }}
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
 
-        {/* Body */}
-        <div style={{ overflowY: 'auto', padding: '24px', flex: 1, display: 'flex', flexDirection: 'column', gap: '28px' }}>
-          {/* Step 1 */}
+        {/* Scrollable body */}
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '24px 20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '28px',
+          }}
+        >
+          {/* Step 1 — Install */}
           <div>
-            <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-              <span
-                style={{
-                  fontFamily: 'var(--font-serif)',
-                  fontSize: '64px',
-                  fontWeight: 300,
-                  fontStyle: 'italic',
-                  color: 'var(--line)',
-                  lineHeight: 0.9,
-                  flexShrink: 0,
-                  width: '40px',
-                }}
-              >
-                1
-              </span>
-              <div style={{ flex: 1 }}>
-                <h3
-                  style={{
-                    fontFamily: 'var(--font-serif)',
-                    fontSize: '18px',
-                    fontWeight: 600,
-                    color: 'var(--ink)',
-                    marginBottom: '8px',
-                  }}
-                >
-                  Install
-                </h3>
-                <p
-                  style={{
-                    fontFamily: 'var(--font-sans)',
-                    fontSize: '13px',
-                    color: 'var(--ink-faint)',
-                    marginBottom: '10px',
-                  }}
-                >
-                  Run this in each developer's terminal to set up the MCP server.
-                </p>
-                <CodeBlock code={installCmd} onCopy={copyInstall} copied={copiedInstall} />
-              </div>
-            </div>
+            <span
+              style={{
+                fontFamily: 'var(--font-sans)',
+                fontSize: '10px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                color: 'var(--ink-faint)',
+                fontWeight: 600,
+                display: 'block',
+                marginBottom: '8px',
+              }}
+            >
+              01 Install
+            </span>
+            <p
+              style={{
+                fontFamily: 'var(--font-sans)',
+                fontSize: '12px',
+                color: 'var(--ink-soft)',
+                marginBottom: '10px',
+                lineHeight: 1.5,
+              }}
+            >
+              Run this in each developer's terminal to set up the MCP server.
+            </p>
+            <CodeBlock code={installCmd} onCopy={copyInstall} copied={copiedInstall} />
           </div>
 
-          {/* Step 2 */}
+          {/* Step 2 — Tools detected */}
           <div>
-            <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-              <span
-                style={{
-                  fontFamily: 'var(--font-serif)',
-                  fontSize: '64px',
-                  fontWeight: 300,
-                  fontStyle: 'italic',
-                  color: 'var(--line)',
-                  lineHeight: 0.9,
-                  flexShrink: 0,
-                  width: '40px',
-                }}
-              >
-                2
-              </span>
-              <div style={{ flex: 1 }}>
-                <h3
-                  style={{
-                    fontFamily: 'var(--font-serif)',
-                    fontSize: '18px',
-                    fontWeight: 600,
-                    color: 'var(--ink)',
-                    marginBottom: '8px',
-                  }}
-                >
-                  Connect your tools
-                </h3>
-                <p
-                  style={{
-                    fontFamily: 'var(--font-sans)',
-                    fontSize: '13px',
-                    color: 'var(--ink-faint)',
-                    marginBottom: '12px',
-                  }}
-                >
-                  Gyst works with the tools your team already uses.
-                </p>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                  {TOOL_DISPLAY.map(tool => {
-                    const detected = detectedTools.find(
-                      dt => dt.name.toLowerCase() === tool.name.toLowerCase()
-                    );
-                    const isDetected = detected?.detected ?? false;
+            <span
+              style={{
+                fontFamily: 'var(--font-sans)',
+                fontSize: '10px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                color: 'var(--ink-faint)',
+                fontWeight: 600,
+                display: 'block',
+                marginBottom: '8px',
+              }}
+            >
+              02 Tools detected
+            </span>
+            <p
+              style={{
+                fontFamily: 'var(--font-sans)',
+                fontSize: '12px',
+                color: 'var(--ink-soft)',
+                marginBottom: '10px',
+                lineHeight: 1.5,
+              }}
+            >
+              Gyst works with the AI coding tools your team already uses.
+            </p>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '6px',
+              }}
+            >
+              {TOOL_DISPLAY.map(tool => {
+                const detected = detectedTools.find(
+                  dt => dt.name.toLowerCase() === tool.name.toLowerCase()
+                );
+                const isDetected = detected?.detected ?? false;
 
-                    return (
-                      <div
-                        key={tool.name}
+                return (
+                  <div
+                    key={tool.name}
+                    style={{
+                      padding: '7px 10px',
+                      border: `1px solid ${isDetected ? 'var(--ink)' : 'var(--line)'}`,
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: isDetected ? 'var(--ink)' : 'transparent',
+                    }}
+                  >
+                    {isDetected ? (
+                      <Check size={11} color="#fff" strokeWidth={2.5} />
+                    ) : (
+                      <span
                         style={{
-                          padding: '8px 10px',
-                          border: `1px solid ${isDetected ? '#1E7A3F66' : 'var(--line)'}`,
-                          borderRadius: '6px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          background: isDetected ? '#1E7A3F0A' : 'transparent',
+                          width: '11px',
+                          height: '11px',
+                          borderRadius: '50%',
+                          border: '1px solid var(--line)',
+                          display: 'inline-block',
+                          flexShrink: 0,
                         }}
-                      >
-                        {isDetected ? (
-                          <Check size={12} color="#1E7A3F" />
-                        ) : (
-                          <span
-                            style={{
-                              width: '12px',
-                              height: '12px',
-                              borderRadius: '50%',
-                              border: '1px solid var(--line)',
-                              display: 'inline-block',
-                              flexShrink: 0,
-                            }}
-                          />
-                        )}
-                        <span
-                          style={{
-                            fontFamily: 'var(--font-sans)',
-                            fontSize: '12px',
-                            color: isDetected ? '#1E7A3F' : 'var(--ink-faint)',
-                            fontWeight: isDetected ? 500 : 400,
-                          }}
-                        >
-                          {tool.label}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Step 3 */}
-          <div>
-            <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-              <span
-                style={{
-                  fontFamily: 'var(--font-serif)',
-                  fontSize: '64px',
-                  fontWeight: 300,
-                  fontStyle: 'italic',
-                  color: 'var(--line)',
-                  lineHeight: 0.9,
-                  flexShrink: 0,
-                  width: '40px',
-                }}
-              >
-                3
-              </span>
-              <div style={{ flex: 1 }}>
-                <h3
-                  style={{
-                    fontFamily: 'var(--font-serif)',
-                    fontSize: '18px',
-                    fontWeight: 600,
-                    color: 'var(--ink)',
-                    marginBottom: '8px',
-                  }}
-                >
-                  Invite link
-                </h3>
-                <p
-                  style={{
-                    fontFamily: 'var(--font-sans)',
-                    fontSize: '13px',
-                    color: 'var(--ink-faint)',
-                    marginBottom: '10px',
-                  }}
-                >
-                  Share this command with teammates to join your team.
-                </p>
-                {inviteData ? (
-                  <>
-                    <CodeBlock
-                      code={inviteData.installCommand}
-                      onCopy={copyInvite}
-                      copied={copiedInvite}
-                    />
-                    <p
+                      />
+                    )}
+                    <span
                       style={{
-                        fontFamily: 'var(--font-mono)',
+                        fontFamily: 'var(--font-sans)',
                         fontSize: '11px',
-                        color: 'var(--ink-faint)',
-                        marginTop: '8px',
+                        color: isDetected ? '#fff' : 'var(--ink-faint)',
+                        fontWeight: isDetected ? 600 : 400,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
                       }}
                     >
-                      Link expires in 7 days
-                    </p>
-                  </>
-                ) : (
-                  <div
-                    style={{
-                      height: '40px',
-                      background: 'var(--sunken)',
-                      borderRadius: '6px',
-                      animation: 'pulse 1.5s ease-in-out infinite',
-                    }}
-                  />
-                )}
-              </div>
+                      {tool.label}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
+          </div>
+
+          {/* Step 3 — Share invite */}
+          <div>
+            <span
+              style={{
+                fontFamily: 'var(--font-sans)',
+                fontSize: '10px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                color: 'var(--ink-faint)',
+                fontWeight: 600,
+                display: 'block',
+                marginBottom: '8px',
+              }}
+            >
+              03 Share invite
+            </span>
+            <p
+              style={{
+                fontFamily: 'var(--font-sans)',
+                fontSize: '12px',
+                color: 'var(--ink-soft)',
+                marginBottom: '10px',
+                lineHeight: 1.5,
+              }}
+            >
+              Share this command with teammates to join your team.
+            </p>
+            {inviteData ? (
+              <>
+                <CodeBlock
+                  code={inviteData.installCommand}
+                  onCopy={copyInvite}
+                  copied={copiedInvite}
+                />
+                <p
+                  style={{
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: '11px',
+                    color: 'var(--ink-faint)',
+                    marginTop: '6px',
+                  }}
+                >
+                  Expires in 7 days
+                </p>
+              </>
+            ) : (
+              <div
+                style={{
+                  height: '40px',
+                  background: 'var(--sunken)',
+                  borderRadius: '4px',
+                  animation: 'pulse 1.5s ease-in-out infinite',
+                }}
+              />
+            )}
           </div>
         </div>
 
         {/* Footer */}
         <div
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
-            padding: '16px 24px',
-            borderTop: '1px solid var(--line-soft)',
+            padding: '16px 20px',
+            borderTop: '1px solid var(--line)',
+            flexShrink: 0,
           }}
         >
           <button
             onClick={onClose}
             style={{
-              padding: '9px 24px',
-              background: 'var(--accent)',
+              width: '100%',
+              padding: '10px',
+              background: 'var(--ink)',
               border: 'none',
-              borderRadius: '6px',
+              borderRadius: '4px',
               fontFamily: 'var(--font-sans)',
               fontSize: '13px',
               fontWeight: 600,
-              color: '#FFFFFF',
+              color: '#fff',
               cursor: 'pointer',
             }}
           >
@@ -381,63 +397,9 @@ export default function InviteModal({ onClose, teamInfo }: InviteModalProps) {
       <style>{`
         @keyframes pulse {
           0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
+          50% { opacity: 0.45; }
         }
       `}</style>
-    </div>
-  );
-}
-
-function CodeBlock({
-  code,
-  onCopy,
-  copied,
-}: {
-  code: string;
-  onCopy: (text: string) => void;
-  copied: boolean;
-}) {
-  return (
-    <div
-      style={{
-        background: '#1A1712',
-        borderRadius: '6px',
-        padding: '10px 14px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '12px',
-      }}
-    >
-      <code
-        style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: '12px',
-          color: '#F5F1E8',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {code}
-      </code>
-      <button
-        onClick={() => onCopy(code)}
-        style={{
-          background: 'transparent',
-          border: '1px solid #4A4438',
-          borderRadius: '4px',
-          padding: '3px 8px',
-          fontFamily: 'var(--font-mono)',
-          fontSize: '10px',
-          color: copied ? '#1E7A3F' : '#8B8172',
-          cursor: 'pointer',
-          flexShrink: 0,
-          transition: 'color 150ms',
-        }}
-      >
-        {copied ? '✓' : 'Copy'}
-      </button>
-    </div>
+    </>
   );
 }

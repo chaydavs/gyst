@@ -3,17 +3,16 @@
 @tailwind utilities;
 
 :root {
-  --bg: #F5F1E8;
-  --elevated: #FFFCF5;
-  --sunken: #EDE7D6;
-  --ink: #1A1712;
-  --ink-soft: #4A4438;
-  --ink-faint: #8B8172;
-  --line: #D4CBB5;
-  --line-soft: #E5DEC9;
-  --accent: #D4412B;
-  --font-serif: 'Fraunces', Georgia, serif;
-  --font-sans: 'Inter Tight', system-ui, sans-serif;
+  --bg:        #FFFFFF;
+  --elevated:  #FAFAFA;
+  --sunken:    #F2F2F2;
+  --ink:       #000000;
+  --ink-soft:  #222222;
+  --ink-faint: #888888;
+  --line:      #DEDEDE;
+  --line-soft: #EBEBEB;
+  --accent:    #000000;
+  --font-sans: 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
@@ -26,5 +25,4 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-.font-serif { font-family: var(--font-serif); }
-.font-mono  { font-family: var(--font-mono); }
+.font-mono { font-family: var(--font-mono); }

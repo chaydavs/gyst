@@ -25,81 +25,101 @@ export default function ModeRail({
   view,
   onViewChange,
 }: ModeRailProps) {
-  const tabs: Array<{ key: Mode; label: string }> = [
+  const modeTabs: Array<{ key: Mode; label: string }> = [
     { key: 'team', label: 'Team' },
     { key: 'personal', label: 'Personal' },
   ];
 
+  const viewTabs: Array<{ key: View; label: string }> = [
+    { key: 'feed', label: 'Feed' },
+    { key: 'graph', label: 'Graph' },
+    { key: 'queue', label: 'Review' },
+  ];
+
+  const tabStyle = (active: boolean): React.CSSProperties => ({
+    padding: '10px 16px',
+    fontFamily: 'var(--font-sans)',
+    fontWeight: active ? 600 : 400,
+    fontSize: '13px',
+    cursor: 'pointer',
+    background: 'transparent',
+    border: 'none',
+    borderBottom: active ? '2px solid #000' : '2px solid transparent',
+    color: active ? '#000' : '#888',
+    transition: 'color 100ms',
+  });
+
   return (
     <div
       style={{
-        background: 'var(--elevated)',
+        background: '#fff',
         borderBottom: '1px solid var(--line)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 32px',
+        padding: '0 24px',
         flexShrink: 0,
         position: 'sticky',
-        top: '88px',
+        top: '52px',
         zIndex: 30,
       }}
     >
-      {/* Left: mode tabs */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0' }}>
-        {tabs.map(tab => (
+        {/* Mode tabs */}
+        {modeTabs.map(tab => (
           <button
             key={tab.key}
             onClick={() => onModeChange(tab.key)}
-            style={{
-              padding: '12px 20px',
-              fontFamily: 'var(--font-sans)',
-              fontWeight: 500,
-              fontSize: '14px',
-              cursor: 'pointer',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: mode === tab.key ? '2px solid var(--accent)' : '2px solid transparent',
-              color: mode === tab.key ? 'var(--ink)' : 'var(--ink-faint)',
-              position: 'relative',
-              transition: 'color 150ms',
-            }}
+            style={tabStyle(mode === tab.key)}
           >
             {tab.label}
           </button>
         ))}
 
-        {/* Search input */}
+        <span style={{ width: '1px', height: '16px', background: 'var(--line)', margin: '0 8px' }} />
+
+        {/* View tabs */}
+        {viewTabs.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => onViewChange(tab.key)}
+            style={tabStyle(view === tab.key)}
+          >
+            {tab.label}
+          </button>
+        ))}
+
+        {/* Search */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
-            marginLeft: '16px',
+            gap: '6px',
+            marginLeft: '12px',
             background: 'var(--sunken)',
             border: '1px solid var(--line)',
-            borderRadius: '6px',
-            padding: '5px 10px',
+            borderRadius: '4px',
+            padding: '4px 8px',
           }}
         >
-          <Search size={13} color="var(--ink-faint)" />
+          <Search size={12} color="var(--ink-faint)" />
           <input
             ref={searchInputRef}
             type="text"
             value={searchQuery}
             onChange={e => {
               onSearchChange(e.target.value);
-              onViewChange('search');
+              onViewChange('feed');
             }}
-            placeholder="Search knowledge… (⌘K)"
+            placeholder="Search… (⌘K)"
             style={{
               background: 'transparent',
               border: 'none',
               outline: 'none',
               fontFamily: 'var(--font-sans)',
-              fontSize: '13px',
+              fontSize: '12px',
               color: 'var(--ink)',
-              width: '220px',
+              width: '180px',
             }}
           />
           {searchQuery && (
@@ -111,25 +131,6 @@ export default function ModeRail({
             </button>
           )}
         </div>
-
-        {/* Queue tab */}
-        <button
-          onClick={() => onViewChange('queue')}
-          style={{
-            padding: '12px 20px',
-            fontFamily: 'var(--font-sans)',
-            fontWeight: 500,
-            fontSize: '14px',
-            cursor: 'pointer',
-            background: 'transparent',
-            border: 'none',
-            borderBottom: view === 'queue' ? '2px solid var(--accent)' : '2px solid transparent',
-            color: view === 'queue' ? 'var(--ink)' : 'var(--ink-faint)',
-            transition: 'color 150ms',
-          }}
-        >
-          Review Queue
-        </button>
       </div>
 
       {/* Right: team info */}

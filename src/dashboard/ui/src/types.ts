@@ -85,4 +85,4 @@ export interface SearchResult {
 }
 
 export type Mode = 'team' | 'personal';
-export type View = 'feed' | 'search' | 'queue';
+export type View = 'feed' | 'search' | 'queue' | 'graph';

@@ -4,6 +4,7 @@ import type { Mode, View, TeamInfo, Stats, ReviewItem, TeamMember, Entry } from 
 import Masthead from './components/Masthead';
 import ModeRail from './components/ModeRail';
 import Feed from './components/Feed';
+import GraphCanvas from './components/GraphCanvas';
 import Sidebar from './components/Sidebar';
 import CaptureModal from './components/CaptureModal';
 import InviteModal from './components/InviteModal';
@@ -148,21 +149,31 @@ export default function App() {
         onViewChange={setView}
       />
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-          <Feed
-            mode={mode}
-            searchQuery={searchQuery}
-            onEntryClick={setSelectedEntryId}
+        {view === 'graph' ? (
+          <GraphCanvas
+            onNodeClick={setSelectedEntryId}
             refreshKey={feedRefreshKey}
           />
-        </div>
-        <Sidebar
-          stats={stats}
-          reviewQueue={reviewQueue}
-          teamMembers={teamMembers}
-          onReviewAction={handleReviewAction}
-          refreshKey={sidebarRefreshKey}
-        />
+        ) : (
+          <>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              <Feed
+                mode={mode}
+                searchQuery={searchQuery}
+                onEntryClick={setSelectedEntryId}
+                refreshKey={feedRefreshKey}
+              />
+            </div>
+            <Sidebar
+              stats={stats}
+              reviewQueue={reviewQueue}
+              teamMembers={teamMembers}
+              onReviewAction={handleReviewAction}
+              onInvite={() => setShowInvite(true)}
+              refreshKey={sidebarRefreshKey}
+            />
+          </>
+        )}
       </div>
 
       {showCapture && (
