@@ -40,6 +40,8 @@ export interface ToolInfo {
 /** Shape of any tool's JSON config file. */
 export interface McpConfig {
   mcpServers?: Record<string, unknown>;
+  /** VS Code native MCP format uses "servers" instead of "mcpServers" */
+  servers?: Record<string, unknown>;
   hooks?: Record<string, unknown>;
   [key: string]: unknown;
 }
@@ -149,6 +151,36 @@ export function detectTools(): ToolInfo[] {
       detected: existsSync(join(home, ".continue")),
       configPath: join(home, ".continue", "config.json"),
     },
+    {
+      // VS Code native MCP support (v1.99+). Uses "servers" key, not "mcpServers".
+      // macOS stores config in ~/Library/Application Support/Code/User/
+      // Linux stores config in ~/.config/Code/User/
+      name: "VS Code",
+      detected:
+        existsSync(join(home, "Library", "Application Support", "Code", "User")) ||
+        existsSync(join(home, ".config", "Code", "User")),
+      configPath: existsSync(join(home, "Library", "Application Support", "Code", "User"))
+        ? join(home, "Library", "Application Support", "Code", "User", "mcp.json")
+        : join(home, ".config", "Code", "User", "mcp.json"),
+    },
+    {
+      // GitHub Copilot standalone MCP config (used by github.com/copilot-extensions)
+      name: "GitHub Copilot",
+      detected: existsSync(join(home, ".github", "copilot")),
+      configPath: join(home, ".github", "copilot", "mcp.json"),
+    },
+    {
+      // LM Studio desktop app (https://lmstudio.ai)
+      name: "LM Studio",
+      detected: existsSync(join(home, ".lmstudio")),
+      configPath: join(home, ".lmstudio", "mcp.json"),
+    },
+    {
+      // Kiro (AWS AI IDE, https://kiro.dev)
+      name: "Kiro",
+      detected: existsSync(join(home, ".kiro")),
+      configPath: join(home, ".kiro", "settings", "mcp.json"),
+    },
   ];
 }
 
@@ -221,6 +253,27 @@ export function mergeGystMcpEntry(config: McpConfig): McpConfig {
   return {
     ...config,
     mcpServers: { ...existing, gyst: GYST_MCP_ENTRY },
+  };
+}
+
+/**
+ * Returns a new VS Code mcp.json config with the Gyst server merged.
+ * VS Code uses `"servers"` (not `"mcpServers"`) and a `"type": "stdio"` field.
+ *
+ * @param config - Existing VS Code mcp.json content.
+ * @returns New config object with `servers.gyst` set.
+ */
+export function mergeGystVSCodeEntry(config: McpConfig): McpConfig {
+  const existing =
+    typeof config.servers === "object" && config.servers !== null
+      ? (config.servers as Record<string, unknown>)
+      : {};
+  return {
+    ...config,
+    servers: {
+      ...existing,
+      gyst: { ...GYST_MCP_ENTRY, type: "stdio" },
+    },
   };
 }
 
@@ -438,10 +491,12 @@ async function registerMcpForTools(
     }
 
     const existing = readJsonConfig(tool.configPath);
+
+    // VS Code uses "servers" key; all other tools use "mcpServers"
+    const isVSCode = tool.name === "VS Code";
+    const serverMap = isVSCode ? existing.servers : existing.mcpServers;
     const alreadyConfigured =
-      typeof existing.mcpServers === "object" &&
-      existing.mcpServers !== null &&
-      "gyst" in existing.mcpServers;
+      typeof serverMap === "object" && serverMap !== null && "gyst" in serverMap;
 
     if (alreadyConfigured) {
       const overwrite = await askYesNo(
@@ -456,7 +511,8 @@ async function registerMcpForTools(
     }
 
     try {
-      writeJsonConfig(tool.configPath, mergeGystMcpEntry(existing));
+      const merged = isVSCode ? mergeGystVSCodeEntry(existing) : mergeGystMcpEntry(existing);
+      writeJsonConfig(tool.configPath, merged);
       process.stdout.write(`    ${tool.name}: wrote to ${tool.configPath}\n`);
       configured.push(tool.name);
     } catch (err) {
