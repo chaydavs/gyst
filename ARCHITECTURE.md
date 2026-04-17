@@ -51,7 +51,7 @@ Extends Karpathy's "LLM Wiki" pattern — where a single developer's context per
 | CLI | Commander.js | Mature, well-typed, tree-shakeable |
 | Validation | Zod | Runtime + compile-time type safety from one schema |
 | Git | simple-git + parse-git-diff | Commit capture and diff analysis |
-| Visualization | D3.js | Force-directed knowledge graph in the dashboard |
+| Dashboard | React 18 + Vite + Tailwind | Editorial SPA at localhost:3579; D3.js legacy graph preserved at /legacy |
 
 ### Why not...
 
@@ -468,29 +468,61 @@ All use stdio transport pointing at `dist/server.js`.
 
 ## Dashboard
 
-Single-page app at `http://localhost:3579` served by `gyst dashboard`.
+React 18 + Vite + Tailwind SPA at `http://localhost:3579` served by `gyst dashboard`.
+
+### Architecture
+
+- **Frontend:** React 18 + Vite + TypeScript + Tailwind, built to `src/dashboard/dist/`
+- **Server:** `src/dashboard/server.ts` serves `dist/` as static files; all routes except `/api/*` and `/legacy` serve `dist/index.html` (SPA routing)
+- **`gyst dashboard`** starts the server on port 3579 and opens the browser
+- **Build:** `npm run build:dashboard` from project root, or `cd src/dashboard/ui && npm run build`
+- **Legacy D3 graph** preserved at `/legacy` for structural (Graphify) visualization
+
+### Frontend Components
+
+| Component | Purpose |
+|-----------|---------|
+| `Masthead` | Black header bar — publication date, 52px serif "Gyst" wordmark, Capture + Invite buttons |
+| `ModeRail` | Team/Personal tabs with entry counts + inline search |
+| `Feed` | Chronological entry list with type-filter chips and confidence bars |
+| `EntryCard` | Individual entry with serif title, type badge, confidence bar |
+| `Sidebar` | Review Queue card, Team Pulse stats (2×2 grid), Team Members list |
+| `CaptureModal` | 5-type picker grid, Personal/Team scope segmented control, ⌘N shortcut |
+| `InviteModal` | 3-step onboarding: install command → detected tools grid → invite link; ⌘I shortcut |
+| `EntryDrawer` | Slides in from right — full content in serif, feedback/promote/edit actions |
 
 ### API Endpoints
 
+All endpoints are local-only with no authentication required.
+
 | Endpoint | Returns |
 |----------|---------|
-| `GET /api/entries` | All active entries with relationships |
-| `GET /api/entries?type=convention` | Filtered by entry type |
-| `GET /api/structural` | Structural graph (from Graphify) |
-| `GET /api/stats` | Entry counts, age distribution |
+| `GET /api/entries` | Paginated entries (scope, type, limit, offset params) |
+| `GET /api/entries/:id` | Single entry + relationships + sources |
+| `GET /api/search?q=&scope=` | BM25 search results |
+| `GET /api/team/members` | Registered team members |
+| `GET /api/team/info` | Team metadata |
+| `GET /api/health` | Server health check |
+| `GET /api/tools/detected` | AI tools detected on this machine |
+| `POST /api/entries` | Create a new entry |
+| `PATCH /api/entries/:id` | Update an entry |
+| `POST /api/entries/:id/feedback` | Submit helpful/unhelpful rating |
+| `POST /api/entries/:id/promote` | Promote entry scope |
+| `POST /api/team/invite` | Generate invite key |
+| `POST /api/team/invite/email` | Send invite via email |
 
-### Visualization
+### Keyboard Shortcuts
 
-D3 force-directed graph:
-- **Nodes** = knowledge entries, colored by type
-- **Edges** = relationships (related_to, similar_to, supersedes, co_retrieved)
-- Click a node → inline detail panel (title, content, confidence, sources, related entries)
-- Filter controls: type checkboxes, status toggle, search
-- Theme: pure black background + white text + type-specific accent colors
+| Shortcut | Action |
+|----------|--------|
+| ⌘K | Focus search |
+| ⌘N | Open Capture modal |
+| ⌘I | Open Invite modal |
+| Esc | Dismiss modal / close drawer |
 
-### Why D3, not React
+### Design System
 
-The dashboard is a diagnostic tool, not a product UI. D3 renders directly to SVG without a build step. The entire frontend is one HTML file (~4500 lines including inline JS/CSS). No npm install, no bundler, no framework churn.
+Paper/ink editorial aesthetic: Fraunces (serif headings), Inter Tight (sans UI), JetBrains Mono (code/metadata). Warm `#F5F1E8` paper background, black masthead.
 
 ---
 
@@ -750,9 +782,12 @@ src/
 │       ├── prompt.ts
 │       ├── markdown-adr.ts
 │       └── markdown-headings.ts
-├── dashboard/         ← HTTP dashboard (D3 force graph)
-│   ├── server.ts
-│   └── index.html
+├── dashboard/         ← HTTP dashboard server + React UI
+│   ├── server.ts          Express server (port 3579), 20+ API endpoints
+│   ├── index.html         Legacy D3 force graph (served at /legacy)
+│   └── ui/                React 18 + Vite + Tailwind SPA
+│       ├── src/           Components: Masthead, ModeRail, Feed, Sidebar, CaptureModal, InviteModal, EntryDrawer
+│       └── dist/          Built output (served as static files)
 ├── mcp/               ← MCP server + 14 tools
 │   ├── server.ts          Stdio transport entry point
 │   ├── register-tools.ts  Tool registry

@@ -58,18 +58,19 @@ The agent calls `learn()` for each piece of knowledge it finds. It understands c
 gyst recall "what should I know about this codebase"
 ```
 
-Or open the visual knowledge graph:
+Or open the team knowledge UI:
 
 ```bash
 gyst dashboard
 ```
 
-This starts a local HTTP server at **[localhost:4242](http://localhost:4242)**. You'll see:
+This starts a local server at **[localhost:3579](http://localhost:3579)**. You'll see:
 
-- A D3 force-directed graph of every knowledge entry and how they're connected
-- Filter by type: `convention`, `error_pattern`, `decision`, `learning`, `ghost_knowledge`
-- Click any node to read the full entry
-- Entry counts at the top
+- Editorial newspaper-style UI with Team/Personal mode and a chronological knowledge feed
+- Capture modal (⌘N) to add entries with 5-type picker and Personal/Team scope selector
+- Invite modal (⌘I) for 3-step onboarding of new team members
+- Review Queue sidebar for entries needing attention, Team Pulse stats, and Team Members list
+- Legacy D3 force-directed graph still accessible at `/legacy`
 
 ### Step 4 — Add team members (optional)
 
@@ -201,13 +202,14 @@ Gyst isn't just a passive index — it builds "Team Intuition" through usage:
 ### 📊 Visualizing Team Friction
 
 ```bash
-gyst dashboard   # launch the D3-powered knowledge graph at localhost:4242
+gyst dashboard   # launch the team knowledge UI at localhost:3579
 ```
 
-- **Cluster Analysis:** See how your team's knowledge is grouping by domain (e.g., Auth, Payments, Infra).
-- **Friction Heatmap:** Identify the files that trigger the most recall hits to find your technical debt "hotspots."
-- **Live Graph:** Nodes are knowledge entries; edges are relationships. Click any node to read the full entry. Filter by type or confidence.
-- **Structural Sidecar (graphify):** A second layer of AST-derived nodes (functions, classes, files) renders alongside curated entries — dashed edges and muted colors so the two scales never conflate. Toggle `Curated` / `Structural` / `All` to focus each layer independently. Recall results surface the matching structural context as a post-ranked sidecar; it never pollutes BM25 or RRF scoring.
+- **Team/Personal feeds:** Switch between shared team knowledge and your personal entries, with inline search and type-filter chips.
+- **Capture (⌘N):** Add entries with a 5-type picker (convention, decision, error pattern, learning, ghost knowledge) and Personal/Team scope.
+- **Review Queue:** Sidebar card surfaces entries awaiting review or confirmation.
+- **Team Pulse:** Stats grid showing recent activity, member contributions, and confidence distribution.
+- **Structural Sidecar (graphify):** AST-derived structural context is available via the legacy graph at `/legacy` — dashed edges and muted colors keep curated and structural layers visually distinct. Toggle `Curated` / `Structural` / `All` to focus each layer independently. Recall results surface the matching structural context as a post-ranked sidecar; it never pollutes BM25 or RRF scoring.
 
 ### Convention Detection
 
@@ -440,7 +442,7 @@ Model: `all-MiniLM-L6-v2` (22MB, same model used in production). **4 of 10 subta
 - `gyst join <key> <name>` — Join an existing team with an invite key.
 
 ### Visualization
-- `gyst dashboard` — Launch the D3-powered visual knowledge graph. Alias: `ui`.
+- `gyst dashboard` — Launch the team knowledge UI at localhost:3579. Alias: `ui`.
 - `gyst show memory` — Alias for `dashboard`.
 - `gyst show members` — Alias for `team members`.
 
@@ -454,7 +456,8 @@ gyst/
 │   ├── mcp/           # MCP server + 14 tools (stdio + HTTP)
 │   ├── compiler/      # Extract, normalize, deduplicate, link
 │   ├── store/         # SQLite + FTS5, 5-strategy search, RRF fusion, graph, confidence
-│   ├── server/        # HTTP server, auth (API keys), activity logging, dashboard
+│   ├── server/        # HTTP server, auth (API keys), activity logging
+│   ├── dashboard/     # HTTP server + React UI (src/dashboard/ui/)
 │   ├── capture/       # Git hooks, session harvesting, context injection
 │   ├── cli/           # Commander-based CLI (15 commands)
 │   └── utils/         # Config, logger, errors, token counting
