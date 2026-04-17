@@ -28,8 +28,22 @@ import { searchByBM25 } from "../store/search.js";
 // ---------------------------------------------------------------------------
 // Path resolution for React UI build output
 // ---------------------------------------------------------------------------
+//
+// import.meta.url differs between dev and bundled modes:
+//   Dev (src/dashboard/server.ts):  fileDir = src/dashboard/  → dist at ./dist
+//   Bundled (dist/cli.js):          fileDir = dist/            → dist at ../src/dashboard/dist
+//
+// Probe in order and use the first candidate that exists on disk.
 
-const DIST_DIR = join(dirname(fileURLToPath(import.meta.url)), "dist");
+const _fileDir = dirname(fileURLToPath(import.meta.url));
+const DIST_DIR: string = (() => {
+  const candidates = [
+    join(_fileDir, "dist"),                        // dev: src/dashboard/ → src/dashboard/dist/
+    join(_fileDir, "../src/dashboard/dist"),        // bundled: dist/      → src/dashboard/dist/
+    join(_fileDir, "../../src/dashboard/dist"),     // deep-bundled fallback
+  ];
+  return candidates.find((p) => existsSync(join(p, "index.html"))) ?? candidates[0];
+})();
 
 // ---------------------------------------------------------------------------
 // Public interfaces
