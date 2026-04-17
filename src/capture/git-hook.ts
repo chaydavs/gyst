@@ -63,6 +63,12 @@ const SIGNIFICANT_CHANGE_THRESHOLD = 50;
 export async function captureCommit(): Promise<void> {
   const git = simpleGit();
 
+  // Resolve the git repository root so config and DB path are always relative
+  // to the repo root, regardless of which subdirectory the user ran `git commit`
+  // from. Without this, pushing from src/ creates src/.gyst/wiki.db instead of
+  // using the shared root-level database.
+  const gitRoot = (await git.revparse(["--show-toplevel"])).trim();
+
   // 1. Get the latest commit details
   const log = await git.log({ maxCount: 1 });
   const latest = log.latest;
@@ -84,7 +90,7 @@ export async function captureCommit(): Promise<void> {
   // This turns `fix:` → error_pattern, `feat:`/`refactor:` → decision.
   // Without it every commit becomes a low-signal `learning`, and
   // the decisions/ + patterns/ folders stay empty forever.
-  const parsed = await parseLatestCommit(process.cwd());
+  const parsed = await parseLatestCommit(gitRoot);
 
   // 4. Decide whether to capture.
   // Structured parse wins: if Conventional Commits matched, we always capture.
@@ -113,10 +119,26 @@ export async function captureCommit(): Promise<void> {
   if (isAiAuthored) tags.push("ai-authored");
   if (!parsed && isSignificant) tags.push("significant-change");
 
-  const config = loadConfig();
+  const config = loadConfig(gitRoot);
   const db = await initDatabase(config.dbPath);
 
   try {
+    // Guard: skip if this commit hash is already in the database.
+    // This prevents duplicates during rebases, amends, or accidental
+    // re-runs of the hook for the same commit.
+    const alreadyCaptured = db
+      .query<{ id: string }, [string]>(
+        "SELECT id FROM entries WHERE content LIKE ? LIMIT 1",
+      )
+      .get(`%Commit: ${latest.hash}%`);
+    if (alreadyCaptured) {
+      logger.debug("captureCommit: commit already captured, skipping", {
+        hash: latest.hash,
+        existingId: alreadyCaptured.id,
+      });
+      return;
+    }
+
     const { addManualEntry } = await import("../capture/manual.js");
 
     const content = [
