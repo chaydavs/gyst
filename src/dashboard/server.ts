@@ -704,20 +704,24 @@ export async function startDashboardServer(
                 const home = process.env["HOME"] ?? "";
                 const tools = [
                   {
-                    name: "Claude Code",
+                    name: "claude",
                     configPath: join(home, ".claude", "settings.json"),
                   },
                   {
-                    name: "Cursor",
+                    name: "cursor",
                     configPath: join(home, ".cursor", "mcp.json"),
                   },
                   {
-                    name: "Codex",
+                    name: "codex",
                     configPath: join(home, ".codex", "config.yaml"),
                   },
                   {
-                    name: "Windsurf",
+                    name: "windsurf",
                     configPath: join(home, ".codeium", "windsurf", "mcp_config.json"),
+                  },
+                  {
+                    name: "cline",
+                    configPath: join(home, ".vscode", "extensions", "saoudrizwan.claude-dev-0.0.0", "config.json"),
                   },
                 ];
                 const detected = tools.map((t) => ({
@@ -914,7 +918,7 @@ export async function startDashboardServer(
                 const now = new Date().toISOString();
                 try {
                   db.run(
-                    `INSERT INTO entries (id, type, title, content, scope, status, confidence, created_at, updated_at)
+                    `INSERT INTO entries (id, type, title, content, scope, status, confidence, created_at, last_confirmed)
                      VALUES (?, ?, ?, ?, ?, 'active', 0.7, ?, ?)`,
                     [id, type, title, content, scope, now, now],
                   );
@@ -990,12 +994,18 @@ export async function startDashboardServer(
               if (path === "/api/team/invite") {
                 try {
                   interface TeamRow { id: string }
-                  const team = db
+                  let team = db
                     .query<TeamRow, []>("SELECT id FROM teams LIMIT 1")
                     .get();
+                  // If no team exists yet, create a default one so invites always work
                   if (team === null || team === undefined) {
-                    logAccess(requestId, method, path, start, 404);
-                    return jsonResponse({ error: "No team configured" }, 404, requestId);
+                    const defaultId = "default";
+                    const now2 = new Date().toISOString();
+                    db.run(
+                      `INSERT OR IGNORE INTO teams (id, name, created_at) VALUES (?, 'My Team', ?)`,
+                      [defaultId, now2],
+                    );
+                    team = { id: defaultId };
                   }
                   const inviteCode = crypto.randomUUID();
                   const now = new Date().toISOString();
