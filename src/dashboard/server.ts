@@ -277,17 +277,39 @@ function getRecentEvents(db: Database, limit: number = 100): any[] {
 }
 
 /**
+ * Maps a raw SQLite entries row (snake_case) to the camelCase shape the UI expects.
+ */
+function mapEntryRow(row: Record<string, unknown>): Record<string, unknown> {
+  return {
+    id:            row["id"],
+    type:          row["type"],
+    title:         row["title"],
+    content:       row["content"],
+    scope:         row["scope"],
+    confidence:    row["confidence"],
+    createdAt:     row["created_at"],
+    lastConfirmed: row["last_confirmed"],
+    sourceCount:   row["source_count"] ?? 0,
+    sourceTool:    row["source_tool"] ?? null,
+    developerId:   row["developer_id"] ?? null,
+  };
+}
+
+/**
  * Fetches curated entries with optional scope filtering.
  */
-function getEntriesByScope(db: Database, scope?: string, limit: number = 100): any[] {
+function getEntriesByScope(db: Database, scope?: string, limit: number = 100): Record<string, unknown>[] {
+  let rows: Record<string, unknown>[];
   if (scope) {
-    return db
+    rows = db
       .query("SELECT * FROM entries WHERE scope = ? AND status = 'active' ORDER BY created_at DESC LIMIT ?")
-      .all(scope, limit);
+      .all(scope, limit) as Record<string, unknown>[];
+  } else {
+    rows = db
+      .query("SELECT * FROM entries WHERE status = 'active' ORDER BY created_at DESC LIMIT ?")
+      .all(limit) as Record<string, unknown>[];
   }
-  return db
-    .query("SELECT * FROM entries WHERE status = 'active' ORDER BY created_at DESC LIMIT ?")
-    .all(limit);
+  return rows.map(mapEntryRow);
 }
 
 // ---------------------------------------------------------------------------
@@ -518,19 +540,33 @@ export async function startDashboardServer(
                   interface ReviewQueueRow {
                     id: string;
                     entry_id: string;
-                    action: string;
                     reason: string;
                     confidence_before: number;
                     created_at: string;
-                    status: string;
                   }
+                  interface EntryForQueue { title: string; type: string; content: string; confidence: number }
                   const rows = db
                     .query<ReviewQueueRow, []>(
-                      "SELECT * FROM review_queue WHERE status = 'pending' ORDER BY created_at DESC LIMIT 50",
+                      "SELECT id, entry_id, reason, confidence_before, created_at FROM review_queue WHERE status = 'pending' ORDER BY created_at DESC LIMIT 50",
                     )
                     .all();
+                  const enriched = rows.map((r) => {
+                    const e = db
+                      .query<EntryForQueue, [string]>("SELECT title, type, content, confidence FROM entries WHERE id = ?")
+                      .get(r.entry_id);
+                    return {
+                      id: r.entry_id,        // use entry id so confirm/archive routes match
+                      queueId: r.id,
+                      title: e?.title ?? r.entry_id,
+                      type: e?.type ?? "learning",
+                      content: e?.content ?? "",
+                      confidence: e?.confidence ?? r.confidence_before,
+                      reason: r.reason,
+                      createdAt: r.created_at,
+                    };
+                  });
                   logAccess(requestId, method, path, start, 200);
-                  return jsonResponse(rows, 200, requestId);
+                  return jsonResponse(enriched, 200, requestId);
                 } catch (err) {
                   logger.error("review-queue error", {
                     error: err instanceof Error ? err.message : String(err),
@@ -739,30 +775,65 @@ export async function startDashboardServer(
               if (entryIdGetMatch !== null) {
                 const id = decodeURIComponent(entryIdGetMatch[1] ?? "");
                 try {
-                  const entry = db
+                  const entryRow = db
                     .query("SELECT * FROM entries WHERE id = ?")
-                    .get(id);
-                  if (entry === null || entry === undefined) {
+                    .get(id) as Record<string, unknown> | null | undefined;
+                  if (entryRow === null || entryRow === undefined) {
                     logAccess(requestId, method, path, start, 404);
                     return jsonResponse({ error: "Entry not found" }, 404, requestId);
                   }
-                  const tags = db
-                    .query("SELECT tag FROM entry_tags WHERE entry_id = ?")
+                  // Flatten tag/file arrays to plain strings
+                  const tagRows = db
+                    .query<{ tag: string }, [string]>("SELECT tag FROM entry_tags WHERE entry_id = ?")
                     .all(id);
-                  const files = db
-                    .query("SELECT file_path FROM entry_files WHERE entry_id = ?")
+                  const fileRows = db
+                    .query<{ file_path: string }, [string]>("SELECT file_path FROM entry_files WHERE entry_id = ?")
                     .all(id);
-                  const relationships = db
-                    .query(
-                      "SELECT * FROM relationships WHERE source_id = ? OR target_id = ?",
+                  // Map relationship rows and enrich with related entry title
+                  interface RelRow { source_id: string; target_id: string; type: string; strength: number }
+                  const relRows = db
+                    .query<RelRow, [string, string]>(
+                      "SELECT source_id, target_id, type, strength FROM relationships WHERE source_id = ? OR target_id = ?",
                     )
                     .all(id, id);
-                  const sources = db
-                    .query("SELECT * FROM sources WHERE entry_id = ?")
+                  const relationships = relRows.map((r) => {
+                    const relatedId = r.source_id === id ? r.target_id : r.source_id;
+                    const related = db
+                      .query<{ title: string; type: string }, [string]>("SELECT title, type FROM entries WHERE id = ?")
+                      .get(relatedId);
+                    return {
+                      id: `${r.source_id}_${r.target_id}_${r.type}`,
+                      sourceId: r.source_id,
+                      targetId: r.target_id,
+                      type: r.type,
+                      strength: r.strength,
+                      relatedId,
+                      relatedTitle: related?.title ?? relatedId,
+                      relatedType: related?.type ?? null,
+                    };
+                  });
+                  // Map sources to camelCase
+                  interface SourceRow { id: string; entry_id: string; tool: string; developer_id: string | null; session_id: string | null; created_at: string }
+                  const srcRows = db
+                    .query<SourceRow, [string]>("SELECT * FROM sources WHERE entry_id = ?")
                     .all(id);
+                  const sources = srcRows.map((s) => ({
+                    id: s.id,
+                    entryId: s.entry_id,
+                    tool: s.tool,
+                    developerId: s.developer_id,
+                    sessionId: s.session_id,
+                    createdAt: s.created_at,
+                  }));
                   logAccess(requestId, method, path, start, 200);
                   return jsonResponse(
-                    { ...(entry as object), tags, files, relationships, sources },
+                    {
+                      ...mapEntryRow(entryRow),
+                      tags: tagRows.map((t) => t.tag),
+                      files: fileRows.map((f) => f.file_path),
+                      relationships,
+                      sources,
+                    },
                     200,
                     requestId,
                   );

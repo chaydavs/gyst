@@ -206,8 +206,8 @@ export default function EntryDrawer({ id, onClose, onPromote }: EntryDrawerProps
 
         {!loading && entry && (
           <div>
-            {/* Type + scope chips */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            {/* Type + scope + source tool chips */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
               <span
                 style={{
                   fontFamily: 'var(--font-mono)',
@@ -218,6 +218,7 @@ export default function EntryDrawer({ id, onClose, onPromote }: EntryDrawerProps
                   background: `${TYPE_COLORS[entry.type]}20`,
                   padding: '3px 8px',
                   borderRadius: '3px',
+                  fontWeight: 600,
                 }}
               >
                 {TYPE_LABELS[entry.type]}
@@ -235,6 +236,30 @@ export default function EntryDrawer({ id, onClose, onPromote }: EntryDrawerProps
                 }}
               >
                 {entry.scope}
+              </span>
+              {entry.sourceTool && (
+                <span
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '10px',
+                    color: 'var(--ink-faint)',
+                    background: 'var(--sunken)',
+                    padding: '3px 8px',
+                    borderRadius: '3px',
+                  }}
+                >
+                  via {entry.sourceTool}
+                </span>
+              )}
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '10px',
+                  color: 'var(--ink-faint)',
+                  marginLeft: 'auto',
+                }}
+              >
+                {new Date(entry.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
               </span>
             </div>
 
@@ -386,35 +411,85 @@ export default function EntryDrawer({ id, onClose, onPromote }: EntryDrawerProps
               </div>
             </MetaSection>
 
+            {/* Tags */}
+            {entry.tags.length > 0 && (
+              <MetaSection label="Tags">
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {entry.tags.map(tag => (
+                    <span
+                      key={tag}
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '11px',
+                        color: 'var(--ink-soft)',
+                        background: 'var(--sunken)',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        border: '1px solid var(--line-soft)',
+                      }}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </MetaSection>
+            )}
+
             {/* Related entries */}
             {entry.relationships.length > 0 && (
               <MetaSection label="Related">
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  {entry.relationships.map(rel => {
-                    const relatedId = rel.sourceId === entry.id ? rel.targetId : rel.sourceId;
-                    return (
-                      <div
-                        key={rel.id}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {entry.relationships.map(rel => (
+                    <div
+                      key={rel.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '6px 10px',
+                        background: 'var(--bg)',
+                        borderRadius: '6px',
+                        border: '1px solid var(--line-soft)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <span
                         style={{
                           fontFamily: 'var(--font-mono)',
-                          fontSize: '11px',
-                          color: 'var(--accent)',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          gap: '6px',
-                          alignItems: 'center',
+                          fontSize: '9px',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.06em',
+                          color: 'var(--ink-faint)',
+                          flexShrink: 0,
                         }}
                       >
-                        <span style={{ color: 'var(--ink-faint)', textTransform: 'uppercase', fontSize: '9px' }}>
-                          {rel.type}
-                        </span>
-                        <span>{relatedId}</span>
-                        <span style={{ color: 'var(--ink-faint)', fontSize: '10px' }}>
-                          ({Math.round(rel.strength * 100)}%)
-                        </span>
-                      </div>
-                    );
-                  })}
+                        {rel.type.replace(/_/g, ' ')}
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-serif)',
+                          fontSize: '13px',
+                          color: 'var(--ink)',
+                          flex: 1,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {rel.relatedTitle}
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: '10px',
+                          color: confidenceColor(rel.strength),
+                          flexShrink: 0,
+                        }}
+                      >
+                        {Math.round(rel.strength * 100)}%
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </MetaSection>
             )}

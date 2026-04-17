@@ -28,6 +28,9 @@ export interface Relationship {
   targetId: string;
   type: string;
   strength: number;
+  relatedId: string;
+  relatedTitle: string;
+  relatedType: string | null;
 }
 
 export interface Source {
