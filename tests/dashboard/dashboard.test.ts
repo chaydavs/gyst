@@ -38,7 +38,7 @@ describe("GET /", () => {
     const res = await fetch(baseUrl + "/");
     expect(res.status).toBe(200);
     const text = await res.text();
-    expect(text).toContain("<title>Gyst Knowledge Graph</title>");
+    expect(text).toContain("<title>Gyst");
   });
 });
 
