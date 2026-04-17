@@ -2,7 +2,13 @@
 
 **Team knowledge compiler for AI coding agents.**
 
-> Every AI tool makes individual developers faster. Gyst makes the team smarter — shared memory of past fixes, decisions, and conventions across Claude Code, Cursor, Codex, Gemini, and any MCP-compatible tool.
+---
+
+AI coding agents are everywhere. Claude Code, Cursor, Codex, Gemini — every developer on your team has one. But each agent only knows what happened in its own session. When your teammate's agent figures out why the auth service keeps timing out, or discovers that you should never deploy on Fridays because of the batch job, or learns the right way to structure API responses — that knowledge dies at the end of the session. Your agent starts fresh tomorrow. Their agent starts fresh next week. The team never gets smarter, even as each individual gets faster.
+
+Gyst is a shared memory layer that lives between your agents and your codebase. When an agent learns something worth keeping, it calls `learn()`. When any agent on the team needs context, it calls `recall()`. The knowledge base grows with every session, every fix, every decision — and every agent on the team has access to everything every other agent has ever learned. One developer's hard-won insight becomes the whole team's starting point.
+
+---
 
 ---
 
