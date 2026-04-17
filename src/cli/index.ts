@@ -474,17 +474,54 @@ program
 program.command("invite", { hidden: true }).description("Alias for team invite").action(inviteTeamAction);
 program.command("members", { hidden: true }).description("Alias for team members").action(membersTeamAction);
 
-program.command("join <inviteKey> <displayName>").description("Join team").action(async (key, name) => {
-  try {
-    const db = openTeamDb();
-    const { memberKey } = await joinTeam(db, key.trim(), name.trim());
-    db.close();
-    process.stdout.write(`Joined! Member Key: ${memberKey}\n`);
-  } catch (err) {
-    process.stdout.write(`Error: ${(err as Error).message}\n`);
-    process.exit(1);
-  }
-});
+program
+  .command("join <inviteKey> <displayName>")
+  .description("Join a team using an invite key")
+  .option("--server <url>", "Remote Gyst HTTP server URL (e.g. http://team.example.com:3456)")
+  .action(async (key: string, name: string, opts: { server?: string }) => {
+    try {
+      if (opts.server) {
+        // Remote join: hit the HTTP server's /team/join endpoint
+        const url = opts.server.replace(/\/$/, "") + "/team/join";
+        // The HTTP server reads the invite key from the Authorization header,
+        // and the display name from the JSON body.
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${key.trim()}`,
+          },
+          body: JSON.stringify({ displayName: name.trim() }),
+        });
+        if (!res.ok) {
+          const body = await res.text();
+          process.stdout.write(`Error: ${res.status} ${body}\n`);
+          process.exit(1);
+        }
+        const data = (await res.json()) as { memberKey?: string };
+        if (!data.memberKey) {
+          process.stdout.write("Error: server did not return a member key\n");
+          process.exit(1);
+        }
+        process.stdout.write(`Joined! Member Key: ${data.memberKey}\n`);
+        process.stdout.write(`Add to your shell:  export GYST_API_KEY="${data.memberKey}"\n`);
+        process.stdout.write(`Set MCP server URL: export GYST_SERVER="${opts.server}"\n`);
+        process.stdout.write(`\nConfigure your MCP client to use:\n`);
+        process.stdout.write(`  URL:   ${opts.server.replace(/\/$/, "")}/mcp\n`);
+        process.stdout.write(`  Auth:  Bearer ${data.memberKey}\n`);
+      } else {
+        // Local join: use the local DB
+        const db = openTeamDb();
+        const { memberKey } = await joinTeam(db, key.trim(), name.trim());
+        db.close();
+        process.stdout.write(`Joined! Member Key: ${memberKey}\n`);
+        process.stdout.write(`Add to your shell:  export GYST_API_KEY="${memberKey}"\n`);
+      }
+    } catch (err) {
+      process.stdout.write(`Error: ${(err as Error).message}\n`);
+      process.exit(1);
+    }
+  });
 
 program.command("ghost-init", { hidden: true }).description("Interactive onboarding").action(async () => {
   const { runGhostInit } = await import("./ghost-init.js");
@@ -700,7 +737,24 @@ program.command("inject", { hidden: true }).description("Alias for inject-contex
   }
 });
 
-program.command("serve").description("Start Gyst MCP server").action(serveAction);
+program
+  .command("serve")
+  .description("Start Gyst MCP server (stdio) or shared HTTP team server")
+  .option("--http", "Start in HTTP mode so remote teammates can connect")
+  .option("--port <port>", "HTTP port (default: 3456, overridden by GYST_PORT env var)", "3456")
+  .action(async (opts: { http?: boolean; port?: string }) => {
+    if (opts.http) {
+      const { startHttpServer } = await import("../server/http.js");
+      const config = loadConfig();
+      const port = parseInt(process.env["GYST_PORT"] ?? opts.port ?? "3456", 10);
+      startHttpServer({ port, dbPath: config.dbPath });
+      process.stdout.write(`Gyst HTTP server running on port ${port}\n`);
+      process.stdout.write(`Teammates can join via: POST http://<your-host>:${port}/team/join\n`);
+      process.stdout.write(`MCP endpoint: http://<your-host>:${port}/mcp  (Bearer <memberKey>)\n`);
+    } else {
+      await serveAction();
+    }
+  });
 program.command("start", { hidden: true }).description("Alias for serve").action(serveAction);
 
 program
