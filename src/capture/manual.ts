@@ -132,10 +132,19 @@ export async function addManualEntry(
   };
 
   // 3. Extract entry (generate ID, normalize fields)
+  // LearnInputSchema requires content >= 10 chars. For short CLI inputs like
+  // `gyst add "auth flow" "broken"`, prepend the title so the entry is
+  // descriptive enough for FTS5 and semantic search to index meaningfully.
+  const minContentLength = 10;
+  const effectiveContent =
+    safeContent.length < minContentLength
+      ? `${safeTitle}: ${safeContent}`
+      : safeContent;
+
   const learnInput: LearnInput = {
     type: safeInput.type,
     title: safeInput.title,
-    content: safeInput.content,
+    content: effectiveContent,
     files: [...safeFiles],
     tags: [...safeTags],
     scope: safeInput.scope,
