@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
-import type { Stats, Analytics, ReviewItem, TeamMember } from '../types';
+import type { Stats, Analytics, ReviewItem, TeamMember, DriftReport } from '../types';
 
 interface SidebarProps {
   stats: Stats | null;
@@ -79,12 +79,13 @@ export default function Sidebar({
   const extraMembers = teamMembers.length > 8 ? teamMembers.length - 8 : 0;
 
   const [recentEvents, setRecentEvents] = useState<ActivityEvent[]>([]);
+  const [drift, setDrift] = useState<DriftReport | null>(null);
+  const [newAnchor, setNewAnchor] = useState('');
+  const [anchorSaving, setAnchorSaving] = useState(false);
 
   useEffect(() => {
-    api
-      .getActivity({ limit: 8 })
-      .then(setRecentEvents)
-      .catch(() => undefined);
+    api.getActivity({ limit: 8 }).then(setRecentEvents).catch(() => undefined);
+    api.getDrift().then(setDrift).catch(() => undefined);
   }, [refreshKey]);
 
   const entriesThisWeek = stats?.byType
@@ -215,6 +216,35 @@ export default function Sidebar({
             </div>
           )}
         </section>
+      )}
+
+      {/* ── 4. Drift Score ── */}
+      {drift && (
+        <DriftSection
+          drift={drift}
+          newAnchor={newAnchor}
+          setNewAnchor={setNewAnchor}
+          anchorSaving={anchorSaving}
+          onAddAnchor={async () => {
+            const q = newAnchor.trim();
+            if (!q) return;
+            setAnchorSaving(true);
+            try {
+              await api.addAnchor(q);
+              setNewAnchor('');
+              const updated = await api.getDrift();
+              setDrift(updated);
+            } catch { /* best-effort */ }
+            finally { setAnchorSaving(false); }
+          }}
+          onRemoveAnchor={async (id: number) => {
+            try {
+              await api.removeAnchor(id);
+              const updated = await api.getDrift();
+              setDrift(updated);
+            } catch { /* best-effort */ }
+          }}
+        />
       )}
 
       {/* ── 5. Team Members ── */}
@@ -472,6 +502,186 @@ function MemberChip({ member }: { member: TeamMember }) {
         {member.displayName}
       </span>
     </div>
+  );
+}
+
+function DriftSection({
+  drift,
+  newAnchor,
+  setNewAnchor,
+  anchorSaving,
+  onAddAnchor,
+  onRemoveAnchor,
+}: {
+  drift: DriftReport;
+  newAnchor: string;
+  setNewAnchor: (v: string) => void;
+  anchorSaving: boolean;
+  onAddAnchor: () => void;
+  onRemoveAnchor: (id: number) => void;
+}) {
+  const trendColor = drift.trend === 'improving'
+    ? '#22c55e'
+    : drift.trend === 'stable'
+      ? 'var(--ink-soft)'
+      : drift.trend === 'drifting'
+        ? '#f59e0b'
+        : 'var(--ink-faint)';
+
+  const scorePct = Math.round(drift.score * 100);
+  const scoreColor = drift.score < 0.2 ? '#22c55e' : drift.score < 0.5 ? '#f59e0b' : '#ef4444';
+
+  const anchors = drift.anchorResults;
+
+  return (
+    <section style={{ padding: '20px 20px 18px', borderBottom: '1px solid var(--line-soft)' }}>
+      <header style={SECTION_HEADER_STYLE}>
+        <span>Knowledge Drift</span>
+        {/* Score pill */}
+        <span style={{
+          marginLeft: 'auto',
+          fontFamily: 'var(--font-mono)',
+          fontSize: '10px',
+          fontWeight: 700,
+          color: scoreColor,
+          background: 'var(--sunken)',
+          border: `1px solid ${scoreColor}40`,
+          padding: '2px 7px',
+          borderRadius: '10px',
+        }}>
+          {scorePct === 0 && drift.trend === 'unknown' ? '—' : `${scorePct}%`}
+        </span>
+      </header>
+
+      {/* Trend + stale count */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '12px', alignItems: 'center' }}>
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '10px',
+          color: trendColor,
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+        }}>
+          {drift.trend === 'unknown' ? 'collecting data' : drift.trend}
+        </span>
+        {drift.staleEntries > 0 && (
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ink-faint)' }}>
+            · {drift.staleEntries} stale
+          </span>
+        )}
+        {drift.fatigueWarning && (
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            color: '#f59e0b',
+            background: '#f59e0b18',
+            border: '1px solid #f59e0b40',
+            padding: '1px 5px',
+            borderRadius: '4px',
+          }}>
+            fatigue
+          </span>
+        )}
+      </div>
+
+      {/* Top recommendation */}
+      {drift.recommendations[0] && drift.trend !== 'unknown' && (
+        <p style={{
+          fontFamily: 'var(--font-sans)',
+          fontSize: '11px',
+          color: 'var(--ink-faint)',
+          lineHeight: 1.5,
+          margin: '0 0 12px',
+          padding: '8px 10px',
+          background: 'var(--sunken)',
+          borderRadius: '4px',
+          border: '1px solid var(--line-soft)',
+        }}>
+          {drift.recommendations[0]}
+        </p>
+      )}
+
+      {/* Anchor queries */}
+      <div style={{ marginTop: '8px' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ink-faint)', marginBottom: '7px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Anchor queries
+        </div>
+        {anchors.length === 0 ? (
+          <p style={{ fontFamily: 'var(--font-sans)', fontSize: '11px', color: 'var(--ink-faint)', fontStyle: 'italic', margin: '0 0 8px' }}>
+            No anchors yet. Add a probe query below.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', marginBottom: '8px' }}>
+            {anchors.map((a) => (
+              <div key={a.id} style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 8px',
+                background: 'var(--bg)',
+                border: `1px solid ${a.found ? 'var(--line-soft)' : '#ef444440'}`,
+                borderRadius: '4px',
+              }}>
+                <span style={{ fontSize: '10px', flexShrink: 0 }}>{a.found ? '✓' : '✗'}</span>
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '10px',
+                  color: a.found ? 'var(--ink-soft)' : '#ef4444',
+                  flex: 1,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {a.query}
+                </span>
+                <button
+                  onClick={() => onRemoveAnchor(a.id)}
+                  style={{ background: 'none', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
+                >×</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Add anchor input */}
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <input
+            type="text"
+            value={newAnchor}
+            onChange={e => setNewAnchor(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') onAddAnchor(); }}
+            placeholder="probe query..."
+            style={{
+              flex: 1,
+              fontFamily: 'var(--font-mono)',
+              fontSize: '11px',
+              padding: '4px 8px',
+              background: 'var(--sunken)',
+              border: '1px solid var(--line)',
+              borderRadius: '4px',
+              color: 'var(--ink)',
+              outline: 'none',
+            }}
+          />
+          <button
+            onClick={onAddAnchor}
+            disabled={anchorSaving || !newAnchor.trim()}
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '10px',
+              padding: '4px 10px',
+              background: 'var(--accent)',
+              border: 'none',
+              borderRadius: '4px',
+              color: '#fff',
+              cursor: anchorSaving || !newAnchor.trim() ? 'not-allowed' : 'pointer',
+              opacity: anchorSaving || !newAnchor.trim() ? 0.5 : 1,
+            }}
+          >
+            +
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 

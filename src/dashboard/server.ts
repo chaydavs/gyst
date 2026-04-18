@@ -25,6 +25,7 @@ import {
 import { getRecentActivity, initActivitySchema } from "../server/activity.js";
 import { searchByBM25 } from "../store/search.js";
 import { initAnalyticsSchema, getAnalyticsSummary } from "../utils/analytics.js";
+import { initDriftSchema, computeDriftReport, addAnchorQuery, listAnchorQueries, takeDriftSnapshot } from "../utils/drift.js";
 
 // ---------------------------------------------------------------------------
 // Path resolution for React UI build output
@@ -341,7 +342,8 @@ const REVIEW_ACTION_RE = /^\/api\/review-queue\/([^/]+)\/(confirm|archive|skip)$
 const ASSETS_RE = /^\/assets\//;
 const TEAM_MEMBER_ID_RE = /^\/api\/team\/members\/([^/]+)$/;
 const TEAM_MEMBER_STATS_RE = /^\/api\/team\/members\/([^/]+)\/stats$/;
-const TEAM_INVITE_HASH_RE = /^\/api\/team\/invites\/([^/]+)$/;
+const TEAM_INVITE_HASH_RE  = /^\/api\/team\/invites\/([^/]+)$/;
+const ANCHOR_ID_RE         = /^\/api\/drift\/anchors\/([^/]+)$/;
 
 // ---------------------------------------------------------------------------
 // Main export
@@ -362,6 +364,8 @@ export async function startDashboardServer(
   // Ensure supporting tables exist before serving API
   initActivitySchema(db);
   initAnalyticsSchema(db);
+  initDriftSchema(db);
+  takeDriftSnapshot(db); // take today's snapshot on server start (idempotent)
 
   const tryStart = (port: number): any => {
     try {
@@ -475,6 +479,18 @@ export async function startDashboardServer(
                 const data = getAnalyticsSummary(db);
                 logAccess(requestId, method, path, start, 200);
                 return jsonResponse(data, 200, requestId);
+              }
+
+              if (path === "/api/drift") {
+                const report = computeDriftReport(db);
+                logAccess(requestId, method, path, start, 200);
+                return jsonResponse(report, 200, requestId);
+              }
+
+              if (path === "/api/drift/anchors") {
+                const anchors = listAnchorQueries(db);
+                logAccess(requestId, method, path, start, 200);
+                return jsonResponse(anchors, 200, requestId);
               }
 
               if (path === "/api/graph") {
@@ -1058,6 +1074,25 @@ export async function startDashboardServer(
             // ------------------------------------------------------------------
 
             if (method === "POST") {
+              // /api/drift/anchors — add a golden probe query
+              if (path === "/api/drift/anchors") {
+                try {
+                  const body = await req.json() as { query?: string };
+                  const query = typeof body.query === "string" ? body.query.trim() : "";
+                  if (query.length === 0) {
+                    logAccess(requestId, method, path, start, 400);
+                    return jsonResponse({ error: "query is required" }, 400, requestId);
+                  }
+                  addAnchorQuery(db, query);
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse({ ok: true }, 200, requestId);
+                } catch (err) {
+                  logger.error("add anchor error", { error: err instanceof Error ? err.message : String(err) });
+                  logAccess(requestId, method, path, start, 500);
+                  return jsonResponse({ error: "internal" }, 500, requestId);
+                }
+              }
+
               // /api/review-queue/:id/(confirm|archive|skip)
               const reviewActionMatch = REVIEW_ACTION_RE.exec(path);
               if (reviewActionMatch !== null) {
@@ -1465,6 +1500,21 @@ export async function startDashboardServer(
                   return jsonResponse({ ok: true }, 200, requestId);
                 } catch (err) {
                   logger.error("remove member error", { error: err instanceof Error ? err.message : String(err) });
+                  logAccess(requestId, method, path, start, 500);
+                  return jsonResponse({ error: "internal" }, 500, requestId);
+                }
+              }
+
+              // /api/drift/anchors/:id — remove an anchor query by id
+              const anchorDeleteMatch = ANCHOR_ID_RE.exec(path);
+              if (anchorDeleteMatch !== null) {
+                const anchorId = decodeURIComponent(anchorDeleteMatch[1] ?? "");
+                try {
+                  db.run("DELETE FROM anchor_queries WHERE id = ?", [anchorId]);
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse({ ok: true }, 200, requestId);
+                } catch (err) {
+                  logger.error("remove anchor error", { error: err instanceof Error ? err.message : String(err) });
                   logAccess(requestId, method, path, start, 500);
                   return jsonResponse({ error: "internal" }, 500, requestId);
                 }

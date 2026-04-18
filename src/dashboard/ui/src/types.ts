@@ -121,5 +121,31 @@ export interface Analytics {
   learnsToday: number;
 }
 
+export type DriftTrend = 'improving' | 'stable' | 'drifting' | 'unknown';
+
+export interface DriftWindow {
+  zeroResultRate: number;
+  avgResults: number;
+  recallCount: number;
+  learnCount: number;
+}
+
+export interface AnchorResult {
+  id: number;
+  query: string;
+  found: boolean;
+}
+
+export interface DriftReport {
+  score: number;
+  trend: DriftTrend;
+  recent7d: DriftWindow;
+  baseline30d: DriftWindow;
+  staleEntries: number;
+  fatigueWarning: boolean;
+  anchorResults: AnchorResult[];
+  recommendations: string[];
+}
+
 export type Mode = 'team' | 'personal';
 export type View = 'feed' | 'search' | 'queue' | 'graph' | 'team';

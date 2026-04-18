@@ -18,6 +18,7 @@ import {
   maybeRunNightlyDistill,
   triggerSessionDistill,
 } from "../compiler/distill-scheduler.js";
+import { initDriftSchema, takeDriftSnapshot } from "../utils/drift.js";
 
 /**
  * Starts the background event processing loop.
@@ -83,6 +84,9 @@ async function handleEvent(
         const sessionId =
           typeof payload?.sessionId === "string" ? payload.sessionId : null;
         await triggerSessionDistill(db, sessionId);
+        // Take daily drift snapshot — idempotent, skips if already done today
+        initDriftSchema(db);
+        takeDriftSnapshot(db);
       }
       break;
 
