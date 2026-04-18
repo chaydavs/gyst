@@ -9,6 +9,7 @@ import Sidebar from './components/Sidebar';
 import CaptureModal from './components/CaptureModal';
 import InviteModal from './components/InviteModal';
 import EntryDrawer from './components/EntryDrawer';
+import TeamView from './components/TeamView';
 
 export default function App() {
   const [mode, setMode] = useState<Mode>('team');
@@ -129,6 +130,11 @@ export default function App() {
     api.getStats().then(setStats).catch(() => undefined);
   }, []);
 
+  const handleTeamCreated = useCallback((info: TeamInfo) => {
+    setTeamInfo(info);
+    api.getTeamMembers().then(setTeamMembers).catch(() => undefined);
+  }, []);
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
       <Masthead
@@ -149,7 +155,11 @@ export default function App() {
         onViewChange={setView}
       />
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
-        {view === 'graph' ? (
+        {view === 'team' ? (
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            <TeamView teamInfo={teamInfo} onTeamCreated={handleTeamCreated} />
+          </div>
+        ) : view === 'graph' ? (
           <GraphCanvas
             onNodeClick={setSelectedEntryId}
             refreshKey={feedRefreshKey}

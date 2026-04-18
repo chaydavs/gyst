@@ -321,6 +321,8 @@ const ENTRY_ID_RE = /^\/api\/entries\/([^/]+)$/;
 const ENTRY_ACTION_RE = /^\/api\/entries\/([^/]+)\/(feedback|promote)$/;
 const REVIEW_ACTION_RE = /^\/api\/review-queue\/([^/]+)\/(confirm|archive|skip)$/;
 const ASSETS_RE = /^\/assets\//;
+const TEAM_MEMBER_ID_RE = /^\/api\/team\/members\/([^/]+)$/;
+const TEAM_INVITE_HASH_RE = /^\/api\/team\/invites\/([^/]+)$/;
 
 // ---------------------------------------------------------------------------
 // Main export
@@ -717,6 +719,35 @@ export async function startDashboardServer(
                 }
               }
 
+              // /api/team/invites — pending (non-expired, non-revoked) invite keys
+              if (path === "/api/team/invites") {
+                try {
+                  interface InviteRow {
+                    key_hash: string;
+                    created_at: string;
+                    expires_at: string | null;
+                  }
+                  const rows = db
+                    .query<InviteRow, []>(
+                      `SELECT key_hash, created_at, expires_at FROM api_keys
+                       WHERE type = 'invite' AND revoked = 0
+                         AND (expires_at IS NULL OR expires_at > datetime('now'))
+                       ORDER BY created_at DESC`,
+                    )
+                    .all();
+                  const invites = rows.map(r => ({
+                    keyHash: r.key_hash,
+                    createdAt: r.created_at,
+                    expiresAt: r.expires_at,
+                  }));
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse(invites, 200, requestId);
+                } catch (_err) {
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse([], 200, requestId);
+                }
+              }
+
               // /api/health
               if (path === "/api/health") {
                 try {
@@ -1037,6 +1068,37 @@ export async function startDashboardServer(
                 }
               }
 
+              // /api/team — create a new team
+              if (path === "/api/team") {
+                try {
+                  let body: unknown;
+                  try { body = await req.json(); } catch (_e) { body = {}; }
+                  const nameRaw = (body as Record<string, unknown>)?.name;
+                  const name = typeof nameRaw === "string" && nameRaw.trim().length > 0
+                    ? nameRaw.trim()
+                    : "My Team";
+                  db.run(`CREATE TABLE IF NOT EXISTS teams (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                  )`);
+                  const existing = db.query<{ id: string }, []>("SELECT id FROM teams LIMIT 1").get();
+                  if (existing !== null && existing !== undefined) {
+                    logAccess(requestId, method, path, start, 409);
+                    return jsonResponse({ error: "Team already exists", teamId: existing.id }, 409, requestId);
+                  }
+                  const teamId = crypto.randomUUID();
+                  const now = new Date().toISOString();
+                  db.run("INSERT INTO teams (id, name, created_at) VALUES (?, ?, ?)", [teamId, name, now]);
+                  logAccess(requestId, method, path, start, 201);
+                  return jsonResponse({ teamId, name }, 201, requestId);
+                } catch (err) {
+                  logger.error("create team error", { error: err instanceof Error ? err.message : String(err) });
+                  logAccess(requestId, method, path, start, 500);
+                  return jsonResponse({ error: "internal" }, 500, requestId);
+                }
+              }
+
               // /api/team/invite/email (must come before /api/team/invite)
               if (path === "/api/team/invite/email") {
                 try {
@@ -1202,6 +1264,43 @@ export async function startDashboardServer(
                   logger.error("update entry error", {
                     error: err instanceof Error ? err.message : String(err),
                   });
+                  logAccess(requestId, method, path, start, 500);
+                  return jsonResponse({ error: "internal" }, 500, requestId);
+                }
+              }
+            }
+
+            // ------------------------------------------------------------------
+            // DELETE routes
+            // ------------------------------------------------------------------
+
+            if (method === "DELETE") {
+              // /api/team/members/:developerId
+              const memberDeleteMatch = TEAM_MEMBER_ID_RE.exec(path);
+              if (memberDeleteMatch !== null) {
+                const developerId = decodeURIComponent(memberDeleteMatch[1] ?? "");
+                try {
+                  db.run("DELETE FROM team_members WHERE developer_id = ?", [developerId]);
+                  db.run("UPDATE api_keys SET revoked = 1 WHERE developer_id = ?", [developerId]);
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse({ ok: true }, 200, requestId);
+                } catch (err) {
+                  logger.error("remove member error", { error: err instanceof Error ? err.message : String(err) });
+                  logAccess(requestId, method, path, start, 500);
+                  return jsonResponse({ error: "internal" }, 500, requestId);
+                }
+              }
+
+              // /api/team/invites/:keyHash
+              const inviteDeleteMatch = TEAM_INVITE_HASH_RE.exec(path);
+              if (inviteDeleteMatch !== null) {
+                const keyHash = decodeURIComponent(inviteDeleteMatch[1] ?? "");
+                try {
+                  db.run("UPDATE api_keys SET revoked = 1 WHERE key_hash = ? AND type = 'invite'", [keyHash]);
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse({ ok: true }, 200, requestId);
+                } catch (err) {
+                  logger.error("revoke invite error", { error: err instanceof Error ? err.message : String(err) });
                   logAccess(requestId, method, path, start, 500);
                   return jsonResponse({ error: "internal" }, 500, requestId);
                 }

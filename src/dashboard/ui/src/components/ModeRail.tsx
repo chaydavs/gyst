@@ -34,6 +34,7 @@ export default function ModeRail({
     { key: 'feed', label: 'Feed' },
     { key: 'graph', label: 'Graph' },
     { key: 'queue', label: 'Review' },
+    { key: 'team', label: 'Team' },
   ];
 
   const tabStyle = (active: boolean): React.CSSProperties => ({

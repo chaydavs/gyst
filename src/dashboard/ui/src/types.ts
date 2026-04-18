@@ -84,5 +84,11 @@ export interface SearchResult {
   snippet: string;
 }
 
+export interface PendingInvite {
+  keyHash: string;
+  createdAt: string;
+  expiresAt: string | null;
+}
+
 export type Mode = 'team' | 'personal';
-export type View = 'feed' | 'search' | 'queue' | 'graph';
+export type View = 'feed' | 'search' | 'queue' | 'graph' | 'team';
