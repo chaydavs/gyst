@@ -135,6 +135,11 @@ export default function App() {
     api.getTeamMembers().then(setTeamMembers).catch(() => undefined);
   }, []);
 
+  const handleTeamDeleted = useCallback(() => {
+    setTeamInfo(null);
+    setTeamMembers([]);
+  }, []);
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
       <Masthead
@@ -157,7 +162,7 @@ export default function App() {
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
         {view === 'team' ? (
           <div style={{ flex: 1, overflowY: 'auto' }}>
-            <TeamView teamInfo={teamInfo} onTeamCreated={handleTeamCreated} />
+            <TeamView teamInfo={teamInfo} onTeamCreated={handleTeamCreated} onTeamDeleted={handleTeamDeleted} />
           </div>
         ) : view === 'graph' ? (
           <GraphCanvas

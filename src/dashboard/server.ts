@@ -1147,6 +1147,15 @@ export async function startDashboardServer(
                 }
               }
 
+              // /api/shutdown — gracefully stop the dashboard server
+              if (path === "/api/shutdown") {
+                logAccess(requestId, method, path, start, 200);
+                const response = jsonResponse({ ok: true, message: "Dashboard server shutting down." }, 200, requestId);
+                // Give the response time to flush before exiting
+                setTimeout(() => process.exit(0), 200);
+                return response;
+              }
+
               // /api/team — create a new team
               if (path === "/api/team") {
                 try {
@@ -1354,6 +1363,28 @@ export async function startDashboardServer(
             // ------------------------------------------------------------------
 
             if (method === "DELETE") {
+              // /api/team — dissolve the entire team (all members, keys, team row)
+              if (path === "/api/team") {
+                try {
+                  db.transaction(() => {
+                    // Remove all API keys for this team
+                    try { db.run("DELETE FROM api_keys WHERE team_id IN (SELECT id FROM teams)"); } catch { /* table may not exist */ }
+                    // Remove all members
+                    try { db.run("DELETE FROM team_members"); } catch { /* table may not exist */ }
+                    // Remove all activity log entries
+                    try { db.run("DELETE FROM activity_log"); } catch { /* table may not exist */ }
+                    // Remove the team itself
+                    db.run("DELETE FROM teams");
+                  })();
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse({ ok: true }, 200, requestId);
+                } catch (err) {
+                  logger.error("delete team error", { error: err instanceof Error ? err.message : String(err) });
+                  logAccess(requestId, method, path, start, 500);
+                  return jsonResponse({ error: "internal" }, 500, requestId);
+                }
+              }
+
               // /api/team/members/:developerId
               const memberDeleteMatch = TEAM_MEMBER_ID_RE.exec(path);
               if (memberDeleteMatch !== null) {

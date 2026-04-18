@@ -6,6 +6,7 @@ import TeamSetupWizard from './TeamSetupWizard';
 interface TeamViewProps {
   teamInfo: TeamInfo | null;
   onTeamCreated: (info: TeamInfo) => void;
+  onTeamDeleted: () => void;
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -239,7 +240,7 @@ function StatPill({ value, label }: { value: number | string; label: string }) {
 
 // ── Main TeamView ─────────────────────────────────────────────────────────────
 
-export default function TeamView({ teamInfo, onTeamCreated }: TeamViewProps) {
+export default function TeamView({ teamInfo, onTeamCreated, onTeamDeleted }: TeamViewProps) {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [activity, setActivity] = useState<TeamActivity[]>([]);
   const [invites, setInvites] = useState<PendingInvite[]>([]);
@@ -418,6 +419,137 @@ export default function TeamView({ teamInfo, onTeamCreated }: TeamViewProps) {
           Click URL to change it — used when generating join commands.
         </p>
       </div>
+
+      {/* ── Danger Zone ── */}
+      <DangerZone teamName={teamInfo.name} onTeamDeleted={onTeamDeleted} />
+    </div>
+  );
+}
+
+// ── DangerZone ────────────────────────────────────────────────────────────────
+
+type DangerAction = 'delete-team' | 'stop-server' | null;
+
+function DangerZone({ teamName, onTeamDeleted }: { teamName: string; onTeamDeleted: () => void }) {
+  const [confirming, setConfirming] = useState<DangerAction>(null);
+  const [confirmInput, setConfirmInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const reset = () => { setConfirming(null); setConfirmInput(''); setError(null); };
+
+  const handleDeleteTeam = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.deleteTeam();
+      setDone('Team deleted. You can create a new one.');
+      // Small delay so user sees the message, then trigger re-render
+      setTimeout(() => onTeamDeleted(), 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleStopServer = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.shutdownServer();
+      setDone('Server stopping… this page will go offline shortly.');
+    } catch {
+      // The server may close before the response arrives — treat as success
+      setDone('Server stopping… this page will go offline shortly.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const buttonBase: React.CSSProperties = {
+    fontSize: '12px', padding: '7px 14px', cursor: 'pointer',
+    border: '1px solid #cc0000', borderRadius: '4px',
+    background: '#fff', color: '#cc0000', fontFamily: 'var(--font-sans)', fontWeight: 600,
+  };
+
+  return (
+    <div style={{ marginTop: '48px', borderTop: '1px solid var(--line)', paddingTop: '24px' }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#cc0000', marginBottom: '16px' }}>
+        Danger Zone
+      </div>
+
+      {done ? (
+        <p style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', color: '#22c55e' }}>{done}</p>
+      ) : confirming === null ? (
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <button onClick={() => setConfirming('delete-team')} style={buttonBase}>
+            Delete Team
+          </button>
+          <button onClick={() => setConfirming('stop-server')} style={{ ...buttonBase, color: '#888', borderColor: '#888' }}>
+            Stop Dashboard Server
+          </button>
+        </div>
+      ) : confirming === 'stop-server' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '440px' }}>
+          <p style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', margin: 0 }}>
+            This will stop the dashboard process. The page will go offline.
+            Knowledge data is not deleted.
+          </p>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={() => void handleStopServer()}
+              disabled={busy}
+              style={{ ...buttonBase, color: '#888', borderColor: '#888', opacity: busy ? 0.5 : 1 }}
+            >
+              {busy ? 'Stopping…' : 'Stop Server'}
+            </button>
+            <button onClick={reset} style={{ fontSize: '12px', padding: '7px 14px', cursor: 'pointer', border: '1px solid var(--line)', borderRadius: '4px', background: '#fff', fontFamily: 'var(--font-sans)' }}>
+              Cancel
+            </button>
+          </div>
+          {error && <p style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#cc0000', margin: 0 }}>{error}</p>}
+        </div>
+      ) : (
+        // confirming === 'delete-team'
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '440px' }}>
+          <p style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', margin: 0 }}>
+            This will permanently delete <strong>{teamName}</strong>, all members, all API keys, and all activity history.
+            Knowledge entries are <em>not</em> deleted. Type the team name to confirm.
+          </p>
+          <input
+            autoFocus
+            type="text"
+            value={confirmInput}
+            onChange={e => setConfirmInput(e.target.value)}
+            placeholder={teamName}
+            style={{
+              fontFamily: 'var(--font-mono)', fontSize: '13px', padding: '8px 10px',
+              border: '1px solid #cc0000', borderRadius: '4px', outline: 'none', background: '#fff',
+            }}
+          />
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={() => void handleDeleteTeam()}
+              disabled={busy || confirmInput !== teamName}
+              style={{
+                ...buttonBase,
+                background: confirmInput === teamName ? '#cc0000' : '#fff',
+                color: confirmInput === teamName ? '#fff' : '#cc0000',
+                opacity: busy || confirmInput !== teamName ? 0.5 : 1,
+                cursor: busy || confirmInput !== teamName ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {busy ? 'Deleting…' : 'Delete Team'}
+            </button>
+            <button onClick={reset} style={{ fontSize: '12px', padding: '7px 14px', cursor: 'pointer', border: '1px solid var(--line)', borderRadius: '4px', background: '#fff', fontFamily: 'var(--font-sans)' }}>
+              Cancel
+            </button>
+          </div>
+          {error && <p style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#cc0000', margin: 0 }}>{error}</p>}
+        </div>
+      )}
     </div>
   );
 }

@@ -56,6 +56,8 @@ export const api = {
   getTeamActivity: (limit = 50) => apiFetch<TeamActivity[]>(`/api/team/activity?limit=${limit}`),
   revokeInvite: (keyHash: string) => apiFetch<{ ok: boolean }>(`/api/team/invites/${encodeURIComponent(keyHash)}`, { method: 'DELETE' }),
   removeMember: (developerId: string) => apiFetch<{ ok: boolean }>(`/api/team/members/${encodeURIComponent(developerId)}`, { method: 'DELETE' }),
+  deleteTeam: () => apiFetch<{ ok: boolean }>('/api/team', { method: 'DELETE' }),
+  shutdownServer: () => apiFetch<{ ok: boolean; message: string }>('/api/shutdown', { method: 'POST', body: '{}' }),
 
   // Activity
   getActivity: (params?: { limit?: number; developerId?: string }) => {
