@@ -10,6 +10,7 @@ import CaptureModal from './components/CaptureModal';
 import InviteModal from './components/InviteModal';
 import EntryDrawer from './components/EntryDrawer';
 import TeamView from './components/TeamView';
+import DocsTab from './components/DocsTab';
 
 export default function App() {
   const [mode, setMode] = useState<Mode>('team');
@@ -166,6 +167,10 @@ export default function App() {
         {view === 'team' ? (
           <div style={{ flex: 1, overflowY: 'auto' }}>
             <TeamView teamInfo={teamInfo} onTeamCreated={handleTeamCreated} onTeamDeleted={handleTeamDeleted} />
+          </div>
+        ) : view === 'docs' ? (
+          <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <DocsTab />
           </div>
         ) : view === 'graph' ? (
           <GraphCanvas

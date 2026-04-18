@@ -499,6 +499,35 @@ export async function startDashboardServer(
                 return jsonResponse(data, 200, requestId);
               }
 
+              if (path === "/api/docs") {
+                const docs = db.query<{
+                  id: string; title: string; content: string; file_path: string | null;
+                  created_at: string; last_confirmed: string; confidence: number;
+                }, []>(
+                  "SELECT id, title, content, file_path, created_at, last_confirmed, confidence FROM entries WHERE type='md_doc' AND status='active' ORDER BY last_confirmed DESC"
+                ).all();
+                logAccess(requestId, method, path, start, 200);
+                return jsonResponse(docs, 200, requestId);
+              }
+
+              const DOCS_ENTRY_RE = /^\/api\/docs\/([^/]+)$/;
+              const docsEntryMatch = DOCS_ENTRY_RE.exec(path);
+              if (docsEntryMatch) {
+                const docId = decodeURIComponent(docsEntryMatch[1] ?? "");
+                const doc = db.query<{
+                  id: string; title: string; content: string; file_path: string | null;
+                  created_at: string; last_confirmed: string; confidence: number;
+                }, [string]>(
+                  "SELECT id, title, content, file_path, created_at, last_confirmed, confidence FROM entries WHERE id=? AND type='md_doc'"
+                ).get(docId);
+                if (!doc) {
+                  logAccess(requestId, method, path, start, 404);
+                  return jsonResponse({ error: "not found" }, 404, requestId);
+                }
+                logAccess(requestId, method, path, start, 200);
+                return jsonResponse(doc, 200, requestId);
+              }
+
               // /api/graph/:id  — must come before the bare /api/graph check
               const graphNodeMatch = GRAPH_NODE_RE.exec(path);
               if (graphNodeMatch !== null) {
