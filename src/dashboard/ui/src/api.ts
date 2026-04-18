@@ -1,4 +1,4 @@
-import type { Entry, EntryDetail, TeamMember, TeamInfo, ReviewItem, Stats, Analytics, SearchResult, PendingInvite, TeamActivity } from './types';
+import type { Entry, EntryDetail, TeamMember, TeamInfo, ReviewItem, Stats, Analytics, MemberStats, SearchResult, PendingInvite, TeamActivity } from './types';
 
 async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, {
@@ -57,6 +57,7 @@ export const api = {
   listInvites: () => apiFetch<PendingInvite[]>('/api/team/invites'),
   getTeamActivity: (limit = 50) => apiFetch<TeamActivity[]>(`/api/team/activity?limit=${limit}`),
   revokeInvite: (keyHash: string) => apiFetch<{ ok: boolean }>(`/api/team/invites/${encodeURIComponent(keyHash)}`, { method: 'DELETE' }),
+  getMemberStats: (developerId: string) => apiFetch<MemberStats>(`/api/team/members/${encodeURIComponent(developerId)}/stats`),
   removeMember: (developerId: string) => apiFetch<{ ok: boolean }>(`/api/team/members/${encodeURIComponent(developerId)}`, { method: 'DELETE' }),
   deleteTeam: () => apiFetch<{ ok: boolean }>('/api/team', { method: 'DELETE' }),
   shutdownServer: () => apiFetch<{ ok: boolean; message: string }>('/api/shutdown', { method: 'POST', body: '{}' }),

@@ -24,7 +24,6 @@ export default function App() {
   const [reviewQueue, setReviewQueue] = useState<ReviewItem[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [isLive, setIsLive] = useState(false);
-  const [developerFilter, setDeveloperFilter] = useState<string | null>(null);
 
   // Incrementing key triggers re-fetch in Feed without unmounting it
   const [feedRefreshKey, setFeedRefreshKey] = useState(0);
@@ -156,15 +155,12 @@ export default function App() {
         mode={mode}
         onModeChange={setMode}
         teamInfo={teamInfo}
-        teamMembers={teamMembers}
         teamMemberCount={teamMembers.length}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         searchInputRef={searchInputRef}
         view={view}
         onViewChange={setView}
-        developerFilter={developerFilter}
-        onDeveloperFilterChange={setDeveloperFilter}
       />
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
         {view === 'team' ? (
@@ -184,7 +180,6 @@ export default function App() {
                 searchQuery={searchQuery}
                 onEntryClick={setSelectedEntryId}
                 refreshKey={feedRefreshKey}
-                developerFilter={developerFilter}
               />
             </div>
             <Sidebar

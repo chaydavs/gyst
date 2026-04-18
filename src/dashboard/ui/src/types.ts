@@ -101,6 +101,13 @@ export interface PendingInvite {
   expiresAt: string | null;
 }
 
+export interface MemberStats {
+  byType: Record<string, number>;
+  recentActivity: Array<{ action: string; entryId: string | null; createdAt: string }>;
+  recallCount: number;
+  learnCount: number;
+}
+
 export interface Analytics {
   totalRecalls: number;
   totalLearns: number;

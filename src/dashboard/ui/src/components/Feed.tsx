@@ -8,8 +8,6 @@ interface FeedProps {
   searchQuery: string;
   onEntryClick: (id: string) => void;
   refreshKey?: number;
-  /** Filter entries to a specific developer ID (team mode only) */
-  developerFilter?: string | null;
 }
 
 type FilterType = 'all' | EntryType;
@@ -39,7 +37,7 @@ function searchResultToEntry(r: SearchResult): Entry {
   };
 }
 
-export default function Feed({ mode, searchQuery, onEntryClick, refreshKey, developerFilter }: FeedProps) {
+export default function Feed({ mode, searchQuery, onEntryClick, refreshKey }: FeedProps) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,11 +59,7 @@ export default function Feed({ mode, searchQuery, onEntryClick, refreshKey, deve
           const searchResults = await api.search(searchQuery.trim(), mode === 'team' ? 'team' : undefined);
           result = searchResults.map(searchResultToEntry);
         } else {
-          result = await api.listEntries({
-            scope,
-            limit: 50,
-            developerId: developerFilter ?? undefined,
-          });
+          result = await api.listEntries({ scope, limit: 50 });
         }
         if (!cancelled) {
           setEntries(result);
@@ -81,16 +75,14 @@ export default function Feed({ mode, searchQuery, onEntryClick, refreshKey, deve
 
     void load();
     return () => { cancelled = true; };
-  }, [mode, searchQuery, refreshKey, developerFilter]);
+  }, [mode, searchQuery, refreshKey]);
 
   const filtered = filter === 'all' ? entries : entries.filter(e => e.type === filter);
 
   const sectionTitle = searchQuery
     ? `Results for "${searchQuery}"`
     : mode === 'team'
-      ? developerFilter
-        ? 'Filtered by member'
-        : 'The Team Ledger'
+      ? 'The Team Ledger'
       : 'Your Notebook';
 
   return (

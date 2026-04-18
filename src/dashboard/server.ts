@@ -340,6 +340,7 @@ const ENTRY_ACTION_RE = /^\/api\/entries\/([^/]+)\/(feedback|promote)$/;
 const REVIEW_ACTION_RE = /^\/api\/review-queue\/([^/]+)\/(confirm|archive|skip)$/;
 const ASSETS_RE = /^\/assets\//;
 const TEAM_MEMBER_ID_RE = /^\/api\/team\/members\/([^/]+)$/;
+const TEAM_MEMBER_STATS_RE = /^\/api\/team\/members\/([^/]+)\/stats$/;
 const TEAM_INVITE_HASH_RE = /^\/api\/team\/invites\/([^/]+)$/;
 
 // ---------------------------------------------------------------------------
@@ -850,6 +851,48 @@ export async function startDashboardServer(
                 } catch (_err) {
                   logAccess(requestId, method, path, start, 200);
                   return jsonResponse([], 200, requestId);
+                }
+              }
+
+              // /api/team/members/:developerId/stats
+              const memberStatsMatch = TEAM_MEMBER_STATS_RE.exec(path);
+              if (memberStatsMatch !== null) {
+                const devId = decodeURIComponent(memberStatsMatch[1] ?? "");
+                try {
+                  interface TypeCountRow { type: string; n: number }
+                  const byType: Record<string, number> = {};
+                  const typeRows = db
+                    .query<TypeCountRow, [string]>(
+                      `SELECT type, COUNT(*) AS n FROM entries
+                       WHERE developer_id = ? AND status = 'active' GROUP BY type`,
+                    )
+                    .all(devId);
+                  for (const r of typeRows) byType[r.type] = r.n;
+
+                  interface ActivityRow { action: string; entry_id: string | null; created_at: string }
+                  const recentActivity = db
+                    .query<ActivityRow, [string]>(
+                      `SELECT action, entry_id, created_at FROM activity_log
+                       WHERE developer_id = ? ORDER BY created_at DESC LIMIT 15`,
+                    )
+                    .all(devId)
+                    .map(r => ({ action: r.action, entryId: r.entry_id, createdAt: r.created_at }));
+
+                  interface RecallCountRow { recallCount: number; learnCount: number }
+                  const activityCounts = db
+                    .query<RecallCountRow, [string]>(
+                      `SELECT
+                        SUM(CASE WHEN action='recall' OR action='search' THEN 1 ELSE 0 END) AS recallCount,
+                        SUM(CASE WHEN action='learn' THEN 1 ELSE 0 END) AS learnCount
+                       FROM activity_log WHERE developer_id = ?`,
+                    )
+                    .get(devId) ?? { recallCount: 0, learnCount: 0 };
+
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse({ byType, recentActivity, ...activityCounts }, 200, requestId);
+                } catch (_err) {
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse({ byType: {}, recentActivity: [], recallCount: 0, learnCount: 0 }, 200, requestId);
                 }
               }
 

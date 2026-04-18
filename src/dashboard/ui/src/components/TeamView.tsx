@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
-import type { TeamInfo, TeamMember, PendingInvite, TeamActivity } from '../types';
+import type { TeamInfo, TeamMember, MemberStats, PendingInvite, TeamActivity } from '../types';
 import TeamSetupWizard from './TeamSetupWizard';
 
 interface TeamViewProps {
@@ -109,63 +109,182 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-// ── Member card ───────────────────────────────────────────────────────────────
+const ENTRY_TYPE_COLORS: Record<string, string> = {
+  error_pattern: '#ef4444',
+  convention: '#3b82f6',
+  decision: '#8b5cf6',
+  learning: '#10b981',
+  ghost_knowledge: '#f59e0b',
+};
+
+// ── Member card (click to expand stats) ──────────────────────────────────────
 
 function MemberCard({ member, onRemove }: { member: TeamMember; onRemove: (id: string) => void }) {
+  const [expanded, setExpanded] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [stats, setStats] = useState<MemberStats | null>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
+
+  const handleExpand = async () => {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && stats === null) {
+      setLoadingStats(true);
+      try {
+        const data = await api.getMemberStats(member.developerId);
+        setStats(data);
+      } catch { /* best-effort */ }
+      finally { setLoadingStats(false); }
+    }
+  };
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: '12px',
-      padding: '12px 0', borderBottom: '1px solid var(--line)',
-    }}>
-      <Avatar name={member.displayName} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-          <span style={{ fontFamily: 'var(--font-sans)', fontSize: '14px', fontWeight: 600 }}>
-            {member.displayName}
-          </span>
-          <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: '10px', padding: '1px 5px',
-            background: member.role === 'admin' ? '#000' : 'var(--sunken)',
-            color: member.role === 'admin' ? '#fff' : 'var(--ink-faint)',
-            borderRadius: '3px',
-          }}>
-            {member.role}
-          </span>
-        </div>
-        <div style={{ display: 'flex', gap: '12px', marginTop: '3px' }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-faint)' }}>
-            {member.entryCount > 0 ? `${member.entryCount} entr${member.entryCount === 1 ? 'y' : 'ies'}` : 'no entries yet'}
-          </span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-faint)' }}>
-            joined {relTime(member.joinedAt)}
-          </span>
-          {member.lastActive && (
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-faint)' }}>
-              active {relTime(member.lastActive)}
+    <div style={{ borderBottom: '1px solid var(--line)' }}>
+      {/* ── Row ── */}
+      <div
+        onClick={() => void handleExpand()}
+        style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 0', cursor: 'pointer' }}
+      >
+        <Avatar name={member.displayName} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+            <span style={{ fontFamily: 'var(--font-sans)', fontSize: '14px', fontWeight: 600 }}>
+              {member.displayName}
             </span>
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontSize: '10px', padding: '1px 5px',
+              background: member.role === 'admin' ? '#000' : 'var(--sunken)',
+              color: member.role === 'admin' ? '#fff' : 'var(--ink-faint)',
+              borderRadius: '3px',
+            }}>
+              {member.role}
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: '12px', marginTop: '3px' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-faint)' }}>
+              {member.entryCount > 0 ? `${member.entryCount} entr${member.entryCount === 1 ? 'y' : 'ies'}` : 'no entries yet'}
+            </span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-faint)' }}>
+              joined {relTime(member.joinedAt)}
+            </span>
+            {member.lastActive && (
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-faint)' }}>
+                active {relTime(member.lastActive)}
+              </span>
+            )}
+          </div>
+        </div>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--ink-faint)', marginRight: '6px' }}>
+          {expanded ? '▲' : '▼'}
+        </span>
+        {member.role !== 'admin' && (
+          <div onClick={e => e.stopPropagation()}>
+            {confirming ? (
+              <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                <button onClick={() => { onRemove(member.developerId); setConfirming(false); }}
+                  style={{ fontSize: '11px', padding: '4px 8px', cursor: 'pointer', border: '1px solid #cc0000', borderRadius: '3px', background: '#cc0000', color: '#fff', fontFamily: 'var(--font-sans)' }}>
+                  Remove
+                </button>
+                <button onClick={() => setConfirming(false)}
+                  style={{ fontSize: '11px', padding: '4px 8px', cursor: 'pointer', border: '1px solid var(--line)', borderRadius: '3px', background: '#fff', color: 'var(--ink)', fontFamily: 'var(--font-sans)' }}>
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirming(true)}
+                style={{ fontSize: '11px', padding: '4px 8px', cursor: 'pointer', border: '1px solid var(--line)', borderRadius: '3px', background: '#fff', color: 'var(--ink-faint)', fontFamily: 'var(--font-sans)', flexShrink: 0 }}>
+                Remove
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Expanded stats panel ── */}
+      {expanded && (
+        <div style={{ padding: '0 0 16px 48px' }}>
+          {loadingStats ? (
+            <p style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-faint)' }}>Loading…</p>
+          ) : stats ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Usage counts */}
+              <div style={{ display: 'flex', gap: '24px' }}>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-sans)', fontSize: '22px', fontWeight: 700, letterSpacing: '-0.02em' }}>
+                    {stats.learnCount}
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ink-faint)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    Learns
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-sans)', fontSize: '22px', fontWeight: 700, letterSpacing: '-0.02em' }}>
+                    {stats.recallCount}
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ink-faint)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    Recalls
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-sans)', fontSize: '22px', fontWeight: 700, letterSpacing: '-0.02em' }}>
+                    {member.entryCount}
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ink-faint)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    Entries
+                  </div>
+                </div>
+              </div>
+
+              {/* Entries by type */}
+              {Object.keys(stats.byType).length > 0 && (
+                <div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ink-faint)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>
+                    Contribution breakdown
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {Object.entries(stats.byType).sort((a, b) => b[1] - a[1]).map(([type, count]) => (
+                      <span key={type} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                        padding: '3px 8px', borderRadius: '12px', border: '1px solid var(--line)',
+                        fontFamily: 'var(--font-mono)', fontSize: '11px',
+                      }}>
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: ENTRY_TYPE_COLORS[type] ?? '#888', flexShrink: 0 }} />
+                        {type.replace(/_/g, ' ')} · {count}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Recent activity */}
+              {stats.recentActivity.length > 0 && (
+                <div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ink-faint)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>
+                    Recent activity
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {stats.recentActivity.slice(0, 6).map((a, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{
+                          fontFamily: 'var(--font-mono)', fontSize: '10px', padding: '1px 6px',
+                          background: 'var(--sunken)', border: '1px solid var(--line)', borderRadius: '3px',
+                          color: 'var(--ink-soft)',
+                        }}>
+                          {actionLabel(a.action)}
+                        </span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ink-faint)' }}>
+                          {relTime(a.createdAt)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p style={{ fontFamily: 'var(--font-sans)', fontSize: '12px', color: 'var(--ink-faint)' }}>No data yet.</p>
           )}
         </div>
-      </div>
-      {member.role !== 'admin' && (
-        confirming ? (
-          <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-            <button onClick={() => { onRemove(member.developerId); setConfirming(false); }}
-              style={{ fontSize: '11px', padding: '4px 8px', cursor: 'pointer', border: '1px solid #cc0000', borderRadius: '3px', background: '#cc0000', color: '#fff', fontFamily: 'var(--font-sans)' }}>
-              Remove
-            </button>
-            <button onClick={() => setConfirming(false)}
-              style={{ fontSize: '11px', padding: '4px 8px', cursor: 'pointer', border: '1px solid var(--line)', borderRadius: '3px', background: '#fff', color: 'var(--ink)', fontFamily: 'var(--font-sans)' }}>
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <button onClick={() => setConfirming(true)}
-            style={{ fontSize: '11px', padding: '4px 8px', cursor: 'pointer', border: '1px solid var(--line)', borderRadius: '3px', background: '#fff', color: 'var(--ink-faint)', fontFamily: 'var(--font-sans)', flexShrink: 0 }}>
-            Remove
-          </button>
-        )
       )}
     </div>
   );
