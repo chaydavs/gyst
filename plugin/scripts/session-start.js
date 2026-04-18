@@ -3,12 +3,12 @@
  * Claude Code / Codex SessionStart hook.
  *
  * Records the session_start event and injects recent-context markdown as
- * `additionalContext`. Output must be valid JSON for Claude Code plugin hooks;
- * we wrap the inject-context output in the hook-response envelope.
+ * `additionalContext`. Output must be valid JSON for Claude Code plugin hooks.
  *
  * Never blocks the agent: all failures swallow to `{"continue": true}`.
  */
 import { spawnSync } from "node:child_process";
+import { badge, emitAsync } from "./badge.js";
 
 function tryCommand(cmd, args) {
   const result = spawnSync(cmd, args, {
@@ -20,18 +20,16 @@ function tryCommand(cmd, args) {
   return "";
 }
 
-function resolveGyst() {
-  // Prefer the installed binary; fall back to npx for cold-start dev envs.
-  return process.env.GYST_BIN || "gyst";
-}
-
 try {
-  const gyst = resolveGyst();
+  const gyst = process.env.GYST_BIN || "gyst";
 
-  // Fire-and-forget telemetry — ignore output.
-  spawnSync(gyst, ["emit", "session_start"], { timeout: 2000, stdio: "ignore" });
+  badge("injecting team context");
 
-  // Context for the agent + a human-friendly notification line on stderr.
+  // Fire-and-forget session_start event — detached, concurrent.
+  emitAsync(gyst, "session_start", {});
+
+  // inject-context must be synchronous because its output goes into the
+  // additionalContext response field that Claude Code reads immediately.
   const context = tryCommand(gyst, ["inject-context", "--always-on", "--graph-traverse"]);
 
   const response = { continue: true };

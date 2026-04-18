@@ -7,6 +7,7 @@ export type EventType =
   | "session_end"
   | "pre_compact"
   | "prompt"
+  | "pre_tool_use"
   | "tool_use"
   | "commit"
   | "pull"

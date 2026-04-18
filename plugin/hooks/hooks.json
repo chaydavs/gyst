@@ -8,16 +8,27 @@
     {
       "event": "UserPromptSubmit",
       "script": "plugin/scripts/prompt.js",
-      "timeout": 2000
+      "timeout": 500
+    },
+    {
+      "event": "PreToolUse",
+      "matcher": "",
+      "script": "plugin/scripts/pre-tool.js",
+      "timeout": 500
     },
     {
       "event": "PostToolUse",
       "matcher": "",
       "script": "plugin/scripts/tool-use.js",
-      "timeout": 2000
+      "timeout": 500
     },
     {
       "event": "Stop",
+      "script": "plugin/scripts/session-end.js",
+      "timeout": 5000
+    },
+    {
+      "event": "SubagentStop",
       "script": "plugin/scripts/session-end.js",
       "timeout": 5000
     }
