@@ -38,7 +38,6 @@ const TYPE_COLOR: Record<string, string> = {
   convention:      '#d97706',
   learning:        '#059669',
   md_doc:          '#0891b2',
-  structural:      '#2563eb',
 };
 const STRUCTURAL_COLOR = '#6366f1';
 
