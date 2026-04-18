@@ -13,6 +13,10 @@ export type EventType =
   | "pull"
   | "file_change"
   | "md_change"
+  | "md_changed"
+  | "tool_failure"
+  | "kb_miss_signal"
+  | "drift_snapshot"
   | "plan_added"
   | "error";
 
