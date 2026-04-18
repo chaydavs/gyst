@@ -56,7 +56,9 @@ gyst/
 │       ├── config.ts           # Load .gyst-wiki.json config
 │       ├── logger.ts           # Structured logging, never console.log
 │       ├── tokens.ts           # Token counting for context budget
-│       └── errors.ts           # Custom error types
+│       ├── errors.ts           # Custom error types
+│       ├── analytics.ts        # Local-only usage metrics (leverage ratio, zero-result rate)
+│       └── drift.ts            # AI drift detection (anchor queries, fatigue, trend scoring)
 ├── tests/                      # Mirrors src/ structure
 ├── gyst-wiki/                  # Output: the compiled knowledge base
 ├── decisions/                  # ADRs: what we tried and why
@@ -69,7 +71,7 @@ gyst/
 
 ## Current Phase: V1 (Complete)
 
-### MCP Tools (13 total — both stdio and HTTP transports)
+### MCP Tools (14 total — both stdio and HTTP transports)
 - `learn` — record team knowledge with entity extraction, auto-linking
 - `recall` — ranked search with RRF fusion, intent boost, ghost_knowledge tier 0
 - `search` — compact index (id/type/confidence/title) for progressive disclosure
@@ -83,6 +85,44 @@ gyst/
 - `harvest` — extract knowledge from a session transcript
 - `activity` — query team activity log
 - `status` — health check / stats
+- `configure` — read/write project configuration
+
+### Hook Coverage (plugin/hooks/hooks.json)
+All six Claude Code hook events are registered:
+- `SessionStart` — inject-context: injects ghost knowledge + top conventions at session start
+- `UserPromptSubmit` — emit prompt event for knowledge classification (fire-and-forget)
+- `PreToolUse` — status badge on stderr + pre_tool_use event (fire-and-forget)
+- `PostToolUse` — emit tool_use + sidecar ADR/plan detection (concurrent detached spawns)
+- `Stop` — session distillation trigger (fire-and-forget)
+- `SubagentStop` — same distillation for subagent sessions
+
+All hook scripts use detached spawn (badge.js) — never block the agent loop.
+
+### Local Analytics (src/utils/analytics.ts)
+- `usage_metrics` table: recall/learn events with token proxy, intent bucket, zero_result flag
+- `getAnalyticsSummary()` computes leverage ratio (tokens delivered ÷ tokens invested)
+- Intent classified locally (4 buckets: temporal/debugging/code_quality/conceptual)
+- No external network calls. No opt-in. All data stays in project SQLite.
+- Dashboard: Context Economics section shows leverage ratio, zero-result rate, token savings, intent mix
+
+### AI Drift Detection (src/utils/drift.ts)
+- `drift_snapshots` table: daily point-in-time recall quality snapshots
+- `anchor_queries` table: golden probe queries that must always return results
+- `computeDriftReport()` compares 7-day vs 30-day window — scores 0.0 (healthy) to 1.0 (severe)
+- Three signals: zero-result rate trend, avg results decline, AI fatigue (10:1 recall:learn ratio)
+- Anchor pulse check: BM25 probe on every drift report; broken anchors flagged by name
+- Snapshot auto-taken on every session_end event
+- Dashboard: Knowledge Drift section with score pill, trend label, anchor manager
+
+### Dashboard (src/dashboard/)
+React UI at localhost:3579 with:
+- Feed: entry browser with type filters, scope toggle, search
+- Review queue: decay/low-confidence entries with confirm/archive actions
+- Graph view: interactive relationship visualization
+- Team management: member roster, expandable per-member stats, invite flow, danger zone
+- Context Economics: leverage ratio, token savings, intent breakdown
+- Knowledge Drift: drift score, trend, stale count, fatigue warning, anchor query manager
+- Activity feed: recent events with developer attribution
 
 ### CLI Commands
 - `gyst setup` — detect conventions from a sample project
@@ -96,7 +136,6 @@ gyst/
 DO NOT build yet:
 - Slack bot (V2)
 - Turso team sync (V2)
-- Dashboard enhancement (V3)
 - Docker deployment (V3)
 
 ## Code Rules

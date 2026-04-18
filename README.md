@@ -10,8 +10,6 @@ Gyst is a shared memory layer that lives between your agents and your codebase. 
 
 ---
 
----
-
 ## Install
 
 **Requires Bun:**
@@ -140,6 +138,7 @@ Knowledge lives in your git repo or on a shared HTTP server. Nothing leaves your
 | `harvest` | Extract knowledge from a session transcript |
 | `activity` | Recent team activity log |
 | `status` | Health check and database stats |
+| `configure` | Read/write project configuration |
 
 ### Ghost Knowledge
 
@@ -148,6 +147,72 @@ Ghost entries have infinite confidence and always surface first — they encode 
 ```bash
 gyst ghost-init   # interactive Q&A to capture tribal knowledge
 ```
+
+---
+
+## Context Economics
+
+Gyst tracks the ROI of your knowledge base locally — no external calls, no opt-in required.
+
+**Leverage ratio** = tokens your agents received from recall ÷ tokens you invested writing entries. A ratio above 1.0 means the KB is already paying for itself. A ratio of 10 means every minute spent writing an entry saved ten minutes of context re-generation.
+
+The dashboard surfaces:
+- Leverage ratio and total token savings
+- Zero-result rate (rising trend = KB going stale)
+- Intent breakdown (debugging vs. conventions vs. conceptual queries)
+- Recalls today / learns today
+
+All data stays in your SQLite database. Nothing leaves your machine.
+
+---
+
+## Drift Detection
+
+AI knowledge bases degrade silently. Gyst measures and surfaces drift before it causes problems.
+
+**Three signals tracked automatically:**
+
+1. **Zero-result rate trend** — compares your 7-day window against your 30-day baseline. A rising trend means your agents are asking questions the KB can't answer.
+2. **Stale entries** — entries with decaying confidence that haven't been confirmed in 30+ days. The knowledge garden needs pruning.
+3. **AI fatigue warning** — if your agents recalled knowledge 10+ times last week but no new entries were added, you're at risk of your intuition dulling. Gyst flags it.
+
+**Anchor queries** let you define golden probe queries that should always return results. The dashboard's pulse check runs them on every load and flags any that return zero results — targeted knowledge loss, caught early.
+
+The drift score (0–100%) and trend label (improving / stable / drifting) are always visible in the dashboard sidebar.
+
+---
+
+## Hooks
+
+Gyst registers into every hook event in Claude Code and compatible tools:
+
+| Hook | What Gyst does |
+|------|---------------|
+| `SessionStart` | Injects team context + ghost knowledge into every session |
+| `UserPromptSubmit` | Records prompt patterns for knowledge classification |
+| `PreToolUse` | Shows "gyst is working" status badge; records tool invocation patterns |
+| `PostToolUse` | Captures tool errors → error_pattern entries; detects ADR/plan writes |
+| `Stop` | Triggers session distillation — extracts knowledge from the full session |
+| `SubagentStop` | Same distillation for subagent sessions |
+
+All hook emissions are fire-and-forget (detached spawns). Hooks return in under 1ms — no latency added to the agent loop.
+
+---
+
+## Dashboard
+
+```bash
+gyst dashboard
+```
+
+Opens at `localhost:3579`. Includes:
+
+- **Feed** — browse all entries by type, scope, or keyword search
+- **Review queue** — entries flagged for decay, low confidence, or explicit feedback
+- **Graph view** — interactive knowledge relationship graph
+- **Team management** — member roster, per-member stats (contributions, recall count, recent activity), invite flow, danger zone
+- **Context Economics** — leverage ratio, token savings, intent breakdown, zero-result rate
+- **Knowledge Drift** — drift score, trend, stale entry count, AI fatigue warning, anchor query manager
 
 ---
 
@@ -184,8 +249,8 @@ gyst ghost-init   # interactive Q&A to capture tribal knowledge
 ### CodeMemBench — team knowledge retrieval (200 queries)
 | Metric | Score |
 |--------|------:|
-| NDCG@10 | 0.327 |
-| Hit Rate | 66.0% |
+| NDCG@10 | 0.351 |
+| Hit Rate | 78.0% |
 | Ghost Knowledge Hit | **92.0%** |
 
 ### LongMemEval (500 questions)
@@ -206,7 +271,7 @@ Five search strategies run in parallel on every query, fused with Reciprocal Ran
 4. **Temporal** — recency-weighted for debugging/history queries
 5. **Semantic** — 22MB local ONNX model, no API call required
 
-The `install` command wires a `SessionStart` hook into your AI tools. At every session start, `gyst inject-context` automatically injects ghost knowledge rules and top conventions for the current directory.
+The `install` command wires into every hook event in your AI tools. At every session start, `gyst inject-context` automatically injects ghost knowledge rules and top conventions for the current directory. Every tool use, prompt, and session end is captured and processed in the background.
 
 ---
 
@@ -214,16 +279,17 @@ The `install` command wires a `SessionStart` hook into your AI tools. At every s
 
 ```
 src/
-├── mcp/        # MCP server + 14 tools (stdio + HTTP)
-├── compiler/   # Extract, normalize, deduplicate, link
-├── store/      # SQLite + FTS5, 5-strategy search, RRF fusion, graph
+├── mcp/        # MCP server + 14 tools (stdio + HTTP transports)
+├── compiler/   # Extract, normalize, deduplicate, link, distill
+├── store/      # SQLite + FTS5, 5-strategy search, RRF fusion, graph, embeddings
 ├── server/     # HTTP server, auth, activity logging
-├── dashboard/  # React knowledge UI
+├── dashboard/  # React knowledge UI + team management
 ├── capture/    # Git hooks, session harvesting, context injection
+├── utils/      # Analytics, drift detection, config, tokens, logger
 └── cli/        # CLI commands
 ```
 
-**Stack:** Bun · TypeScript · SQLite (FTS5) · `@modelcontextprotocol/sdk` · Zod
+**Stack:** Bun · TypeScript · SQLite (FTS5) · `@modelcontextprotocol/sdk` · Zod · React (dashboard)
 
 ---
 
@@ -231,7 +297,7 @@ src/
 
 ```bash
 bun install
-bun test                    # 958 tests, 63 files
+bun test                    # 895 tests, 47 files
 bun run lint                # tsc --noEmit
 bun run build               # bundle to dist/
 bun run benchmark:codememb  # CodeMemBench
