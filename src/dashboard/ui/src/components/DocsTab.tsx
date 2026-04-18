@@ -15,8 +15,8 @@ export default function DocsTab() {
       .finally(() => setLoading(false));
   }, []);
 
-  const selectDoc = async (id: string) => {
-    const doc = await api.getDoc(id).catch(() => null);
+  const selectDoc = (id: string) => {
+    const doc = docs.find(d => d.id === id) ?? null;
     if (doc) setSelected(doc);
   };
 
