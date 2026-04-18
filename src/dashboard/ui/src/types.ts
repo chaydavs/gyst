@@ -101,5 +101,18 @@ export interface PendingInvite {
   expiresAt: string | null;
 }
 
+export interface Analytics {
+  totalRecalls: number;
+  totalLearns: number;
+  totalTokensDelivered: number;
+  totalTokensInvested: number;
+  leverageRatio: number;
+  zeroResultRate: number;
+  avgResultsPerRecall: number;
+  intentBreakdown: Record<string, number>;
+  recallsToday: number;
+  learnsToday: number;
+}
+
 export type Mode = 'team' | 'personal';
 export type View = 'feed' | 'search' | 'queue' | 'graph' | 'team';

@@ -26,6 +26,7 @@ import { logger } from "../../utils/logger.js";
 import { emitEvent } from "../../store/events.js";
 import { DatabaseError, ValidationError } from "../../utils/errors.js";
 import type { ToolContext } from "../register-tools.js";
+import { trackLearn, initAnalyticsSchema } from "../../utils/analytics.js";
 
 // ---------------------------------------------------------------------------
 // Input schema
@@ -446,6 +447,15 @@ export function registerLearnTool(server: McpServer, ctx: ToolContext): void {
         const { logActivity } = await import("../../server/activity.js");
         logActivity(ctx.db, ctx.teamId, ctx.developerId, "learn", id, valid.files);
       }
+
+      // Local analytics — stored in this project's SQLite, never transmitted
+      initAnalyticsSchema(db);
+      trackLearn(db, {
+        entryType: valid.type,
+        scope: resolvedScope,
+        tokenInvestment: Math.round(safeContent.length / 4),
+        teamMode: ctx.mode === "team",
+      });
 
       return {
         content: [

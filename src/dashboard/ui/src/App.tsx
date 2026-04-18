@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from './api';
-import type { Mode, View, TeamInfo, Stats, ReviewItem, TeamMember, Entry } from './types';
+import type { Mode, View, TeamInfo, Stats, Analytics, ReviewItem, TeamMember, Entry } from './types';
 import Masthead from './components/Masthead';
 import ModeRail from './components/ModeRail';
 import Feed from './components/Feed';
@@ -20,9 +20,11 @@ export default function App() {
   const [showInvite, setShowInvite] = useState(false);
   const [teamInfo, setTeamInfo] = useState<TeamInfo | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [reviewQueue, setReviewQueue] = useState<ReviewItem[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [isLive, setIsLive] = useState(false);
+  const [developerFilter, setDeveloperFilter] = useState<string | null>(null);
 
   // Incrementing key triggers re-fetch in Feed without unmounting it
   const [feedRefreshKey, setFeedRefreshKey] = useState(0);
@@ -43,11 +45,13 @@ export default function App() {
         api.getTeamInfo(),
         api.getTeamMembers(),
         api.getReviewQueue(),
+        api.getAnalytics(),
       ]);
       if (results[0].status === 'fulfilled') setStats(results[0].value);
       if (results[1].status === 'fulfilled') setTeamInfo(results[1].value);
       if (results[2].status === 'fulfilled') setTeamMembers(results[2].value);
       if (results[3].status === 'fulfilled') setReviewQueue(results[3].value);
+      if (results[4].status === 'fulfilled') setAnalytics(results[4].value);
     };
     void load();
   }, []);
@@ -152,12 +156,15 @@ export default function App() {
         mode={mode}
         onModeChange={setMode}
         teamInfo={teamInfo}
+        teamMembers={teamMembers}
         teamMemberCount={teamMembers.length}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         searchInputRef={searchInputRef}
         view={view}
         onViewChange={setView}
+        developerFilter={developerFilter}
+        onDeveloperFilterChange={setDeveloperFilter}
       />
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
         {view === 'team' ? (
@@ -177,10 +184,12 @@ export default function App() {
                 searchQuery={searchQuery}
                 onEntryClick={setSelectedEntryId}
                 refreshKey={feedRefreshKey}
+                developerFilter={developerFilter}
               />
             </div>
             <Sidebar
               stats={stats}
+              analytics={analytics}
               reviewQueue={reviewQueue}
               teamMembers={teamMembers}
               onReviewAction={handleReviewAction}

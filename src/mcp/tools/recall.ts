@@ -35,6 +35,8 @@ import { formatForContext } from "../../utils/format-recall.js";
 import { logger } from "../../utils/logger.js";
 import { emitEvent } from "../../store/events.js";
 import { getStructuralForEntries } from "../../store/structural.js";
+import { trackRecall, initAnalyticsSchema } from "../../utils/analytics.js";
+import type { IntentBucket } from "../../utils/analytics.js";
 
 // ---------------------------------------------------------------------------
 // Input schema
@@ -436,6 +438,22 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
         const { logActivity } = await import("../../server/activity.js");
         logActivity(ctx.db, ctx.teamId, ctx.developerId, "recall", undefined, input.files ?? []);
       }
+
+      // Local analytics — stored in this project's own SQLite, never transmitted
+      const intentBucketMap: Record<string, IntentBucket> = {
+        temporal: "temporal", debugging: "debugging",
+        code_quality: "code_quality", conventions: "code_quality",
+        conceptual: "conceptual", onboarding: "conceptual", search: "conceptual",
+      };
+      const intentBucket: IntentBucket = intentBucketMap[intent] ?? "conceptual";
+      initAnalyticsSchema(db);
+      trackRecall(db, {
+        resultCount: filtered.length,
+        tokenProxy: Math.round(formatted.length / 4),
+        intent: intentBucket,
+        zeroResult: filtered.length === 0,
+        teamMode: ctx.mode === "team",
+      });
 
       return {
         content: [

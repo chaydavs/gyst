@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
-import type { Stats, ReviewItem, TeamMember } from '../types';
+import type { Stats, Analytics, ReviewItem, TeamMember } from '../types';
 
 interface SidebarProps {
   stats: Stats | null;
+  analytics: Analytics | null;
   reviewQueue: ReviewItem[];
   teamMembers: TeamMember[];
   onReviewAction: (id: string, action: 'confirm' | 'archive') => void;
@@ -66,6 +67,7 @@ const SECTION_HEADER_STYLE: React.CSSProperties = {
 
 export default function Sidebar({
   stats,
+  analytics,
   reviewQueue,
   teamMembers,
   onReviewAction,
@@ -169,7 +171,53 @@ export default function Sidebar({
         </div>
       </section>
 
-      {/* ── 3. Team Members ── */}
+      {/* ── 3. Context Economics ── */}
+      {analytics && (analytics.totalRecalls > 0 || analytics.totalLearns > 0) && (
+        <section style={{ padding: '20px 20px 18px', borderBottom: '1px solid var(--line-soft)' }}>
+          <header style={SECTION_HEADER_STYLE}>
+            <span>Context Economics</span>
+          </header>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 12px' }}>
+            <PulseMetric value={analytics.totalRecalls.toLocaleString()} label="Total Recalls" />
+            <PulseMetric value={analytics.leverageRatio > 0 ? `${analytics.leverageRatio}×` : '—'} label="Leverage" />
+            <PulseMetric value={analytics.recallsToday} label="Recalls Today" />
+            <PulseMetric value={`${analytics.zeroResultRate}%`} label="Zero-result" />
+          </div>
+          {analytics.totalTokensInvested > 0 && (
+            <div style={{ marginTop: '14px', padding: '10px 12px', background: 'var(--sunken)', borderRadius: '6px', border: '1px solid var(--line-soft)' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ink-faint)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Token savings
+              </div>
+              <div style={{ fontFamily: 'var(--font-sans)', fontSize: '12px', color: 'var(--ink-soft)', lineHeight: 1.5 }}>
+                <span style={{ fontWeight: 600, color: 'var(--ink)' }}>
+                  {(analytics.totalTokensDelivered / 1000).toFixed(1)}k
+                </span> tokens delivered from{' '}
+                <span style={{ fontWeight: 600, color: 'var(--ink)' }}>
+                  {(analytics.totalTokensInvested / 1000).toFixed(1)}k
+                </span> invested
+              </div>
+            </div>
+          )}
+          {Object.keys(analytics.intentBreakdown).length > 0 && (
+            <div style={{ marginTop: '12px' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ink-faint)', marginBottom: '7px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Intent mix
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                {Object.entries(analytics.intentBreakdown)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([intent, count]) => (
+                    <span key={intent} style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', padding: '2px 7px', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: '10px', color: 'var(--ink-soft)' }}>
+                      {intent} {count}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ── 5. Team Members ── */}
       <section style={{ padding: '20px 20px 18px', borderBottom: '1px solid var(--line-soft)' }}>
         <header style={SECTION_HEADER_STYLE}>
           <span>Team</span>
@@ -219,7 +267,7 @@ export default function Sidebar({
         </div>
       </section>
 
-      {/* ── 4. Activity ── */}
+      {/* ── 6. Activity ── */}
       <section style={{ padding: '20px 20px 18px' }}>
         <header style={SECTION_HEADER_STYLE}>
           <span>Activity</span>
@@ -256,7 +304,7 @@ function PulseMetric({ value, label }: { value: number | string; label: string }
       <div
         style={{
           fontFamily: 'var(--font-sans)',
-          fontSize: '28px',
+          fontSize: '24px',
           fontWeight: 700,
           color: 'var(--ink)',
           lineHeight: 1,

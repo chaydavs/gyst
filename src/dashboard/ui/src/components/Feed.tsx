@@ -8,6 +8,8 @@ interface FeedProps {
   searchQuery: string;
   onEntryClick: (id: string) => void;
   refreshKey?: number;
+  /** Filter entries to a specific developer ID (team mode only) */
+  developerFilter?: string | null;
 }
 
 type FilterType = 'all' | EntryType;
@@ -37,7 +39,7 @@ function searchResultToEntry(r: SearchResult): Entry {
   };
 }
 
-export default function Feed({ mode, searchQuery, onEntryClick, refreshKey }: FeedProps) {
+export default function Feed({ mode, searchQuery, onEntryClick, refreshKey, developerFilter }: FeedProps) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,13 +53,19 @@ export default function Feed({ mode, searchQuery, onEntryClick, refreshKey }: Fe
     const load = async () => {
       try {
         let result: Entry[];
+        // Personal mode shows both personal + project scoped entries so nothing
+        // is silently hidden (e.g. error patterns captured by git hooks land as
+        // scope='project' and would otherwise disappear from the feed).
+        const scope = mode === 'team' ? 'team' : 'personal,project';
         if (searchQuery.trim()) {
-          const scope = mode === 'team' ? 'team' : 'personal';
-          const searchResults = await api.search(searchQuery.trim(), scope);
+          const searchResults = await api.search(searchQuery.trim(), mode === 'team' ? 'team' : undefined);
           result = searchResults.map(searchResultToEntry);
         } else {
-          const scope = mode === 'team' ? 'team' : 'personal';
-          result = await api.listEntries({ scope, limit: 50 });
+          result = await api.listEntries({
+            scope,
+            limit: 50,
+            developerId: developerFilter ?? undefined,
+          });
         }
         if (!cancelled) {
           setEntries(result);
@@ -73,14 +81,16 @@ export default function Feed({ mode, searchQuery, onEntryClick, refreshKey }: Fe
 
     void load();
     return () => { cancelled = true; };
-  }, [mode, searchQuery, refreshKey]);
+  }, [mode, searchQuery, refreshKey, developerFilter]);
 
   const filtered = filter === 'all' ? entries : entries.filter(e => e.type === filter);
 
   const sectionTitle = searchQuery
     ? `Results for "${searchQuery}"`
     : mode === 'team'
-      ? 'The Team Ledger'
+      ? developerFilter
+        ? 'Filtered by member'
+        : 'The Team Ledger'
       : 'Your Notebook';
 
   return (

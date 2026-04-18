@@ -24,6 +24,7 @@ import {
 } from "../store/graph.js";
 import { getRecentActivity, initActivitySchema } from "../server/activity.js";
 import { searchByBM25 } from "../store/search.js";
+import { initAnalyticsSchema, getAnalyticsSummary } from "../utils/analytics.js";
 
 // ---------------------------------------------------------------------------
 // Path resolution for React UI build output
@@ -297,17 +298,34 @@ function mapEntryRow(row: Record<string, unknown>): Record<string, unknown> {
 
 /**
  * Fetches curated entries with optional scope filtering.
+ * `scope` may be a single scope name or a comma-separated list (e.g. "personal,project").
  */
-function getEntriesByScope(db: Database, scope?: string, limit: number = 100): Record<string, unknown>[] {
+function getEntriesByScope(db: Database, scope?: string, limit: number = 100, developerId?: string): Record<string, unknown>[] {
   let rows: Record<string, unknown>[];
-  if (scope) {
-    rows = db
-      .query("SELECT * FROM entries WHERE scope = ? AND status = 'active' ORDER BY created_at DESC LIMIT ?")
-      .all(scope, limit) as Record<string, unknown>[];
+  const scopes = scope ? scope.split(",").map((s) => s.trim()).filter(Boolean) : [];
+
+  if (scopes.length === 1) {
+    const baseSql = developerId
+      ? "SELECT * FROM entries WHERE scope = ? AND developer_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT ?"
+      : "SELECT * FROM entries WHERE scope = ? AND status = 'active' ORDER BY created_at DESC LIMIT ?";
+    rows = (developerId
+      ? db.query(baseSql).all(scopes[0], developerId, limit)
+      : db.query(baseSql).all(scopes[0], limit)) as Record<string, unknown>[];
+  } else if (scopes.length > 1) {
+    const placeholders = scopes.map(() => "?").join(", ");
+    const baseSql = developerId
+      ? `SELECT * FROM entries WHERE scope IN (${placeholders}) AND developer_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT ?`
+      : `SELECT * FROM entries WHERE scope IN (${placeholders}) AND status = 'active' ORDER BY created_at DESC LIMIT ?`;
+    rows = (developerId
+      ? db.query(baseSql).all(...scopes, developerId, limit)
+      : db.query(baseSql).all(...scopes, limit)) as Record<string, unknown>[];
   } else {
-    rows = db
-      .query("SELECT * FROM entries WHERE status = 'active' ORDER BY created_at DESC LIMIT ?")
-      .all(limit) as Record<string, unknown>[];
+    const baseSql = developerId
+      ? "SELECT * FROM entries WHERE developer_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT ?"
+      : "SELECT * FROM entries WHERE status = 'active' ORDER BY created_at DESC LIMIT ?";
+    rows = (developerId
+      ? db.query(baseSql).all(developerId, limit)
+      : db.query(baseSql).all(limit)) as Record<string, unknown>[];
   }
   return rows.map(mapEntryRow);
 }
@@ -340,8 +358,9 @@ export async function startDashboardServer(
 ): Promise<DashboardServerHandle> {
   const { db } = options;
   
-  // Ensure activity log table exists before serving API
+  // Ensure supporting tables exist before serving API
   initActivitySchema(db);
+  initAnalyticsSchema(db);
 
   const tryStart = (port: number): any => {
     try {
@@ -451,6 +470,12 @@ export async function startDashboardServer(
                 return jsonResponse(data, 200, requestId);
               }
 
+              if (path === "/api/analytics") {
+                const data = getAnalyticsSummary(db);
+                logAccess(requestId, method, path, start, 200);
+                return jsonResponse(data, 200, requestId);
+              }
+
               if (path === "/api/graph") {
                 const data = getFullGraph(db);
                 logAccess(requestId, method, path, start, 200);
@@ -524,7 +549,8 @@ export async function startDashboardServer(
                 const scope = url.searchParams.get("scope") || undefined;
                 const limitParam = url.searchParams.get("limit");
                 const limit = limitParam !== null ? parseInt(limitParam, 10) || 100 : 100;
-                const data = getEntriesByScope(db, scope, limit);
+                const developerId = url.searchParams.get("developerId") || undefined;
+                const data = getEntriesByScope(db, scope, limit, developerId);
                 logAccess(requestId, method, path, start, 200);
                 return jsonResponse(data, 200, requestId);
               }

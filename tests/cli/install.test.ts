@@ -222,6 +222,7 @@ describe("writeHooksPlugin", () => {
   let hooksTmp: string;
 
   beforeAll(() => {
+
     hooksTmp = mkdtempSync(join(tmpdir(), "gyst-hooks-"));
   });
 

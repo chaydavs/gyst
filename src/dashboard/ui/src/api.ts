@@ -1,4 +1,4 @@
-import type { Entry, EntryDetail, TeamMember, TeamInfo, ReviewItem, Stats, SearchResult, PendingInvite, TeamActivity } from './types';
+import type { Entry, EntryDetail, TeamMember, TeamInfo, ReviewItem, Stats, Analytics, SearchResult, PendingInvite, TeamActivity } from './types';
 
 async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, {
@@ -14,12 +14,13 @@ async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   // Entries
-  listEntries: (params: { scope?: string; type?: string; limit?: number; offset?: number }) => {
+  listEntries: (params: { scope?: string; type?: string; limit?: number; offset?: number; developerId?: string }) => {
     const q = new URLSearchParams();
     if (params.scope) q.set('scope', params.scope);
     if (params.type) q.set('type', params.type);
     if (params.limit) q.set('limit', String(params.limit));
     if (params.offset) q.set('offset', String(params.offset));
+    if (params.developerId) q.set('developerId', params.developerId);
     return apiFetch<Entry[]>(`/api/entries?${q}`);
   },
   getEntry: (id: string) => apiFetch<EntryDetail>(`/api/entries/${encodeURIComponent(id)}`),
@@ -41,6 +42,7 @@ export const api = {
 
   // Stats
   getStats: () => apiFetch<Stats>('/api/stats'),
+  getAnalytics: () => apiFetch<Analytics>('/api/analytics'),
 
   // Review queue
   getReviewQueue: () => apiFetch<ReviewItem[]>('/api/review-queue'),
