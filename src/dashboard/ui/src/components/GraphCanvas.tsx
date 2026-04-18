@@ -216,17 +216,30 @@ export default function GraphCanvas({ onNodeClick, refreshKey }: GraphCanvasProp
         const w = canvas?.offsetWidth ?? 800;
         const h = canvas?.offsetHeight ?? 600;
 
-        nodesRef.current = data.nodes.map(n => ({
-          id: n.id,
-          type: n.type,
-          title: n.title,
-          layer: (n.layer === 'structural' ? 'structural' : 'curated') as 'curated' | 'structural',
-          x: w / 2 + (Math.random() - 0.5) * 300,
-          y: h / 2 + (Math.random() - 0.5) * 300,
-          vx: 0,
-          vy: 0,
-          radius: n.layer === 'structural' ? 4 : 8,
-        }));
+        // Compute degree per node from edge list
+        const connectionCounts = new Map<string, number>();
+        for (const edge of data.edges) {
+          connectionCounts.set(edge.source, (connectionCounts.get(edge.source) ?? 0) + 1);
+          connectionCounts.set(edge.target, (connectionCounts.get(edge.target) ?? 0) + 1);
+        }
+
+        nodesRef.current = data.nodes.map(n => {
+          const count = connectionCounts.get(n.id) ?? 0;
+          const isGhost = n.type === 'ghost_knowledge';
+          const base = n.layer === 'structural' ? 3 : 5;
+          const radius = isGhost ? 20 : Math.min(20, Math.max(base, base + count * 1.5));
+          return {
+            id: n.id,
+            type: n.type,
+            title: n.title,
+            layer: (n.layer === 'structural' ? 'structural' : 'curated') as 'curated' | 'structural',
+            x: w / 2 + (Math.random() - 0.5) * 300,
+            y: h / 2 + (Math.random() - 0.5) * 300,
+            vx: 0,
+            vy: 0,
+            radius,
+          };
+        });
         edgesRef.current = data.edges.map(e => ({
           source: e.source,
           target: e.target,
