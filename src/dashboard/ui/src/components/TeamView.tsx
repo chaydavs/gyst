@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
-import type { TeamInfo, TeamMember, PendingInvite } from '../types';
+import type { TeamInfo, TeamMember, PendingInvite, TeamActivity } from '../types';
 import TeamSetupWizard from './TeamSetupWizard';
 
 interface TeamViewProps {
@@ -8,52 +8,87 @@ interface TeamViewProps {
   onTeamCreated: (info: TeamInfo) => void;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Utilities ─────────────────────────────────────────────────────────────────
 
-function avatar(name: string) {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map(w => w[0]?.toUpperCase() ?? '')
-    .join('');
+function initials(name: string) {
+  return name.split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('');
 }
 
-function relativeTime(iso: string) {
+function relTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60_000);
-  const hrs = Math.floor(mins / 60);
-  const days = Math.floor(hrs / 24);
-  if (days > 0) return `${days}d ago`;
-  if (hrs > 0) return `${hrs}h ago`;
-  if (mins > 0) return `${mins}m ago`;
-  return 'just now';
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return new Date(iso).toLocaleDateString();
 }
 
-function timeUntil(iso: string | null) {
+function timeUntil(iso: string | null): string {
   if (!iso) return 'no expiry';
   const diff = new Date(iso).getTime() - Date.now();
   if (diff <= 0) return 'expired';
-  const hrs = Math.floor(diff / 3_600_000);
-  const days = Math.floor(hrs / 24);
-  if (days > 0) return `expires in ${days}d`;
-  return `expires in ${hrs}h`;
+  const h = Math.floor(diff / 3_600_000);
+  const d = Math.floor(h / 24);
+  if (d > 0) return `${d}d left`;
+  return `${h}h left`;
+}
+
+function actionLabel(action: string): string {
+  const map: Record<string, string> = {
+    joined: 'joined the team',
+    learn: 'added a knowledge entry',
+    recall: 'ran a recall',
+    search: 'searched',
+    conventions: 'checked conventions',
+    check_conventions: 'checked conventions',
+    check: 'ran a check',
+    failures: 'queried failures',
+    graph: 'explored the graph',
+    feedback: 'gave feedback',
+    harvest: 'harvested a session',
+    get_entry: 'viewed an entry',
+    score: 'scored an entry',
+  };
+  return map[action] ?? action;
+}
+
+function actionColor(action: string): string {
+  if (action === 'joined') return '#22c55e';
+  if (action === 'learn') return '#6366f1';
+  if (action === 'recall' || action === 'search') return '#f59e0b';
+  return '#94a3b8';
+}
+
+// ── Small reusable pieces ─────────────────────────────────────────────────────
+
+function Avatar({ name, size = 36 }: { name: string; size?: number }) {
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%',
+      background: 'var(--sunken)', border: '1px solid var(--line)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: 'var(--font-mono)', fontSize: Math.floor(size * 0.33) + 'px', fontWeight: 700,
+      color: 'var(--ink)', flexShrink: 0,
+    }}>
+      {initials(name)}
+    </div>
+  );
 }
 
 function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
-  const copy = () => {
-    void navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
   return (
     <button
-      onClick={copy}
+      onClick={() => { void navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
       style={{
         fontSize: '11px', padding: '4px 8px', cursor: 'pointer',
         border: '1px solid var(--line)', borderRadius: '3px',
         background: copied ? '#000' : '#fff', color: copied ? '#fff' : '#000',
-        fontFamily: 'var(--font-mono)', transition: 'all 150ms',
+        fontFamily: 'var(--font-mono)', transition: 'all 150ms', flexShrink: 0,
       }}
     >
       {copied ? 'Copied!' : label}
@@ -61,66 +96,72 @@ function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) 
   );
 }
 
-// ── MemberRow ─────────────────────────────────────────────────────────────────
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      fontFamily: 'var(--font-mono)', fontSize: '10px', fontWeight: 700,
+      textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--ink-faint)',
+      paddingBottom: '10px', borderBottom: '1px solid var(--line)', marginBottom: '4px',
+    }}>
+      {children}
+    </div>
+  );
+}
 
-function MemberRow({ member, onRemove }: { member: TeamMember; onRemove: (id: string) => void }) {
+// ── Member card ───────────────────────────────────────────────────────────────
+
+function MemberCard({ member, onRemove }: { member: TeamMember; onRemove: (id: string) => void }) {
   const [confirming, setConfirming] = useState(false);
 
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: '12px',
-      padding: '10px 0', borderBottom: '1px solid var(--line)',
+      padding: '12px 0', borderBottom: '1px solid var(--line)',
     }}>
-      <div style={{
-        width: '32px', height: '32px', borderRadius: '50%',
-        background: 'var(--sunken)', border: '1px solid var(--line)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 700,
-        color: 'var(--ink)', flexShrink: 0,
-      }}>
-        {avatar(member.displayName)}
-      </div>
+      <Avatar name={member.displayName} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>
-          {member.displayName}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+          <span style={{ fontFamily: 'var(--font-sans)', fontSize: '14px', fontWeight: 600 }}>
+            {member.displayName}
+          </span>
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: '10px', padding: '1px 5px',
+            background: member.role === 'admin' ? '#000' : 'var(--sunken)',
+            color: member.role === 'admin' ? '#fff' : 'var(--ink-faint)',
+            borderRadius: '3px',
+          }}>
+            {member.role}
+          </span>
         </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-faint)' }}>
-          {member.role} · joined {relativeTime(member.joinedAt)}
+        <div style={{ display: 'flex', gap: '12px', marginTop: '3px' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-faint)' }}>
+            {member.entryCount > 0 ? `${member.entryCount} entr${member.entryCount === 1 ? 'y' : 'ies'}` : 'no entries yet'}
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-faint)' }}>
+            joined {relTime(member.joinedAt)}
+          </span>
+          {member.lastActive && (
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-faint)' }}>
+              active {relTime(member.lastActive)}
+            </span>
+          )}
         </div>
       </div>
       {member.role !== 'admin' && (
         confirming ? (
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <button
-              onClick={() => { onRemove(member.developerId); setConfirming(false); }}
-              style={{
-                fontSize: '11px', padding: '4px 8px', cursor: 'pointer',
-                border: '1px solid #cc0000', borderRadius: '3px',
-                background: '#cc0000', color: '#fff', fontFamily: 'var(--font-sans)',
-              }}
-            >
+          <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+            <button onClick={() => { onRemove(member.developerId); setConfirming(false); }}
+              style={{ fontSize: '11px', padding: '4px 8px', cursor: 'pointer', border: '1px solid #cc0000', borderRadius: '3px', background: '#cc0000', color: '#fff', fontFamily: 'var(--font-sans)' }}>
               Remove
             </button>
-            <button
-              onClick={() => setConfirming(false)}
-              style={{
-                fontSize: '11px', padding: '4px 8px', cursor: 'pointer',
-                border: '1px solid var(--line)', borderRadius: '3px',
-                background: '#fff', color: 'var(--ink)', fontFamily: 'var(--font-sans)',
-              }}
-            >
+            <button onClick={() => setConfirming(false)}
+              style={{ fontSize: '11px', padding: '4px 8px', cursor: 'pointer', border: '1px solid var(--line)', borderRadius: '3px', background: '#fff', color: 'var(--ink)', fontFamily: 'var(--font-sans)' }}>
               Cancel
             </button>
           </div>
         ) : (
-          <button
-            onClick={() => setConfirming(true)}
-            style={{
-              fontSize: '11px', padding: '4px 8px', cursor: 'pointer',
-              border: '1px solid var(--line)', borderRadius: '3px',
-              background: '#fff', color: 'var(--ink-faint)', fontFamily: 'var(--font-sans)',
-            }}
-          >
+          <button onClick={() => setConfirming(true)}
+            style={{ fontSize: '11px', padding: '4px 8px', cursor: 'pointer', border: '1px solid var(--line)', borderRadius: '3px', background: '#fff', color: 'var(--ink-faint)', fontFamily: 'var(--font-sans)', flexShrink: 0 }}>
             Remove
           </button>
         )
@@ -129,54 +170,69 @@ function MemberRow({ member, onRemove }: { member: TeamMember; onRemove: (id: st
   );
 }
 
-// ── PendingInviteRow ──────────────────────────────────────────────────────────
+// ── Activity row ──────────────────────────────────────────────────────────────
 
-function PendingInviteRow({ invite, serverUrl, onRevoke }: {
-  invite: PendingInvite;
-  serverUrl: string;
-  onRevoke: (hash: string) => void;
-}) {
-  const shortKey = invite.keyHash.slice(0, 16) + '…';
-  const joinCmd = `gyst join ${invite.keyHash} "Name" --server ${serverUrl}`;
-
+function ActivityRow({ event }: { event: TeamActivity }) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: '12px',
-      padding: '10px 0', borderBottom: '1px solid var(--line)',
-    }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '8px 0', borderBottom: '1px solid var(--line)' }}>
+      <div style={{
+        width: '8px', height: '8px', borderRadius: '50%', marginTop: '5px', flexShrink: 0,
+        background: actionColor(event.action),
+      }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', fontWeight: 600 }}>
+          {event.displayName}
+        </span>
+        {' '}
+        <span style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', color: 'var(--ink-faint)' }}>
+          {actionLabel(event.action)}
+        </span>
+      </div>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-faint)', flexShrink: 0 }}>
+        {relTime(event.timestamp)}
+      </span>
+    </div>
+  );
+}
+
+// ── Invite row ────────────────────────────────────────────────────────────────
+
+function InviteRow({ invite, serverUrl, onRevoke }: { invite: PendingInvite; serverUrl: string; onRevoke: (hash: string) => void }) {
+  const joinCmd = `gyst join ${invite.keyHash} "Name" --server ${serverUrl}`;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--ink)' }}>
-          {shortKey}
+          {invite.keyHash.slice(0, 20)}…
         </div>
-        <div style={{ fontFamily: 'var(--font-sans)', fontSize: '11px', color: 'var(--ink-faint)' }}>
-          {timeUntil(invite.expiresAt)} · created {relativeTime(invite.createdAt)}
+        <div style={{ fontFamily: 'var(--font-sans)', fontSize: '11px', color: 'var(--ink-faint)', marginTop: '2px' }}>
+          {timeUntil(invite.expiresAt)} · created {relTime(invite.createdAt)}
         </div>
       </div>
       <CopyButton text={joinCmd} label="Copy join cmd" />
-      <button
-        onClick={() => onRevoke(invite.keyHash)}
-        style={{
-          fontSize: '11px', padding: '4px 8px', cursor: 'pointer',
-          border: '1px solid var(--line)', borderRadius: '3px',
-          background: '#fff', color: 'var(--ink-faint)', fontFamily: 'var(--font-sans)',
-        }}
-      >
+      <button onClick={() => onRevoke(invite.keyHash)}
+        style={{ fontSize: '11px', padding: '4px 8px', cursor: 'pointer', border: '1px solid var(--line)', borderRadius: '3px', background: '#fff', color: 'var(--ink-faint)', fontFamily: 'var(--font-sans)', flexShrink: 0 }}>
         Revoke
       </button>
     </div>
   );
 }
 
-// ── Section header ────────────────────────────────────────────────────────────
+// ── Stat pill ─────────────────────────────────────────────────────────────────
 
-function SectionHeader({ title, action }: { title: string; action?: React.ReactNode }) {
+function StatPill({ value, label }: { value: number | string; label: string }) {
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      borderBottom: '2px solid #000', paddingBottom: '8px', marginBottom: '4px',
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      padding: '16px 24px', background: 'var(--sunken)', border: '1px solid var(--line)',
+      borderRadius: '6px', minWidth: '80px',
     }}>
-      <span style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', fontWeight: 700 }}>{title}</span>
-      {action}
+      <span style={{ fontFamily: 'var(--font-sans)', fontSize: '28px', fontWeight: 700, lineHeight: 1, letterSpacing: '-0.02em' }}>
+        {value}
+      </span>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ink-faint)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '4px' }}>
+        {label}
+      </span>
     </div>
   );
 }
@@ -185,19 +241,22 @@ function SectionHeader({ title, action }: { title: string; action?: React.ReactN
 
 export default function TeamView({ teamInfo, onTeamCreated }: TeamViewProps) {
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [activity, setActivity] = useState<TeamActivity[]>([]);
   const [invites, setInvites] = useState<PendingInvite[]>([]);
   const [serverUrl, setServerUrl] = useState('http://localhost:3456');
-  const [isGenerating, setIsGenerating] = useState(false);
   const [isEditingUrl, setIsEditingUrl] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
-    const [membersResult, invitesResult] = await Promise.allSettled([
+    const [membersRes, activityRes, invitesRes] = await Promise.allSettled([
       api.getTeamMembers(),
+      api.getTeamActivity(50),
       api.listInvites(),
     ]);
-    if (membersResult.status === 'fulfilled') setMembers(membersResult.value);
-    if (invitesResult.status === 'fulfilled') setInvites(invitesResult.value);
+    if (membersRes.status === 'fulfilled') setMembers(membersRes.value);
+    if (activityRes.status === 'fulfilled') setActivity(activityRes.value);
+    if (invitesRes.status === 'fulfilled') setInvites(invitesRes.value);
   }, []);
 
   useEffect(() => {
@@ -208,179 +267,156 @@ export default function TeamView({ teamInfo, onTeamCreated }: TeamViewProps) {
     try {
       await api.removeMember(developerId);
       setMembers(prev => prev.filter(m => m.developerId !== developerId));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
+      setActivity(prev => prev.filter(a => a.developerId !== developerId));
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   }, []);
 
   const handleRevokeInvite = useCallback(async (keyHash: string) => {
     try {
       await api.revokeInvite(keyHash);
       setInvites(prev => prev.filter(i => i.keyHash !== keyHash));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
   }, []);
 
   const handleGenerateInvite = useCallback(async () => {
     setIsGenerating(true);
     setError(null);
     try {
-      const result = await api.createInvite();
-      await loadData();
-      // Show the most recent invite's join command
-      void result;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [loadData]);
+      await api.createInvite();
+      const updated = await api.listInvites();
+      setInvites(updated);
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    finally { setIsGenerating(false); }
+  }, []);
 
-  // No team yet — show wizard
   if (!teamInfo) {
     return <TeamSetupWizard onComplete={onTeamCreated} />;
   }
 
-  const adminCount = members.filter(m => m.role === 'admin').length;
+  const totalEntries = members.reduce((sum, m) => sum + m.entryCount, 0);
+  const activeToday = activity.filter(a => {
+    const diff = Date.now() - new Date(a.timestamp).getTime();
+    return diff < 86_400_000;
+  }).length;
 
   return (
-    <div style={{ maxWidth: '680px', margin: '0 auto', padding: '32px 24px' }}>
-      {/* Header */}
-      <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontFamily: 'var(--font-sans)', fontSize: '22px', fontWeight: 700, margin: '0 0 4px' }}>
+    <div style={{ maxWidth: '720px', margin: '0 auto', padding: '32px 24px' }}>
+
+      {/* ── Header ── */}
+      <div style={{ marginBottom: '28px' }}>
+        <h1 style={{ fontFamily: 'var(--font-sans)', fontSize: '24px', fontWeight: 700, margin: '0 0 6px', letterSpacing: '-0.01em' }}>
           {teamInfo.name}
         </h1>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--ink-faint)' }}>
-          {members.length} member{members.length !== 1 ? 's' : ''} · team id: {teamInfo.id.slice(0, 8)}…
+          id: {teamInfo.id.slice(0, 12)}… · created {relTime(teamInfo.createdAt)}
         </div>
       </div>
 
+      {/* ── Stats row ── */}
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '36px', flexWrap: 'wrap' }}>
+        <StatPill value={members.length} label="members" />
+        <StatPill value={totalEntries} label="entries" />
+        <StatPill value={invites.length} label="open invites" />
+        <StatPill value={activeToday} label="actions today" />
+      </div>
+
       {error && (
-        <div style={{
-          padding: '10px 12px', background: '#fff5f5', border: '1px solid #ffcccc',
-          borderRadius: '4px', marginBottom: '24px',
-          fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#cc0000',
-        }}>
+        <div style={{ padding: '10px 12px', background: '#fff5f5', border: '1px solid #ffcccc', borderRadius: '4px', marginBottom: '24px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#cc0000' }}>
           {error}
         </div>
       )}
 
-      {/* Server URL */}
-      <div style={{ marginBottom: '32px' }}>
-        <SectionHeader title="Server" />
+      {/* ── Members ── */}
+      <div style={{ marginBottom: '36px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <SectionTitle>Members ({members.length})</SectionTitle>
+          <button
+            onClick={() => void handleGenerateInvite()}
+            disabled={isGenerating}
+            style={{
+              fontSize: '12px', padding: '6px 14px', cursor: isGenerating ? 'default' : 'pointer',
+              border: '1px solid #000', borderRadius: '4px',
+              background: '#000', color: '#fff', fontFamily: 'var(--font-sans)', fontWeight: 600,
+              opacity: isGenerating ? 0.5 : 1,
+            }}
+          >
+            {isGenerating ? 'Generating…' : '+ Invite'}
+          </button>
+        </div>
+        {members.length === 0 ? (
+          <p style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', color: 'var(--ink-faint)', padding: '20px 0' }}>
+            No members yet. Click "+ Invite" to generate a join command.
+          </p>
+        ) : (
+          members.map(m => <MemberCard key={m.developerId} member={m} onRemove={handleRemoveMember} />)
+        )}
+      </div>
+
+      {/* ── Activity Feed ── */}
+      <div style={{ marginBottom: '36px' }}>
+        <SectionTitle>Activity</SectionTitle>
+        {activity.length === 0 ? (
+          <p style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', color: 'var(--ink-faint)', padding: '20px 0' }}>
+            No activity yet. Activity is logged once teammates start using Gyst.
+          </p>
+        ) : (
+          activity.slice(0, 30).map(ev => <ActivityRow key={ev.id} event={ev} />)
+        )}
+      </div>
+
+      {/* ── Pending Invites ── */}
+      <div style={{ marginBottom: '36px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <SectionTitle>Pending Invites ({invites.length})</SectionTitle>
+          <button
+            onClick={() => void handleGenerateInvite()}
+            disabled={isGenerating}
+            style={{
+              fontSize: '11px', padding: '4px 10px', cursor: isGenerating ? 'default' : 'pointer',
+              border: '1px solid var(--line)', borderRadius: '3px',
+              background: '#fff', color: '#000', fontFamily: 'var(--font-sans)',
+              opacity: isGenerating ? 0.5 : 1,
+            }}
+          >
+            New
+          </button>
+        </div>
+        {invites.length === 0 ? (
+          <p style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', color: 'var(--ink-faint)', padding: '12px 0' }}>
+            No open invites.
+          </p>
+        ) : (
+          invites.map(inv => <InviteRow key={inv.keyHash} invite={inv} serverUrl={serverUrl} onRevoke={handleRevokeInvite} />)
+        )}
+      </div>
+
+      {/* ── Server ── */}
+      <div>
+        <SectionTitle>Server</SectionTitle>
         <div style={{
-          display: 'flex', alignItems: 'center', gap: '8px',
-          padding: '12px', background: 'var(--sunken)', border: '1px solid var(--line)',
-          borderRadius: '4px', marginTop: '8px',
+          display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px',
+          padding: '12px', background: 'var(--sunken)', border: '1px solid var(--line)', borderRadius: '4px',
         }}>
-          <div style={{
-            width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e', flexShrink: 0,
-          }} />
+          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
           {isEditingUrl ? (
-            <input
-              autoFocus
-              type="text"
-              value={serverUrl}
+            <input autoFocus type="text" value={serverUrl}
               onChange={e => setServerUrl(e.target.value)}
               onBlur={() => setIsEditingUrl(false)}
               onKeyDown={e => { if (e.key === 'Enter') setIsEditingUrl(false); }}
-              style={{
-                flex: 1, fontFamily: 'var(--font-mono)', fontSize: '12px',
-                border: 'none', background: 'transparent', outline: 'none', color: 'var(--ink)',
-              }}
+              style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: '12px', border: 'none', background: 'transparent', outline: 'none' }}
             />
           ) : (
-            <span
-              onClick={() => setIsEditingUrl(true)}
-              style={{
-                flex: 1, fontFamily: 'var(--font-mono)', fontSize: '12px',
-                color: 'var(--ink)', cursor: 'text',
-              }}
-              title="Click to edit server URL"
-            >
+            <span onClick={() => setIsEditingUrl(true)}
+              title="Click to edit"
+              style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: '12px', cursor: 'text' }}>
               {serverUrl}
             </span>
           )}
           <CopyButton text={`gyst serve --http --port 3456`} label="Copy serve cmd" />
         </div>
         <p style={{ fontFamily: 'var(--font-sans)', fontSize: '11px', color: 'var(--ink-faint)', margin: '6px 0 0' }}>
-          Click the URL to change it. Used when generating join commands for teammates.
+          Click URL to change it — used when generating join commands.
         </p>
-      </div>
-
-      {/* Members */}
-      <div style={{ marginBottom: '32px' }}>
-        <SectionHeader
-          title={`Members (${members.length})`}
-          action={
-            <button
-              onClick={() => void handleGenerateInvite()}
-              disabled={isGenerating}
-              style={{
-                fontSize: '11px', padding: '4px 10px', cursor: isGenerating ? 'default' : 'pointer',
-                border: '1px solid #000', borderRadius: '3px',
-                background: '#000', color: '#fff', fontFamily: 'var(--font-sans)', fontWeight: 600,
-                opacity: isGenerating ? 0.5 : 1,
-              }}
-            >
-              {isGenerating ? 'Generating…' : '+ Invite Member'}
-            </button>
-          }
-        />
-        {members.length === 0 ? (
-          <p style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', color: 'var(--ink-faint)', padding: '16px 0' }}>
-            No members yet. Generate an invite to add your first teammate.
-          </p>
-        ) : (
-          members.map(member => (
-            <MemberRow
-              key={member.developerId}
-              member={member}
-              onRemove={handleRemoveMember}
-            />
-          ))
-        )}
-        {adminCount === 0 && members.length > 0 && (
-          <p style={{ fontFamily: 'var(--font-sans)', fontSize: '11px', color: 'var(--ink-faint)', marginTop: '8px' }}>
-            No admin assigned — use CLI <code style={{ fontFamily: 'var(--font-mono)' }}>gyst create team</code> to set one up.
-          </p>
-        )}
-      </div>
-
-      {/* Pending Invites */}
-      <div style={{ marginBottom: '32px' }}>
-        <SectionHeader
-          title={`Pending Invites (${invites.length})`}
-          action={
-            <button
-              onClick={() => void handleGenerateInvite()}
-              disabled={isGenerating}
-              style={{
-                fontSize: '11px', padding: '4px 10px', cursor: isGenerating ? 'default' : 'pointer',
-                border: '1px solid var(--line)', borderRadius: '3px',
-                background: '#fff', color: '#000', fontFamily: 'var(--font-sans)',
-                opacity: isGenerating ? 0.5 : 1,
-              }}
-            >
-              Generate New
-            </button>
-          }
-        />
-        {invites.length === 0 ? (
-          <p style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', color: 'var(--ink-faint)', padding: '16px 0' }}>
-            No pending invites. Click "+ Invite Member" above to generate one.
-          </p>
-        ) : (
-          invites.map(invite => (
-            <PendingInviteRow
-              key={invite.keyHash}
-              invite={invite}
-              serverUrl={serverUrl}
-              onRevoke={handleRevokeInvite}
-            />
-          ))
-        )}
       </div>
     </div>
   );

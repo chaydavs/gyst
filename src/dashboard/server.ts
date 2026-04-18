@@ -658,10 +658,21 @@ export async function startDashboardServer(
                     display_name: string;
                     role: string;
                     joined_at: string;
+                    entry_count: number;
+                    last_active: string | null;
                   }
+                  // Enrich with entry counts and last-seen from activity_log (graceful if missing)
                   const rows = db
                     .query<MemberRow, []>(
-                      "SELECT team_id, developer_id, display_name, role, joined_at FROM team_members ORDER BY joined_at ASC",
+                      `SELECT tm.team_id, tm.developer_id, tm.display_name, tm.role, tm.joined_at,
+                              COUNT(DISTINCT e.id) AS entry_count,
+                              MAX(al.timestamp) AS last_active
+                       FROM team_members tm
+                       LEFT JOIN entries e ON e.developer_id = tm.developer_id AND e.status = 'active'
+                       LEFT JOIN (SELECT developer_id, MAX(timestamp) AS timestamp FROM activity_log GROUP BY developer_id) al
+                         ON al.developer_id = tm.developer_id
+                       GROUP BY tm.developer_id
+                       ORDER BY tm.joined_at ASC`,
                     )
                     .all();
                   const members = rows.map(r => ({
@@ -670,13 +681,23 @@ export async function startDashboardServer(
                     displayName: r.display_name,
                     role: r.role,
                     joinedAt: r.joined_at,
+                    entryCount: r.entry_count ?? 0,
+                    lastActive: r.last_active ?? null,
                   }));
                   logAccess(requestId, method, path, start, 200);
                   return jsonResponse(members, 200, requestId);
                 } catch (_err) {
-                  // team_members table may not exist yet
-                  logAccess(requestId, method, path, start, 200);
-                  return jsonResponse([], 200, requestId);
+                  // team_members table may not exist yet — try simpler fallback
+                  try {
+                    interface SimpleMemberRow { team_id: string; developer_id: string; display_name: string; role: string; joined_at: string }
+                    const rows2 = db.query<SimpleMemberRow, []>(
+                      "SELECT team_id, developer_id, display_name, role, joined_at FROM team_members ORDER BY joined_at ASC"
+                    ).all();
+                    return jsonResponse(rows2.map(r => ({ teamId: r.team_id, developerId: r.developer_id, displayName: r.display_name, role: r.role, joinedAt: r.joined_at, entryCount: 0, lastActive: null })), 200, requestId);
+                  } catch {
+                    logAccess(requestId, method, path, start, 200);
+                    return jsonResponse([], 200, requestId);
+                  }
                 }
               }
 
@@ -716,6 +737,64 @@ export async function startDashboardServer(
                 } catch (_err) {
                   logAccess(requestId, method, path, start, 200);
                   return jsonResponse(null, 200, requestId);
+                }
+              }
+
+              // /api/team/activity — recent activity log with display names + synthetic join events
+              if (path === "/api/team/activity") {
+                try {
+                  const limitParam = url.searchParams.get("limit");
+                  const limit = limitParam !== null ? Math.min(parseInt(limitParam, 10) || 50, 200) : 50;
+
+                  // Synthetic "joined" events from team_members
+                  interface JoinRow { developer_id: string; display_name: string; joined_at: string }
+                  const joinRows = db.query<JoinRow, []>(
+                    "SELECT developer_id, display_name, joined_at FROM team_members ORDER BY joined_at DESC"
+                  ).all();
+                  const joinEvents = joinRows.map(r => ({
+                    id: `join:${r.developer_id}`,
+                    action: "joined",
+                    developerId: r.developer_id,
+                    displayName: r.display_name,
+                    entryId: null as string | null,
+                    timestamp: r.joined_at,
+                  }));
+
+                  // Real activity_log events joined with display names
+                  interface ActivityRow { id: number; action: string; developer_id: string; entry_id: string | null; timestamp: string; display_name: string | null }
+                  let logEvents: Array<{ id: string; action: string; developerId: string; displayName: string; entryId: string | null; timestamp: string }> = [];
+                  try {
+                    const logRows = db.query<ActivityRow, [number]>(
+                      `SELECT al.id, al.action, al.developer_id, al.entry_id, al.timestamp,
+                              tm.display_name
+                       FROM activity_log al
+                       LEFT JOIN team_members tm ON tm.developer_id = al.developer_id
+                       ORDER BY al.timestamp DESC
+                       LIMIT ?`
+                    ).all(limit);
+                    logEvents = logRows.map(r => ({
+                      id: `act:${r.id}`,
+                      action: r.action,
+                      developerId: r.developer_id,
+                      displayName: r.display_name ?? r.developer_id.slice(0, 8),
+                      entryId: r.entry_id,
+                      timestamp: r.timestamp,
+                    }));
+                  } catch {
+                    // activity_log may not exist yet
+                  }
+
+                  // Merge and sort by timestamp desc, take top `limit`
+                  const all = [...joinEvents, ...logEvents]
+                    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                    .slice(0, limit);
+
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse(all, 200, requestId);
+                } catch (err) {
+                  logger.error("team/activity error", { error: err instanceof Error ? err.message : String(err) });
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse([], 200, requestId);
                 }
               }
 

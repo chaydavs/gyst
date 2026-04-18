@@ -48,6 +48,17 @@ export interface TeamMember {
   displayName: string;
   role: string;
   joinedAt: string;
+  entryCount: number;
+  lastActive: string | null;
+}
+
+export interface TeamActivity {
+  id: string;
+  action: string;
+  developerId: string;
+  displayName: string;
+  entryId: string | null;
+  timestamp: string;
 }
 
 export interface TeamInfo {
