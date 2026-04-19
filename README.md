@@ -25,6 +25,40 @@ Detects Claude Code, Cursor, Codex CLI, Gemini CLI, Windsurf, OpenCode, VS Code,
 
 ---
 
+## Claude Code Plugin (Teams)
+
+The Claude Code plugin gives you full hook coverage — 12 lifecycle hooks that automatically capture knowledge, inject context, and keep the KB in sync without any manual steps. This is the recommended install for teams on Claude Code.
+
+**Install the plugin:**
+
+```bash
+# From Claude Code
+/plugins install gyst
+```
+
+Or install manually:
+
+```bash
+claude plugin install gyst
+```
+
+**What the plugin adds on top of the MCP server:**
+
+| Capability | MCP server only | + Plugin |
+|-----------|:--------------:|:--------:|
+| `recall` / `learn` in agent sessions | ✓ | ✓ |
+| Context injected at session start | — | ✓ |
+| KB refreshed from codebase each session | — | ✓ |
+| Error patterns captured from failed tool calls | — | ✓ |
+| Markdown files ingested on save | — | ✓ |
+| Session knowledge distilled at session end | — | ✓ |
+| Ghost knowledge injected into subagents | — | ✓ |
+| Drift snapshot on every compaction | — | ✓ |
+
+The plugin tier is **teams only**. See [`plugin/WORKFLOW.md`](plugin/WORKFLOW.md) for a full walkthrough of how each hook fires and how the plugin recognizes your codebase.
+
+---
+
 ## Getting Started
 
 Two routes: let an agent do everything, or set it up yourself.
