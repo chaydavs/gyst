@@ -75,3 +75,4 @@ src/dashboard/dist/
 
 # Dashboard UI dependencies
 src/dashboard/ui/node_modules/
+.superpowers/
