@@ -7,7 +7,7 @@
  *
  * Never blocks the agent: all failures swallow to `{"continue": true}`.
  */
-import { spawnSync } from "node:child_process";
+import { spawnSync, spawn } from "node:child_process";
 import { badge, emitAsync } from "./badge.js";
 
 function tryCommand(cmd, args) {
@@ -25,8 +25,18 @@ try {
 
   badge("injecting team context");
 
-  // Fire-and-forget session_start event — detached, concurrent.
+  // Fire-and-forget: session_start event + self-document KB refresh.
+  // self-document runs detached so it never blocks session startup.
   emitAsync(gyst, "session_start", {});
+  try {
+    const selfDoc = spawn(gyst, ["self-document", "--skip-ghosts", "--no-llm"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    selfDoc.unref();
+  } catch {
+    // non-fatal — KB refresh failure should not block the session
+  }
 
   // inject-context must be synchronous because its output goes into the
   // additionalContext response field that Claude Code reads immediately.

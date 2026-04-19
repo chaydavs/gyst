@@ -1,0 +1,95 @@
+{
+  "name": "gyst",
+  "version": "0.1.34",
+  "description": "Team knowledge layer for AI coding agents. Every session learns, every agent benefits.",
+  "author": "Gyst",
+  "license": "MIT",
+  "tier": "team",
+  "homepage": "https://github.com/chaydavs/gyst",
+  "hooks": [
+    {
+      "event": "SessionStart",
+      "script": "scripts/session-start.js",
+      "timeout": 5000,
+      "description": "Inject team context + ghost knowledge; refresh KB from codebase (detached)"
+    },
+    {
+      "event": "UserPromptSubmit",
+      "script": "scripts/prompt.js",
+      "timeout": 500,
+      "description": "Record prompt pattern for knowledge classification"
+    },
+    {
+      "event": "InstructionsLoaded",
+      "script": "scripts/instructions-loaded.js",
+      "timeout": 500,
+      "description": "Auto-ingest CLAUDE.md / instruction files into KB on load"
+    },
+    {
+      "event": "PreToolUse",
+      "matcher": "",
+      "script": "scripts/pre-tool.js",
+      "timeout": 500,
+      "description": "Status badge; track Read tool calls as KB miss signals"
+    },
+    {
+      "event": "PostToolUse",
+      "matcher": "",
+      "script": "scripts/tool-use.js",
+      "timeout": 500,
+      "description": "Capture tool output; detect ADR/plan writes for auto-ingestion"
+    },
+    {
+      "event": "PostToolUseFailure",
+      "matcher": "",
+      "script": "scripts/tool-failure.js",
+      "timeout": 500,
+      "description": "Extract error_pattern entries from failed tool calls"
+    },
+    {
+      "event": "SubagentStart",
+      "matcher": "",
+      "script": "scripts/subagent-start.js",
+      "timeout": 2000,
+      "description": "Inject ghost knowledge into every spawned subagent"
+    },
+    {
+      "event": "Stop",
+      "script": "scripts/session-end.js",
+      "timeout": 5000,
+      "description": "Distill session knowledge; refresh KB at session end"
+    },
+    {
+      "event": "SubagentStop",
+      "script": "scripts/session-end.js",
+      "timeout": 5000,
+      "description": "Same distillation for subagent sessions"
+    },
+    {
+      "event": "PreCompact",
+      "matcher": "",
+      "script": "scripts/pre-compact.js",
+      "timeout": 5000,
+      "description": "Harvest session knowledge before context is erased"
+    },
+    {
+      "event": "PostCompact",
+      "matcher": "",
+      "script": "scripts/post-compact.js",
+      "timeout": 2000,
+      "description": "Take a drift snapshot after compaction completes"
+    },
+    {
+      "event": "FileChanged",
+      "matcher": "**/*.md",
+      "script": "scripts/file-changed.js",
+      "timeout": 500,
+      "description": "Re-ingest changed markdown files immediately on save"
+    }
+  ],
+  "requirements": {
+    "runtime": "bun>=1.0.0",
+    "tools": ["gyst-mcp"]
+  },
+  "keywords": ["knowledge-base", "memory", "team", "mcp", "ai-agents"]
+}

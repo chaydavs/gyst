@@ -39,6 +39,7 @@ import {
   runSelfDocumentPhase1,
   runSelfDocumentPhase2,
   runSelfDocumentPhase3,
+  runSelfDocumentPhase3NoLLM,
 } from "./commands/self-document.js";
 
 const WIKI_SUBDIRS = [
@@ -835,12 +836,14 @@ program
   .description("Bootstrap the KB: structural skeleton + MD corpus + ghost knowledge")
   .option("--project-dir <path>", "Project root directory", process.cwd())
   .option("--ghost-count <n>", "Number of ghost entries to generate", "10")
-  .option("--skip-ghosts", "Skip Phase 3 (no LLM calls)", false)
+  .option("--skip-ghosts", "Skip Phase 3 entirely", false)
+  .option("--no-llm", "Phase 3 without LLM — promote top hub entries to ghost tier using existing content", false)
   .action(
     async (opts: {
       projectDir: string;
       ghostCount: string;
       skipGhosts: boolean;
+      noLlm: boolean;
     }) => {
       try {
         const config = loadConfig();
@@ -858,12 +861,15 @@ program
         );
 
         if (!opts.skipGhosts) {
+          const n = parseInt(opts.ghostCount, 10);
           const apiKey = process.env["ANTHROPIC_API_KEY"];
-          if (!apiKey) {
-            process.stdout.write("Phase 3 skipped — ANTHROPIC_API_KEY not set\n");
+
+          if (opts.noLlm || !apiKey) {
+            process.stdout.write(`Phase 3 — Ghost knowledge (no-LLM, top ${n})…\n`);
+            const p3 = runSelfDocumentPhase3NoLLM(db, n);
+            process.stdout.write(`  ${p3.written} ghost entries promoted\n`);
           } else {
-            const n = parseInt(opts.ghostCount, 10);
-            process.stdout.write(`Phase 3 — Ghost knowledge (top ${n})…\n`);
+            process.stdout.write(`Phase 3 — Ghost knowledge (Haiku, top ${n})…\n`);
             const p3 = await runSelfDocumentPhase3(db, opts.projectDir, n, apiKey);
             process.stdout.write(
               `  ${p3.written} ghost entries written (${p3.tokensUsed} tokens)\n`,

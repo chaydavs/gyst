@@ -195,6 +195,65 @@ export async function runSelfDocumentPhase2(
 // ---------------------------------------------------------------------------
 
 /**
+ * Promotes the top `ghostCount` hub entries by degree centrality to ghost
+ * knowledge status (confidence=1.0) using their existing content — no LLM
+ * call required. The entry's existing title and content are preserved as-is;
+ * the type is updated to ghost_knowledge and confidence set to 1.0 so the
+ * entry surfaces in tier 0 on every recall().
+ *
+ * This is Phase 3 without the Anthropic API dependency. Use when
+ * ANTHROPIC_API_KEY is unavailable or when zero-cost automation is required.
+ */
+export function runSelfDocumentPhase3NoLLM(
+  db: Database,
+  ghostCount: number,
+): Phase3Result {
+  const candidates = getTopCentralNodes(db, ghostCount);
+  if (candidates.length === 0) {
+    return { written: 0, tokensUsed: 0 };
+  }
+
+  let written = 0;
+  const now = new Date().toISOString();
+
+  for (const entry of candidates) {
+    const moduleName =
+      entry.title.split("/").pop()?.replace(/\.tsx?$/, "") ?? entry.title;
+    const ghostTitle = `How does ${moduleName} work?`;
+    const ghostId = `ghost_${shortHash(ghostTitle)}`;
+
+    const alreadyExists = db
+      .query<{ id: string }, [string]>("SELECT id FROM entries WHERE id=?")
+      .get(ghostId);
+    if (alreadyExists) continue;
+
+    // Use the entry's existing content, trimmed to a readable summary size.
+    const summary = entry.content.slice(0, 600).trimEnd();
+
+    db.transaction(() => {
+      db.run(
+        `INSERT OR REPLACE INTO entries
+           (id, type, title, content, confidence, source_count, created_at,
+            last_confirmed, status, scope, metadata)
+         VALUES (?, 'ghost_knowledge', ?, ?, 1.0, 1, ?, ?, 'active', 'team', ?)`,
+        [
+          ghostId,
+          ghostTitle,
+          summary,
+          now,
+          now,
+          JSON.stringify({ sourceId: entry.id, generatedAt: now, noLlm: true }),
+        ],
+      );
+    })();
+    written++;
+  }
+
+  logger.info("self-document phase 3 (no-llm) complete", { written });
+  return { written, tokensUsed: 0 };
+}
+
+/**
  * Queries the top `ghostCount` hub entries by degree centrality, then calls
  * Anthropic Haiku to generate a concise ghost knowledge entry for each.
  *

@@ -6,6 +6,7 @@
  * session. Never blocks the agent.
  */
 import { readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { badge, emitAsync } from "./badge.js";
 
 function readHookInput() {
@@ -29,6 +30,18 @@ try {
 
   badge("distilling session knowledge");
   emitAsync(gyst, "session_end", payload);
+
+  // Fire-and-forget KB refresh at session end — picks up any files changed
+  // during the session. --no-llm ensures zero cost / no API key required.
+  try {
+    const selfDoc = spawn(gyst, ["self-document", "--skip-ghosts", "--no-llm"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    selfDoc.unref();
+  } catch {
+    // non-fatal
+  }
 
   process.stdout.write(JSON.stringify({ continue: true }));
 } catch {
