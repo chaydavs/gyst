@@ -142,11 +142,14 @@ Knowledge lives in your git repo or on a shared HTTP server. Nothing leaves your
 
 ### Ghost Knowledge
 
-Ghost entries have infinite confidence and always surface first — they encode things your team knows but never wrote down:
+Ghost entries have confidence 1.0 and always surface first — they encode things your team knows but never wrote down. Two ways to create them:
 
 ```bash
-gyst ghost-init   # interactive Q&A to capture tribal knowledge
+gyst ghost-init       # interactive Q&A to capture tribal knowledge
+gyst self-document    # auto-generate from codebase structure (see below)
 ```
+
+The `self-document` command ranks every entry by degree centrality (relationship edges + co-retrieval links) and calls Haiku once per top-N hub node to generate a concise description. Ghost entries are regenerated only when the centrality ranking changes.
 
 ---
 
@@ -184,16 +187,22 @@ The drift score (0–100%) and trend label (improving / stable / drifting) are a
 
 ## Hooks
 
-Gyst registers into every hook event in Claude Code and compatible tools:
+Gyst registers 12 hooks across every Claude Code lifecycle event:
 
 | Hook | What Gyst does |
 |------|---------------|
 | `SessionStart` | Injects team context + ghost knowledge into every session |
 | `UserPromptSubmit` | Records prompt patterns for knowledge classification |
-| `PreToolUse` | Shows "gyst is working" status badge; records tool invocation patterns |
-| `PostToolUse` | Captures tool errors → error_pattern entries; detects ADR/plan writes |
+| `InstructionsLoaded` | Auto-ingests CLAUDE.md / instructions files into the KB on load |
+| `PreToolUse` | Status badge + tracks `Read` tool calls as KB miss signals |
+| `PostToolUse` | Captures tool output; detects ADR/plan writes |
+| `PostToolUseFailure` | Extracts error_pattern entries from failed tool calls automatically |
+| `SubagentStart` | Injects ghost knowledge into every spawned subagent |
 | `Stop` | Triggers session distillation — extracts knowledge from the full session |
 | `SubagentStop` | Same distillation for subagent sessions |
+| `PreCompact` | Harvests session knowledge before context is erased by compaction |
+| `PostCompact` | Takes a drift snapshot after compaction completes |
+| `FileChanged` (`**/*.md`) | Re-ingests changed markdown files into the KB immediately on save |
 
 All hook emissions are fire-and-forget (detached spawns). Hooks return in under 1ms — no latency added to the agent loop.
 
@@ -209,7 +218,8 @@ Opens at `localhost:3579`. Includes:
 
 - **Feed** — browse all entries by type, scope, or keyword search
 - **Review queue** — entries flagged for decay, low confidence, or explicit feedback
-- **Graph view** — interactive knowledge relationship graph
+- **Graph view** — interactive knowledge relationship graph with distinct type colors (purple/ghost, red/error, yellow/decision, amber/convention, green/learning, cyan/md_doc, indigo/structural) and connection-density node sizing
+- **Docs** — browse and preview all ingested markdown files (plans, specs, ADRs, CLAUDE.md); populated by `gyst self-document`
 - **Team management** — member roster, per-member stats (contributions, recall count, recent activity), invite flow, danger zone
 - **Context Economics** — leverage ratio, token savings, intent breakdown, zero-result rate
 - **Knowledge Drift** — drift score, trend, stale entry count, AI fatigue warning, anchor query manager
@@ -228,6 +238,7 @@ Opens at `localhost:3579`. Includes:
 | `gyst check <file>` | Check a file against stored conventions |
 | `gyst detect-conventions` | Scan codebase for conventions |
 | `gyst dashboard` | Launch knowledge UI at localhost:3579 |
+| `gyst self-document [--skip-ghosts] [--ghost-count N]` | Bootstrap KB: structural skeleton + MD corpus + ghost knowledge |
 | `gyst create team <name>` | Create a team and get an admin key |
 | `gyst team invite` | Generate an invite key for a new member |
 | `gyst team members` | List all team members |
@@ -258,6 +269,29 @@ Opens at `localhost:3579`. Includes:
 |--------|------:|
 | Hit Rate @5 | **94.2%** |
 | MRR@5 | 0.837 |
+
+---
+
+## Self-Documenting KB
+
+`gyst self-document` bootstraps the knowledge base from your codebase in three phases, without any manual writing:
+
+**Phase 1 — Structural skeleton** (zero tokens, ~2s)
+Globs all TypeScript/JavaScript source files, extracts exports and imports, stores each file as a `structural` KB entry with hash-check. Subsequent runs skip unchanged files.
+
+**Phase 2 — MD corpus** (zero tokens)
+Scans `**/*.md` files (excluding node_modules, dist, gyst-wiki). Hash-checks each file — creates, updates, or skips. Frontmatter is parsed for title and tags. Section headings are extracted as a TOC prefix for better BM25 retrieval.
+
+**Phase 3 — Ghost knowledge** (optional, ~$0.001)
+Ranks all entries by degree centrality (relationship edges + co-retrieval links). Calls Haiku once per top-N hub node to generate a 2–4 sentence KB description. Ghost entries surface first on every `recall()`.
+
+```bash
+gyst self-document            # all three phases (requires ANTHROPIC_API_KEY for Phase 3)
+gyst self-document --skip-ghosts  # Phases 1+2 only, zero LLM calls
+gyst self-document --ghost-count 20  # generate top-20 ghost entries (default: 10)
+```
+
+The `FileChanged` hook re-ingests any `.md` file as soon as you save it. The `InstructionsLoaded` hook ingests `CLAUDE.md` at session start. Together they keep the KB current without any manual steps.
 
 ---
 
@@ -297,7 +331,7 @@ src/
 
 ```bash
 bun install
-bun test                    # 895 tests, 47 files
+bun test                    # 970 tests, 67 files
 bun run lint                # tsc --noEmit
 bun run build               # bundle to dist/
 bun run benchmark:codememb  # CodeMemBench

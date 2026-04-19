@@ -199,16 +199,24 @@ Claude Code event
 
 The detached child process pattern (`spawn + unref()`) means the hook script exits before gyst has finished processing. Events are queued in `event_queue` and processed by the background event loop in the MCP server (polls every 5 seconds).
 
-**All 6 Claude Code hook events registered:**
+**All 12 Claude Code hook events registered:**
 
 | Event | Script | Action |
 |-------|--------|--------|
 | `SessionStart` | `session-start.js` | `inject-context` (sync — must complete before agent starts) |
 | `UserPromptSubmit` | `prompt.js` | emit `prompt` event (async) |
-| `PreToolUse` | `pre-tool.js` | emit `pre_tool_use` event (async) |
+| `InstructionsLoaded` | `instructions-loaded.js` | emit `md_changed` — triggers MD re-ingest of CLAUDE.md |
+| `PreToolUse` | `pre-tool.js` | status badge; emit `kb_miss_signal` when tool is `Read` |
 | `PostToolUse` | `tool-use.js` | emit `tool_use` + sidecar ADR/plan detection (2 concurrent async emits) |
+| `PostToolUseFailure` | `tool-failure.js` | emit `tool_failure` — error text → error_pattern extraction |
+| `SubagentStart` | `subagent-start.js` | inject ghost knowledge as `additionalContext` via `execFileSync` |
 | `Stop` | `session-end.js` | emit `session_end` — triggers distillation + drift snapshot |
 | `SubagentStop` | `session-end.js` | same as Stop |
+| `PreCompact` | `pre-compact.js` | emit `session_end` with `reason: "pre_compact"` before context erased |
+| `PostCompact` | `post-compact.js` | emit `drift_snapshot` — records KB health after compaction |
+| `FileChanged` (`**/*.md`) | `file-changed.js` | emit `md_changed` — triggers immediate MD file re-ingest |
+
+**Security note:** `subagent-start.js` uses `execFileSync` with an argument array (not `execSync` with a shell string) to prevent injection risk from the `GYST_BIN` env var.
 
 ---
 
@@ -223,10 +231,14 @@ event_queue (SQLite, status='pending')
     ▼
 background event loop (mcp/events.ts, polls every 5s)
     │
-    ├── session_end  → harvest.ts → classify → entries
-    ├── commit       → parse commit → entries
-    ├── tool_use     → error extraction → error_pattern entries
-    └── plan_added   → markdown-adr parser → decision entries
+    ├── session_end    → harvest.ts → classify → entries
+    ├── commit         → parse commit → entries
+    ├── tool_use       → error extraction → error_pattern entries
+    ├── tool_failure   → error text → error_pattern entry
+    ├── md_changed     → ingest-md.ts → md_doc entry (hash-checked)
+    ├── kb_miss_signal → recorded for drift scoring (Read tool used where KB had no answer)
+    ├── drift_snapshot → drift.ts → drift_snapshots row
+    └── plan_added     → markdown-adr parser → decision entries
                           │
                           ▼
                     entries table
@@ -236,6 +248,77 @@ background event loop (mcp/events.ts, polls every 5s)
                           ├── consolidate.ts → merge duplicates, promote co-retrievals
                           └── entries_fts (FTS5 trigger keeps in sync automatically)
 ```
+
+---
+
+## Self-Documenting KB (`gyst self-document`)
+
+The KB can bootstrap itself from the codebase with zero manual writing. Three phases:
+
+### Phase 1 — Structural skeleton (`src/cli/commands/self-document.ts`)
+
+Globs `src/**/*.{ts,tsx}` (excludes `.test.ts`, `.d.ts`). For each file:
+- Extracts top-10 exports and top-8 unique import paths via regex
+- Builds a one-paragraph description: "Exports: X, Y, Z\nImports from: ./a, ./b"
+- Computes a 12-char SHA-256 of `relPath + moduleContent` for hash-check
+- Upserts as `type='structural'` with `source_file_hash` — skips unchanged files on re-runs
+
+No LLM calls. Runs in ~2 seconds for a typical TypeScript codebase.
+
+### Phase 2 — MD corpus (`src/compiler/ingest-md.ts`)
+
+Scans `**/*.md` (excludes node_modules, .git, dist, gyst-wiki). For each file:
+- Computes 16-char SHA-256 of file content — skip if hash matches stored `source_file_hash`
+- Parses frontmatter via `gray-matter` (title, tags)
+- Extracts first 8 H1-H3 headings as section TOC (prepended to content for BM25)
+- Strips code blocks → `[code]`, truncates excerpt at 2000 chars
+- Upserts as `type='md_doc'` with `file_path`-based ID (prevents collision on identical-content files)
+
+The `FileChanged` and `InstructionsLoaded` hooks call the same `ingestMdFile()` function, so the KB stays current as files change during a session.
+
+### Phase 3 — Ghost knowledge (`src/store/centrality.ts`)
+
+Ranks all active non-ghost, non-md_doc entries by degree centrality:
+```
+degree = outgoing_relationship_edges + incoming_relationship_edges
+       + co_retrieval_links (UNION ALL both sides, outer SUM to prevent fan-out)
+```
+
+Top-N entries by degree that don't already have a ghost entry (detected via `metadata LIKE '%<id>%'`) become ghost candidates. One Haiku call per candidate:
+- Prompt: module name + content context
+- Output: 2-4 sentence description starting with "This module" or "This file"
+- Stored as `type='ghost_knowledge'`, `confidence=1.0`
+
+~$0.001 total cost for top-10 entries. `--skip-ghosts` flag bypasses Phase 3 entirely for CI/CD runs.
+
+---
+
+## Graph Visualization (`src/dashboard/ui/src/components/GraphCanvas.tsx`)
+
+The interactive canvas graph uses a force-directed layout (repulsion + spring + center pull + damping). Two visual encodings were updated in April 2026:
+
+**Type colors** (8 distinct hues, not shades):
+```typescript
+const TYPE_COLOR = {
+  ghost_knowledge: '#7c3aed',  // purple
+  error_pattern:   '#dc2626',  // red
+  decision:        '#eab308',  // yellow
+  convention:      '#d97706',  // amber
+  learning:        '#059669',  // green
+  md_doc:          '#0891b2',  // cyan
+};
+const STRUCTURAL_COLOR = '#6366f1'; // indigo (layer guard fires before type lookup)
+```
+
+**Dynamic node sizing** (connection density):
+```typescript
+const count = connectionCounts.get(n.id) ?? 0;  // degree from edge list
+const isGhost = n.type === 'ghost_knowledge';
+const base = n.layer === 'structural' ? 3 : 5;
+const radius = isGhost ? 20 : Math.min(20, Math.max(base, base + count * 1.5));
+```
+
+Ghost knowledge nodes are always 20px — largest in the canvas — making the most important KB entries visually prominent.
 
 ---
 
@@ -254,7 +337,7 @@ Key design decisions:
 
 | Table | Purpose | Notes |
 |-------|---------|-------|
-| `entries` | Core knowledge records | FTS5 virtual table kept in sync via trigger |
+| `entries` | Core knowledge records | Types: error_pattern, convention, decision, learning, ghost_knowledge, structural, **md_doc**. `source_file_hash` column for idempotent MD/structural ingest. FTS5 virtual table kept in sync via trigger |
 | `entries_fts` | Full-text search index | porter stemmer, codeTokenize preprocessing |
 | `relationships` | Curated graph edges | type + strength; auto-promoted from co_retrievals |
 | `co_retrievals` | Implicit co-fetch graph | canonical pair order (entry_a < entry_b) |
