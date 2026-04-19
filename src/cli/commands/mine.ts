@@ -266,3 +266,96 @@ export async function mineCommentsPhase(
   }
   return count;
 }
+
+// ---------------------------------------------------------------------------
+// Phase 3: hot path mining
+// ---------------------------------------------------------------------------
+
+export interface HotPathEntry {
+  readonly file: string;
+  readonly count: number;
+}
+
+/**
+ * Parses `git log --format= --name-only` output into a sorted list of
+ * the most-edited files. Empty lines and git metadata lines are filtered out.
+ */
+export function parseHotPaths(raw: string, limit: number): HotPathEntry[] {
+  const counts = new Map<string, number>();
+  for (const line of raw.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.includes("|") || trimmed.startsWith("commit ")) continue;
+    counts.set(trimmed, (counts.get(trimmed) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([file, count]) => ({ file, count }));
+}
+
+const HOTPATH_LIMIT = 20;
+const HOTPATH_CONFIDENCE = 0.9;
+
+/**
+ * Phase 3 of `gyst mine`: identifies the top-20 most-edited files via
+ * `git log --name-only` and creates ghost_knowledge entries for any hot files
+ * not already covered by an existing ghost_knowledge entry.
+ * Writes cursor `last_hotpath_scan` on completion.
+ */
+export async function mineHotPathsPhase(
+  db: Database,
+  opts: Omit<MineOptions, "commitHash">
+): Promise<number> {
+  let count = 0;
+  try {
+    const { default: simpleGit } = await import("simple-git");
+    const git = simpleGit(opts.repoRoot);
+    const isRepo = await git.checkIsRepo().catch(() => false);
+    if (!isRepo) return 0;
+
+    const raw = await git.raw(["log", "--format=", "--name-only"]);
+    const hotFiles = parseHotPaths(raw, HOTPATH_LIMIT);
+
+    for (const { file, count: editCount } of hotFiles) {
+      const absPath = join(opts.repoRoot, file);
+      if (!existsSync(absPath)) continue;
+
+      const alreadyCovered = db
+        .query<{ id: string }, [string]>(
+          `SELECT e.id FROM entries e
+           JOIN entry_files ef ON ef.entry_id = e.id
+           WHERE e.type = 'ghost_knowledge' AND ef.file_path = ? LIMIT 1`
+        )
+        .get(file);
+      if (alreadyCovered) continue;
+
+      const title = `Hot path: ${file} (${editCount} edits)`;
+      const content = [
+        `mine:hotpath:${file}`,
+        `Edit frequency: ${editCount} commits`,
+        ``,
+        `This is one of the most frequently modified files in the codebase.`,
+        `File: ${file}`,
+      ].join("\n");
+
+      const id = contentHash(`hotpath:${file}`);
+      const now = new Date().toISOString();
+      db.run(
+        `INSERT OR IGNORE INTO entries
+         (id, type, title, content, confidence, scope, status, created_at, updated_at)
+         VALUES (?, 'ghost_knowledge', ?, ?, ?, 'project', 'active', ?, ?)`,
+        [id, title, content, HOTPATH_CONFIDENCE, now, now]
+      );
+      db.run("INSERT OR IGNORE INTO entry_files (entry_id, file_path) VALUES (?, ?)", [id, file]);
+      db.run("INSERT OR IGNORE INTO entry_tags (entry_id, tag) VALUES (?, ?)", [id, "mined:hotpath"]);
+      count++;
+    }
+
+    setMiningCursor(db, "last_hotpath_scan", new Date().toISOString());
+  } catch (err) {
+    logger.warn("mineHotPathsPhase: error", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+  return count;
+}

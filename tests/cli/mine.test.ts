@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { getMiningCursor, setMiningCursor, shouldSkipCommitSubject, conventionalTypeToEntryType, mineGitPhase, mineCommentsPhase } from "../../src/cli/commands/mine.js";
+import { getMiningCursor, setMiningCursor, shouldSkipCommitSubject, conventionalTypeToEntryType, mineGitPhase, mineCommentsPhase, parseHotPaths, mineHotPathsPhase } from "../../src/cli/commands/mine.js";
+import type { HotPathEntry } from "../../src/cli/commands/mine.js";
 import { initDatabase } from "../../src/store/database.js";
 import { join } from "node:path";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
@@ -132,5 +133,31 @@ describe("mineCommentsPhase", () => {
     const count = await mineCommentsPhase(db, { full: false, noLlm: true, repoRoot: tmpDir });
     db.close();
     expect(count).toBe(0);
+  });
+});
+
+describe("parseHotPaths", () => {
+  it("parses git log --name-only output into sorted file counts", () => {
+    const raw = [
+      "src/store/database.ts",
+      "src/store/database.ts",
+      "src/cli/index.ts",
+      "src/store/database.ts",
+      "src/cli/index.ts",
+      "src/utils/logger.ts",
+    ].join("\n");
+    const result = parseHotPaths(raw, 3);
+    expect(result[0]?.file).toBe("src/store/database.ts");
+    expect(result[0]?.count).toBe(3);
+    expect(result[1]?.file).toBe("src/cli/index.ts");
+    expect(result[1]?.count).toBe(2);
+    expect(result).toHaveLength(3);
+  });
+
+  it("filters empty lines", () => {
+    const raw = "\n\n\nsrc/foo.ts\n\nsrc/foo.ts\n\n";
+    const result = parseHotPaths(raw, 10);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.file).toBe("src/foo.ts");
   });
 });
