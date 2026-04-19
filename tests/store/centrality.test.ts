@@ -35,6 +35,21 @@ describe('computeDegreeCentrality', () => {
     expect(centrality.get('hub')!).toBeGreaterThan(centrality.get('leaf1')!);
     db.close();
   });
+
+  test('co-retrieval links increase degree', () => {
+    const db = initDatabase(TEST_DB);
+    insertEntry(db, 'a', 'A');
+    insertEntry(db, 'b', 'B');
+
+    const before = computeDegreeCentrality(db).get('a') ?? 0;
+    db.run(
+      "INSERT INTO co_retrievals (entry_a, entry_b, count, last_seen) VALUES ('a', 'b', 3, unixepoch())"
+    );
+    const after = computeDegreeCentrality(db).get('a') ?? 0;
+
+    expect(after).toBeGreaterThan(before);
+    db.close();
+  });
 });
 
 describe('getTopCentralNodes', () => {

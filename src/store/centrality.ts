@@ -69,7 +69,7 @@ export function getTopCentralNodes(db: Database, n: number): CentralNode[] {
   return db
     .query<CentralNode, [number]>(
       `SELECT e.id, e.title, e.content, e.type,
-              COALESCE(out_c.c, 0) + COALESCE(in_c.c, 0) AS degree
+              COALESCE(out_c.c, 0) + COALESCE(in_c.c, 0) + COALESCE(co.c, 0) AS degree
        FROM entries e
        LEFT JOIN (
          SELECT source_id AS id, COUNT(*) AS c
@@ -81,6 +81,11 @@ export function getTopCentralNodes(db: Database, n: number): CentralNode[] {
          FROM relationships
          GROUP BY target_id
        ) in_c ON in_c.id = e.id
+       LEFT JOIN (
+         SELECT entry_a AS id, SUM(count) AS c FROM co_retrievals GROUP BY entry_a
+         UNION ALL
+         SELECT entry_b AS id, SUM(count) AS c FROM co_retrievals GROUP BY entry_b
+       ) co ON co.id = e.id
        WHERE e.type NOT IN ('ghost_knowledge', 'md_doc')
          AND e.status = 'active'
          AND NOT EXISTS (
@@ -88,7 +93,6 @@ export function getTopCentralNodes(db: Database, n: number): CentralNode[] {
            WHERE g.type = 'ghost_knowledge'
              AND g.metadata LIKE '%' || e.id || '%'
          )
-       GROUP BY e.id
        ORDER BY degree DESC
        LIMIT ?`,
     )
