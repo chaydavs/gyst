@@ -48,6 +48,7 @@ export const api = {
   getReviewQueue: () => apiFetch<ReviewItem[]>('/api/review-queue'),
   confirmEntry: (id: string) => apiFetch<{ ok: boolean }>(`/api/review-queue/${encodeURIComponent(id)}/confirm`, { method: 'POST', body: '{}' }),
   archiveEntry: (id: string) => apiFetch<{ ok: boolean }>(`/api/review-queue/${encodeURIComponent(id)}/archive`, { method: 'POST', body: '{}' }),
+  deleteEntry: (id: string) => apiFetch<{ ok: boolean }>(`/api/entries/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   // Team
   getTeamInfo: () => apiFetch<TeamInfo | null>('/api/team/info'),

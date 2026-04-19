@@ -7,6 +7,7 @@ interface EntryDrawerProps {
   id: string;
   onClose: () => void;
   onPromote: (id: string) => void;
+  onDelete?: (id: string) => void;
 }
 
 const TYPE_COLORS: Record<EntryType, string> = {
@@ -44,7 +45,7 @@ function confidenceColor(c: number): string {
   return '#D4412B';
 }
 
-export default function EntryDrawer({ id, onClose, onPromote }: EntryDrawerProps) {
+export default function EntryDrawer({ id, onClose, onPromote, onDelete }: EntryDrawerProps) {
   const [entry, setEntry] = useState<EntryDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +99,18 @@ export default function EntryDrawer({ id, onClose, onPromote }: EntryDrawerProps
     try {
       await api.promote(entry.id);
       onPromote(entry.id);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!entry) return;
+    if (!window.confirm(`Delete "${entry.title}"? This cannot be undone.`)) return;
+    try {
+      await api.deleteEntry(entry.id);
+      onDelete?.(entry.id);
+      onClose();
     } catch {
       // ignore
     }
@@ -546,6 +559,12 @@ export default function EntryDrawer({ id, onClose, onPromote }: EntryDrawerProps
             active={editMode}
             activeColor="#C27B0E"
             onClick={() => setEditMode(em => !em)}
+          />
+          <ActionButton
+            label="Delete"
+            active={false}
+            activeColor="#cc0000"
+            onClick={() => void handleDelete()}
           />
         </div>
       )}

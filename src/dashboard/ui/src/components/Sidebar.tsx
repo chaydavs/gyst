@@ -7,7 +7,7 @@ interface SidebarProps {
   analytics: Analytics | null;
   reviewQueue: ReviewItem[];
   teamMembers: TeamMember[];
-  onReviewAction: (id: string, action: 'confirm' | 'archive') => void;
+  onReviewAction: (id: string, action: 'confirm' | 'archive' | 'delete') => void;
   onInvite: () => void;
   refreshKey?: number;
 }
@@ -365,7 +365,7 @@ function ReviewQueueItem({
   onAction,
 }: {
   item: ReviewItem;
-  onAction: (id: string, action: 'confirm' | 'archive') => void;
+  onAction: (id: string, action: 'confirm' | 'archive' | 'delete') => void;
 }) {
   const reasonColor = REASON_COLORS[item.reason] ?? '#888';
 
@@ -461,6 +461,25 @@ function ReviewQueueItem({
           }}
         >
           Archive
+        </button>
+        <button
+          onClick={() => onAction(item.id, 'delete')}
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '9px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            padding: '3px 8px',
+            background: 'transparent',
+            border: '1px solid #cc0000',
+            color: '#cc0000',
+            borderRadius: '3px',
+            cursor: 'pointer',
+            lineHeight: 1.4,
+            marginLeft: 'auto',
+          }}
+        >
+          Delete
         </button>
       </div>
     </div>

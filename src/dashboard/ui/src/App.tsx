@@ -122,11 +122,16 @@ export default function App() {
   }, [showCapture, showInvite, selectedEntryId, focusSearch]);
 
   // ── Action handlers ────────────────────────────────────────────────────────
-  const handleReviewAction = useCallback(async (id: string, action: 'confirm' | 'archive') => {
+  const handleReviewAction = useCallback(async (id: string, action: 'confirm' | 'archive' | 'delete') => {
     try {
       if (action === 'confirm') await api.confirmEntry(id);
-      else await api.archiveEntry(id);
+      else if (action === 'archive') await api.archiveEntry(id);
+      else if (action === 'delete') await api.deleteEntry(id);
       setReviewQueue(prev => prev.filter(item => item.id !== id));
+      if (action === 'delete') {
+        setFeedRefreshKey(k => k + 1);
+        api.getStats().then(setStats).catch(() => undefined);
+      }
     } catch {
       // best-effort
     }
@@ -228,6 +233,11 @@ export default function App() {
           id={selectedEntryId}
           onClose={() => setSelectedEntryId(null)}
           onPromote={handlePromote}
+          onDelete={() => {
+            setSelectedEntryId(null);
+            setFeedRefreshKey(k => k + 1);
+            api.getStats().then(setStats).catch(() => undefined);
+          }}
         />
       )}
     </div>

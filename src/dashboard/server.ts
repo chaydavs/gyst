@@ -619,45 +619,36 @@ export async function startDashboardServer(
                 return jsonResponse(data, 200, requestId);
               }
 
-              // /api/review-queue
+              // /api/review-queue — error_pattern + ghost_knowledge needing human verification
               if (path === "/api/review-queue") {
                 try {
-                  // Table may not exist on fresh installs before `gyst setup`
-                  const tableExists = db
-                    .query<{ n: number }, []>("SELECT COUNT(*) as n FROM sqlite_master WHERE type='table' AND name='review_queue'")
-                    .get();
-                  if (!tableExists || tableExists.n === 0) {
-                    logAccess(requestId, method, path, start, 200);
-                    return jsonResponse([], 200, requestId);
+                  interface ReviewRow {
+                    id: string; title: string; type: string; content: string;
+                    confidence: number; created_at: string; last_confirmed: string;
                   }
-                  interface ReviewQueueRow {
-                    id: string;
-                    entry_id: string;
-                    reason: string;
-                    confidence_before: number;
-                    created_at: string;
-                  }
-                  interface EntryForQueue { title: string; type: string; content: string; confidence: number }
                   const rows = db
-                    .query<ReviewQueueRow, []>(
-                      "SELECT id, entry_id, reason, confidence_before, created_at FROM review_queue WHERE status = 'pending' ORDER BY created_at DESC LIMIT 50",
+                    .query<ReviewRow, []>(
+                      `SELECT id, title, type, content, confidence, created_at, last_confirmed
+                       FROM entries
+                       WHERE status = 'active'
+                         AND type IN ('error_pattern', 'ghost_knowledge')
+                         AND (
+                           confidence < 0.85
+                           OR (type = 'ghost_knowledge' AND last_confirmed < datetime('now', '-30 days'))
+                         )
+                       ORDER BY confidence ASC
+                       LIMIT 50`,
                     )
                     .all();
-                  const enriched = rows.map((r) => {
-                    const e = db
-                      .query<EntryForQueue, [string]>("SELECT title, type, content, confidence FROM entries WHERE id = ?")
-                      .get(r.entry_id);
-                    return {
-                      id: r.entry_id,        // use entry id so confirm/archive routes match
-                      queueId: r.id,
-                      title: e?.title ?? r.entry_id,
-                      type: e?.type ?? "learning",
-                      content: e?.content ?? "",
-                      confidence: e?.confidence ?? r.confidence_before,
-                      reason: r.reason,
-                      createdAt: r.created_at,
-                    };
-                  });
+                  const enriched = rows.map((r) => ({
+                    id: r.id,
+                    title: r.title,
+                    type: r.type,
+                    content: r.content,
+                    confidence: r.confidence,
+                    reason: r.confidence < 0.85 ? "low confidence" : "stale — not confirmed in 30+ days",
+                    createdAt: r.created_at,
+                  }));
                   logAccess(requestId, method, path, start, 200);
                   return jsonResponse(enriched, 200, requestId);
                 } catch (err) {
@@ -1140,14 +1131,18 @@ export async function startDashboardServer(
               // /api/review-queue/:id/(confirm|archive|skip)
               const reviewActionMatch = REVIEW_ACTION_RE.exec(path);
               if (reviewActionMatch !== null) {
-                const queueId = decodeURIComponent(reviewActionMatch[1] ?? "");
+                const entryId = decodeURIComponent(reviewActionMatch[1] ?? "");
                 const action = reviewActionMatch[2] as "confirm" | "archive" | "skip";
                 try {
-                  const newStatus = action === "confirm" ? "confirmed" : action;
-                  db.run(
-                    "UPDATE review_queue SET status = ? WHERE id = ?",
-                    [newStatus, queueId],
-                  );
+                  if (action === "confirm") {
+                    db.run(
+                      "UPDATE entries SET confidence = 1.0, last_confirmed = datetime('now') WHERE id = ?",
+                      [entryId],
+                    );
+                  } else if (action === "archive") {
+                    db.run("UPDATE entries SET status = 'archived' WHERE id = ?", [entryId]);
+                  }
+                  // skip — no DB change, just acknowledge
                   broadcastSSE({ type: "queue_changed" });
                   logAccess(requestId, method, path, start, 200);
                   return jsonResponse({ ok: true }, 200, requestId);
@@ -1511,6 +1506,31 @@ export async function startDashboardServer(
             // ------------------------------------------------------------------
 
             if (method === "DELETE") {
+              // /api/entries/:id — hard-delete an entry and all related rows
+              const ENTRY_ID_RE = /^\/api\/entries\/([^/]+)$/;
+              const entryDeleteMatch = ENTRY_ID_RE.exec(path);
+              if (entryDeleteMatch !== null) {
+                const entryId = decodeURIComponent(entryDeleteMatch[1] ?? "");
+                try {
+                  db.transaction(() => {
+                    db.run("DELETE FROM entry_tags WHERE entry_id = ?", [entryId]);
+                    db.run("DELETE FROM entry_files WHERE entry_id = ?", [entryId]);
+                    db.run("DELETE FROM sources WHERE entry_id = ?", [entryId]);
+                    db.run("DELETE FROM co_retrievals WHERE entry_a = ? OR entry_b = ?", [entryId, entryId]);
+                    db.run("DELETE FROM relationships WHERE entry_a = ? OR entry_b = ?", [entryId, entryId]);
+                    db.run("DELETE FROM feedback WHERE entry_id = ?", [entryId]);
+                    db.run("DELETE FROM entries WHERE id = ?", [entryId]);
+                  })();
+                  broadcastSSE({ type: "entries_changed" });
+                  logAccess(requestId, method, path, start, 200);
+                  return jsonResponse({ ok: true }, 200, requestId);
+                } catch (err) {
+                  logger.error("delete entry error", { error: err instanceof Error ? err.message : String(err) });
+                  logAccess(requestId, method, path, start, 500);
+                  return jsonResponse({ error: "internal" }, 500, requestId);
+                }
+              }
+
               // /api/team — dissolve the entire team (all members, keys, team row)
               if (path === "/api/team") {
                 try {

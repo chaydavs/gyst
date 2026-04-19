@@ -263,7 +263,7 @@ gyst dashboard
 Opens at `localhost:3579`. Includes:
 
 - **Feed** — browse all entries by type, scope, or keyword search
-- **Review queue** — entries flagged for decay, low confidence, or explicit feedback
+- **Review queue** — `error_pattern` and `ghost_knowledge` entries with confidence < 85% or stale ghost entries (not confirmed in 30+ days); confirm (resets to 100% confidence), archive, or delete each one
 - **Graph view** — interactive knowledge relationship graph with distinct type colors (purple/ghost, red/error, yellow/decision, amber/convention, green/learning, cyan/md_doc, indigo/structural) and connection-density node sizing
 - **Docs** — browse and preview all ingested markdown files (plans, specs, ADRs, CLAUDE.md); populated by `gyst self-document`
 - **Team management** — member roster, per-member stats (contributions, recall count, recent activity), invite flow, danger zone
