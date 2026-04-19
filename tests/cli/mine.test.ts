@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { getMiningCursor, setMiningCursor } from "../../src/cli/commands/mine.js";
+import { getMiningCursor, setMiningCursor, shouldSkipCommitSubject, conventionalTypeToEntryType, mineGitPhase } from "../../src/cli/commands/mine.js";
 import { initDatabase } from "../../src/store/database.js";
 import { join } from "node:path";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -38,5 +38,60 @@ describe("mining cursor helpers", () => {
     const result = getMiningCursor(db, "last_commit_hash");
     db.close();
     expect(result).toBe("second");
+  });
+});
+
+describe("shouldSkipCommitSubject", () => {
+  it("skips chore/bump/merge/revert subjects", () => {
+    expect(shouldSkipCommitSubject("chore: update deps")).toBe(true);
+    expect(shouldSkipCommitSubject("bump: v1.2.3")).toBe(true);
+    expect(shouldSkipCommitSubject("Merge branch 'main'")).toBe(true);
+    expect(shouldSkipCommitSubject("revert: undo change")).toBe(true);
+  });
+
+  it("keeps feat/fix/refactor subjects", () => {
+    expect(shouldSkipCommitSubject("feat: add login")).toBe(false);
+    expect(shouldSkipCommitSubject("fix: null crash")).toBe(false);
+    expect(shouldSkipCommitSubject("refactor: clean up auth")).toBe(false);
+  });
+});
+
+describe("conventionalTypeToEntryType", () => {
+  it("maps feat/refactor to decision", () => {
+    expect(conventionalTypeToEntryType("feat")).toBe("decision");
+    expect(conventionalTypeToEntryType("refactor")).toBe("decision");
+  });
+
+  it("maps fix/perf to learning", () => {
+    expect(conventionalTypeToEntryType("fix")).toBe("learning");
+    expect(conventionalTypeToEntryType("perf")).toBe("learning");
+  });
+
+  it("maps docs/test to convention", () => {
+    expect(conventionalTypeToEntryType("docs")).toBe("convention");
+    expect(conventionalTypeToEntryType("test")).toBe("convention");
+  });
+
+  it("falls back to learning for unknown types", () => {
+    expect(conventionalTypeToEntryType("other")).toBe("learning");
+  });
+});
+
+describe("mineGitPhase", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "gyst-mine-git-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns 0 when not inside a git repo", async () => {
+    const db = await initDatabase(join(tmpDir, "wiki.db"));
+    const count = await mineGitPhase(db, { full: false, noLlm: true, repoRoot: tmpDir });
+    db.close();
+    expect(count).toBe(0);
   });
 });
