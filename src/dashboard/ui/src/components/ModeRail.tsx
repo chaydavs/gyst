@@ -34,6 +34,7 @@ export default function ModeRail({
     { key: 'feed', label: 'Feed' },
     { key: 'graph', label: 'Graph' },
     { key: 'queue', label: 'Review' },
+    { key: 'docs', label: 'Docs' },
     { key: 'team', label: 'Team' },
   ];
 

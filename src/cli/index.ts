@@ -35,6 +35,11 @@ import {
 import { initActivitySchema } from "../server/activity.js";
 import { getTeamMembers } from "../server/team.js";
 import { EventType, emitEvent, normaliseHookPayload } from "../store/events.js";
+import {
+  runSelfDocumentPhase1,
+  runSelfDocumentPhase2,
+  runSelfDocumentPhase3,
+} from "./commands/self-document.js";
 
 const WIKI_SUBDIRS = [
   "error_pattern",
@@ -824,6 +829,57 @@ program
       process.exit(1);
     }
   });
+
+program
+  .command("self-document")
+  .description("Bootstrap the KB: structural skeleton + MD corpus + ghost knowledge")
+  .option("--project-dir <path>", "Project root directory", process.cwd())
+  .option("--ghost-count <n>", "Number of ghost entries to generate", "10")
+  .option("--skip-ghosts", "Skip Phase 3 (no LLM calls)", false)
+  .action(
+    async (opts: {
+      projectDir: string;
+      ghostCount: string;
+      skipGhosts: boolean;
+    }) => {
+      try {
+        const config = loadConfig();
+        const db = initDatabase(config.dbPath);
+        process.stdout.write("gyst self-document\n\n");
+
+        process.stdout.write("Phase 1 — Structural skeleton…\n");
+        const p1 = await runSelfDocumentPhase1(db, opts.projectDir);
+        process.stdout.write(`  ${p1.created} created, ${p1.updated} updated\n`);
+
+        process.stdout.write("Phase 2 — MD corpus…\n");
+        const p2 = await runSelfDocumentPhase2(db, opts.projectDir);
+        process.stdout.write(
+          `  ${p2.created} ingested, ${p2.updated} updated, ${p2.skipped} skipped\n`,
+        );
+
+        if (!opts.skipGhosts) {
+          const apiKey = process.env["ANTHROPIC_API_KEY"];
+          if (!apiKey) {
+            process.stdout.write("Phase 3 skipped — ANTHROPIC_API_KEY not set\n");
+          } else {
+            const n = parseInt(opts.ghostCount, 10);
+            process.stdout.write(`Phase 3 — Ghost knowledge (top ${n})…\n`);
+            const p3 = await runSelfDocumentPhase3(db, opts.projectDir, n, apiKey);
+            process.stdout.write(
+              `  ${p3.written} ghost entries written (${p3.tokensUsed} tokens)\n`,
+            );
+          }
+        }
+
+        process.stdout.write("\nDone.\n");
+        db.close();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        process.stdout.write(`Error: ${message}\n`);
+        process.exit(1);
+      }
+    },
+  );
 
 // Improve the "unknown command" error with a did-you-mean hint.
 program.on("command:*", (operands: string[]) => {

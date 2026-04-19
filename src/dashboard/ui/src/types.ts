@@ -148,4 +148,14 @@ export interface DriftReport {
 }
 
 export type Mode = 'team' | 'personal';
-export type View = 'feed' | 'search' | 'queue' | 'graph' | 'team';
+export type View = 'feed' | 'search' | 'queue' | 'graph' | 'docs' | 'team';
+
+export interface DocEntry {
+  id: string;
+  title: string;
+  content: string;
+  file_path: string | null;
+  created_at: string;
+  last_confirmed: string;
+  confidence: number;
+}

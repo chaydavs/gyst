@@ -1,4 +1,4 @@
-import type { Entry, EntryDetail, TeamMember, TeamInfo, ReviewItem, Stats, Analytics, MemberStats, SearchResult, PendingInvite, TeamActivity, DriftReport } from './types';
+import type { Entry, EntryDetail, TeamMember, TeamInfo, ReviewItem, Stats, Analytics, MemberStats, SearchResult, PendingInvite, TeamActivity, DriftReport, DocEntry } from './types';
 
 async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, {
@@ -75,6 +75,10 @@ export const api = {
   getAnchors: () => apiFetch<Array<{ id: number; query: string; lastOk: boolean }>>('/api/drift/anchors'),
   addAnchor: (query: string) => apiFetch<{ ok: boolean }>('/api/drift/anchors', { method: 'POST', body: JSON.stringify({ query }) }),
   removeAnchor: (id: number) => apiFetch<{ ok: boolean }>(`/api/drift/anchors/${id}`, { method: 'DELETE' }),
+
+  // Docs
+  getDocs: () => apiFetch<DocEntry[]>('/api/docs'),
+  getDoc: (id: string) => apiFetch<DocEntry>(`/api/docs/${encodeURIComponent(id)}`),
 
   // Misc
   getDetectedTools: () => apiFetch<Array<{ name: string; detected: boolean; configPath: string }>>('/api/tools/detected'),

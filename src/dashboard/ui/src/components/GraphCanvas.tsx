@@ -30,15 +30,16 @@ interface GraphCanvasProps {
   refreshKey?: number;
 }
 
-// Monochrome-friendly type shades — enough visual distinction without color
-const TYPE_SHADE: Record<string, string> = {
-  ghost_knowledge: '#111',
-  error_pattern:  '#444',
-  decision:       '#666',
-  convention:     '#888',
-  learning:       '#aaa',
-  structural:     '#ccc',
+// Distinct per-type colors for quick visual scanning
+const TYPE_COLOR: Record<string, string> = {
+  ghost_knowledge: '#7c3aed',
+  error_pattern:   '#dc2626',
+  decision:        '#eab308',
+  convention:      '#d97706',
+  learning:        '#059669',
+  md_doc:          '#0891b2',
 };
+const STRUCTURAL_COLOR = '#6366f1';
 
 const REPULSION   = 2000;
 const SPRING_K    = 0.04;
@@ -140,8 +141,8 @@ function drawGraph(
     const isHovered = node.id === hoveredId;
     const isConnected = connectedIds.has(node.id);
     const isDimmed = hoveredId && !isHovered && !isConnected;
-    const shade = node.layer === 'structural' ? '#ccc' : (TYPE_SHADE[node.type] ?? '#888');
-    const fill = isDimmed ? '#ebebeb' : (isHovered ? '#000' : shade);
+    const color = node.layer === 'structural' ? STRUCTURAL_COLOR : (TYPE_COLOR[node.type] ?? '#888');
+    const fill = isDimmed ? '#ebebeb' : color;
 
     if (node.layer === 'structural') {
       // Structural nodes (Graphify code graph): small squares
@@ -149,7 +150,7 @@ function drawGraph(
       ctx.fillStyle = fill;
       ctx.fillRect(node.x - s / 2, node.y - s / 2, s, s);
       if (isHovered) {
-        ctx.strokeStyle = '#000';
+        ctx.strokeStyle = color;
         ctx.lineWidth = 1.5;
         ctx.strokeRect(node.x - s / 2, node.y - s / 2, s, s);
       }
@@ -160,7 +161,7 @@ function drawGraph(
       ctx.fillStyle = fill;
       ctx.fill();
       if (isHovered) {
-        ctx.strokeStyle = '#000';
+        ctx.strokeStyle = color;
         ctx.lineWidth = 2;
         ctx.stroke();
       }
@@ -215,17 +216,30 @@ export default function GraphCanvas({ onNodeClick, refreshKey }: GraphCanvasProp
         const w = canvas?.offsetWidth ?? 800;
         const h = canvas?.offsetHeight ?? 600;
 
-        nodesRef.current = data.nodes.map(n => ({
-          id: n.id,
-          type: n.type,
-          title: n.title,
-          layer: (n.layer === 'structural' ? 'structural' : 'curated') as 'curated' | 'structural',
-          x: w / 2 + (Math.random() - 0.5) * 300,
-          y: h / 2 + (Math.random() - 0.5) * 300,
-          vx: 0,
-          vy: 0,
-          radius: n.layer === 'structural' ? 4 : 8,
-        }));
+        // Compute degree per node from edge list
+        const connectionCounts = new Map<string, number>();
+        for (const edge of data.edges) {
+          connectionCounts.set(edge.source, (connectionCounts.get(edge.source) ?? 0) + 1);
+          connectionCounts.set(edge.target, (connectionCounts.get(edge.target) ?? 0) + 1);
+        }
+
+        nodesRef.current = data.nodes.map(n => {
+          const count = connectionCounts.get(n.id) ?? 0;
+          const isGhost = n.type === 'ghost_knowledge';
+          const base = n.layer === 'structural' ? 3 : 5;
+          const radius = isGhost ? 20 : Math.min(20, Math.max(base, base + count * 1.5));
+          return {
+            id: n.id,
+            type: n.type,
+            title: n.title,
+            layer: (n.layer === 'structural' ? 'structural' : 'curated') as 'curated' | 'structural',
+            x: w / 2 + (Math.random() - 0.5) * 300,
+            y: h / 2 + (Math.random() - 0.5) * 300,
+            vx: 0,
+            vy: 0,
+            radius,
+          };
+        });
         edgesRef.current = data.edges.map(e => ({
           source: e.source,
           target: e.target,
@@ -357,9 +371,9 @@ export default function GraphCanvas({ onNodeClick, refreshKey }: GraphCanvasProp
         }}
       >
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: '#bbb', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '2px' }}>Knowledge</span>
-        {Object.entries(TYPE_SHADE).map(([type, shade]) => (
+        {Object.entries(TYPE_COLOR).map(([type, color]) => (
           <div key={type} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: shade, flexShrink: 0 }} />
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: color, flexShrink: 0 }} />
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               {type.replace(/_/g, ' ')}
             </span>
@@ -368,7 +382,7 @@ export default function GraphCanvas({ onNodeClick, refreshKey }: GraphCanvasProp
         <div style={{ height: '1px', background: 'var(--line)', margin: '4px 0 2px' }} />
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: '#bbb', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '2px' }}>Code graph (Graphify)</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ width: '8px', height: '8px', background: '#ccc', flexShrink: 0 }} />
+          <span style={{ width: '8px', height: '8px', background: STRUCTURAL_COLOR, flexShrink: 0 }} />
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             file / function
           </span>

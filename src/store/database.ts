@@ -109,7 +109,7 @@ const PRAGMAS = [
  */
 const ENTRIES_DDL = `CREATE TABLE IF NOT EXISTS entries (
     id               TEXT    NOT NULL PRIMARY KEY,
-    type             TEXT    NOT NULL CHECK (type IN ('error_pattern','convention','decision','learning','ghost_knowledge','structural')),
+    type             TEXT    NOT NULL CHECK (type IN ('error_pattern','convention','decision','learning','ghost_knowledge','structural','md_doc')),
     title            TEXT    NOT NULL,
     content          TEXT    NOT NULL DEFAULT '',
     file_path        TEXT,
@@ -126,7 +126,8 @@ const ENTRIES_DDL = `CREATE TABLE IF NOT EXISTS entries (
                             CHECK (scope IN ('personal','team','project')),
     developer_id     TEXT,
     metadata         TEXT,
-    markdown_path    TEXT
+    markdown_path    TEXT,
+    source_file_hash TEXT
   )`;
 
 const RELATIONSHIPS_DDL = `CREATE TABLE IF NOT EXISTS relationships (
@@ -432,6 +433,76 @@ export function initDatabase(path: string = ".gyst/wiki.db"): Database {
       db.run("ALTER TABLE event_queue ADD COLUMN session_id TEXT");
     } catch {
       // Column already exists — safe to ignore.
+    }
+
+    // Migration: expand entries type CHECK to include 'md_doc' and add source_file_hash.
+    // SQLite CHECK constraints require a table rebuild to modify.
+    try {
+      const row = db.query<{ sql: string }, []>(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='entries'"
+      ).get();
+      if (row && !row.sql.includes("'md_doc'")) {
+        // Disable FK enforcement for the duration of this table-swap so that
+        // tables referencing entries (e.g. relationships ON DELETE CASCADE) are
+        // not inadvertently triggered when we drop the old entries table.
+        // FK enforcement is re-enabled after the transaction completes.
+        db.run("PRAGMA foreign_keys = OFF");
+        try {
+        db.transaction(() => {
+          db.run(`CREATE TABLE entries_new (
+            id               TEXT    NOT NULL PRIMARY KEY,
+            type             TEXT    NOT NULL CHECK (type IN ('error_pattern','convention','decision','learning','ghost_knowledge','structural','md_doc')),
+            title            TEXT    NOT NULL,
+            content          TEXT    NOT NULL DEFAULT '',
+            file_path        TEXT,
+            error_signature  TEXT,
+            confidence       REAL    NOT NULL DEFAULT 0.5,
+            source_count     INTEGER NOT NULL DEFAULT 1,
+            source_tool      TEXT,
+            created_at       TEXT    NOT NULL,
+            last_confirmed   TEXT    NOT NULL,
+            superseded_by    TEXT,
+            status           TEXT    NOT NULL DEFAULT 'active'
+                                    CHECK (status IN ('active','stale','conflicted','archived','consolidated')),
+            scope            TEXT    NOT NULL DEFAULT 'team'
+                                    CHECK (scope IN ('personal','team','project')),
+            developer_id     TEXT,
+            metadata         TEXT,
+            markdown_path    TEXT,
+            source_file_hash TEXT
+          )`);
+          // Copy all rows, supplying NULL for any columns absent in the old
+          // table. We name every column explicitly and detect which optional
+          // columns (markdown_path) already exist so the SELECT is always
+          // column-count–safe regardless of the legacy schema version.
+          const oldCols = db
+            .query<{ name: string }, []>("PRAGMA table_info(entries)")
+            .all()
+            .map((c) => c.name);
+          const hasMarkdownPath = oldCols.includes("markdown_path");
+          db.run(`INSERT INTO entries_new
+            (id, type, title, content, file_path, error_signature,
+             confidence, source_count, source_tool, created_at, last_confirmed,
+             superseded_by, status, scope, developer_id, metadata,
+             markdown_path, source_file_hash)
+            SELECT
+              id, type, title, content, file_path, error_signature,
+              confidence, source_count, source_tool, created_at, last_confirmed,
+              superseded_by, status, scope, developer_id, metadata,
+              ${hasMarkdownPath ? "markdown_path" : "NULL"}, NULL
+            FROM entries`);
+          db.run("DROP TABLE entries");
+          db.run("ALTER TABLE entries_new RENAME TO entries");
+        })();
+        } finally {
+          db.run("PRAGMA foreign_keys = ON");
+        }
+        logger.info("Migrated entries table: added md_doc type and source_file_hash");
+      }
+    } catch (err) {
+      logger.warn("entries md_doc migration skipped", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
 
     // Migration: move any existing type='structural' rows out of the curated
