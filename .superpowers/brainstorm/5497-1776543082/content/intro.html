@@ -1,0 +1,23 @@
+<h2>Making Gyst Self-Documenting</h2>
+<p class="subtitle">Brainstorming: How should teams structure KB entries so AI agents never need to read source code?</p>
+
+<div class="section">
+  <p class="label">The Problem</p>
+  <p>When an AI agent calls <code>recall("how does the knowledge graph work")</code> in a gyst-powered codebase, it should get a complete answer — not silence that forces it to read 5 source files.</p>
+  <p>Today, even gyst itself doesn't document its own architecture in its KB. The fix isn't just writing more entries — it's building a <strong>pattern</strong> that any team can follow.</p>
+</div>
+
+<div class="section">
+  <p class="label">What We're Designing</p>
+  <ul>
+    <li>What AI agents actually look for when they call <code>recall()</code></li>
+    <li>Entry structure (titles, content, tags, graph links) that maximizes hit rate</li>
+    <li>Patterns: ghost knowledge, module summaries, Q&amp;A entries, graph connectivity</li>
+    <li>A <code>gyst self-document</code> command or workflow to generate/maintain these entries</li>
+  </ul>
+</div>
+
+<div class="section" style="background: #f0f9ff; border-radius: 8px; padding: 1rem; border-left: 3px solid #3b82f6;">
+  <p class="label">Scope (User chose B)</p>
+  <p>Build a <strong>reusable pattern</strong> — gyst becomes the reference implementation. Any team adopting gyst can run one command and get a self-documenting codebase.</p>
+</div>

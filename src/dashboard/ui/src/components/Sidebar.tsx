@@ -224,7 +224,6 @@ export default function Sidebar({
       {/* ── 4. Drift Score — always render; DriftSection shows loading/empty state ── */}
       <DriftSection
         drift={drift ?? { score: 0, trend: 'unknown', recent7d: { zeroResultRate: 0, avgResults: 0, recallCount: 0, learnCount: 0 }, baseline30d: { zeroResultRate: 0, avgResults: 0, recallCount: 0, learnCount: 0 }, staleEntries: 0, fatigueWarning: false, anchorResults: [], recommendations: [] }}
-          drift={drift}
           newAnchor={newAnchor}
           setNewAnchor={setNewAnchor}
           anchorSaving={anchorSaving}

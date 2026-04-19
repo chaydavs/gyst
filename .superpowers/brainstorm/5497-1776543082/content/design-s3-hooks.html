@@ -1,0 +1,80 @@
+<h2>Design: Section 3 — Hook Capture Expansion</h2>
+<p class="subtitle">Gyst currently uses 6 hooks. These 6 additional hooks unlock far richer context capture.</p>
+
+<div class="section">
+  <p class="label">Currently wired (6 hooks)</p>
+  <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.5rem;">
+    <span style="background:#374151;color:#d1d5db;padding:0.25rem 0.75rem;border-radius:99px;font-size:0.8em">SessionStart</span>
+    <span style="background:#374151;color:#d1d5db;padding:0.25rem 0.75rem;border-radius:99px;font-size:0.8em">UserPromptSubmit</span>
+    <span style="background:#374151;color:#d1d5db;padding:0.25rem 0.75rem;border-radius:99px;font-size:0.8em">PreToolUse</span>
+    <span style="background:#374151;color:#d1d5db;padding:0.25rem 0.75rem;border-radius:99px;font-size:0.8em">PostToolUse</span>
+    <span style="background:#374151;color:#d1d5db;padding:0.25rem 0.75rem;border-radius:99px;font-size:0.8em">Stop</span>
+    <span style="background:#374151;color:#d1d5db;padding:0.25rem 0.75rem;border-radius:99px;font-size:0.8em">SubagentStop</span>
+  </div>
+</div>
+
+<div class="options" data-multiselect style="margin-top:1.5rem;">
+
+  <div class="option" data-choice="precompact" onclick="toggleSelect(this)">
+    <div class="letter" style="background:#7c3aed">★</div>
+    <div class="content">
+      <h3>PreCompact → Harvest before context is lost</h3>
+      <p><strong>Highest value new hook.</strong> Fires right before context compaction erases conversation history. Gyst reads <code>transcript_path</code> (available on every hook) and runs a full harvest pass before the context window is cleared. This is the only moment where the full session context is still intact.</p>
+      <p style="font-size:0.85em;color:#6b7280;margin-top:0.5rem">KB entries created: learnings, decisions, architecture notes from the full conversation</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="fileinstructions" onclick="toggleSelect(this)">
+    <div class="letter" style="background:#0891b2">2</div>
+    <div class="content">
+      <h3>InstructionsLoaded + FileChanged → Auto-ingest MD files</h3>
+      <p><strong>InstructionsLoaded</strong> fires when CLAUDE.md or <code>.claude/rules/*.md</code> load — provides <code>file_path</code> and <code>memory_type</code>. Auto-ingest these immediately as MD doc entries (Layer 2).</p>
+      <p style="margin-top:0.5rem"><strong>FileChanged</strong> can watch any file pattern. Configure it on <code>**/*.md</code> to auto-reingest any markdown file the moment it changes on disk — plans, specs, ADRs, architecture docs, all ingested instantly without any CLI command.</p>
+      <p style="font-size:0.85em;color:#6b7280;margin-top:0.5rem">KB entries created: md_doc type, source_file pointer, auto-linked to related structural nodes</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="failure" onclick="toggleSelect(this)">
+    <div class="letter" style="background:#dc2626">3</div>
+    <div class="content">
+      <h3>PostToolUseFailure → Auto-extract error patterns</h3>
+      <p>Fires when any tool fails with an error. Provides <code>tool_name</code>, <code>tool_input</code>, and <code>error</code>. Run gyst's error normalizer on the error string and auto-create an <code>error_pattern</code> KB entry — no agent involvement needed. Real failures from real sessions become searchable patterns immediately.</p>
+      <p style="font-size:0.85em;color:#6b7280;margin-top:0.5rem">KB entries created: error_pattern type, normalized signature, linked to affected file</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="preread" onclick="toggleSelect(this)">
+    <div class="letter" style="background:#2563eb">4</div>
+    <div class="content">
+      <h3>PreToolUse(Read) → Detect KB misses in real time</h3>
+      <p>When an agent calls <code>Read</code> on a source file, that's a <strong>signal the KB failed</strong> — the agent couldn't get what it needed from <code>recall()</code>. Capture: which file was read, what the preceding prompt was (from <code>transcript_path</code>), and queue a documentation job for that file. After the session, those queued files get auto-documented first.</p>
+      <p style="font-size:0.85em;color:#6b7280;margin-top:0.5rem">Side effect: KB miss rate becomes measurable — feeds directly into drift score</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="subagentstart" onclick="toggleSelect(this)">
+    <div class="letter" style="background:#059669">5</div>
+    <div class="content">
+      <h3>SubagentStart → Inject ghost knowledge into every subagent</h3>
+      <p>Fires when any subagent spawns, provides <code>agent_type</code>. Return <code>additionalContext</code> with the ghost knowledge + top conventions for that agent's type. Currently, subagents start cold — they don't inherit the parent's gyst context. This gives every spawned agent immediate architectural awareness.</p>
+      <p style="font-size:0.85em;color:#6b7280;margin-top:0.5rem">Impact: subagents stop reading CLAUDE.md repeatedly; ghost knowledge lands in their context directly</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="postcompact" onclick="toggleSelect(this)">
+    <div class="letter" style="background:#d97706">6</div>
+    <div class="content">
+      <h3>PostCompact → Verify harvest completed, snapshot drift</h3>
+      <p>Fires after compaction. Verify the PreCompact harvest landed successfully, then take a drift snapshot so the new (post-compaction) session starts with a fresh baseline. Lightweight — just a confirmation + <code>gyst status</code> ping.</p>
+      <p style="font-size:0.85em;color:#6b7280;margin-top:0.5rem">Ensures compaction never silently loses knowledge</p>
+    </div>
+  </div>
+
+</div>
+
+<div style="background:#f0fdf4;border-radius:8px;padding:1rem;border-left:3px solid #22c55e;margin-top:1.5rem;">
+  <p class="label">Net result: 12 hooks total, full lifecycle coverage</p>
+  <p>With these additions: gyst captures at <strong>every meaningful event</strong> — session start, prompt submit, every tool call, every failure, every file change, every MD load, every compaction, every subagent lifecycle. The knowledge graph updates in real time as work happens, not just at session end.</p>
+</div>
+
+<p style="margin-top:1rem;color:#6b7280;font-size:0.9em">Click the hooks you want to include. Recommend all 6 — each covers a distinct capture gap.</p>

@@ -1,0 +1,81 @@
+<h2>Design: Section 4 — MD Ingestion + Self-Document Command</h2>
+<p class="subtitle">How markdown files flow into the KB, and what <code>gyst self-document</code> does end-to-end</p>
+
+<div class="section">
+  <p class="label">MD File Ingestion Pipeline (runs automatically)</p>
+  <div style="display:grid;gap:0.5rem;margin-top:0.5rem;">
+
+    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:1rem;">
+      <strong style="font-size:0.9em">Trigger 1 — FileChanged hook</strong>
+      <p style="margin:0.4rem 0 0;font-size:0.85em;color:#374151">Watches <code>**/*.md</code>. Any markdown file saved on disk fires this hook immediately. No polling, no CLI command needed. The hook script calls <code>gyst emit md_changed --file &lt;path&gt;</code> which queues the file for ingestion.</p>
+    </div>
+
+    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:1rem;">
+      <strong style="font-size:0.9em">Trigger 2 — InstructionsLoaded hook</strong>
+      <p style="margin:0.4rem 0 0;font-size:0.85em;color:#374151">When Claude loads CLAUDE.md or any <code>.claude/rules/*.md</code> file, gyst auto-ingests it. Provides <code>file_path</code> + <code>memory_type</code> — stored with high confidence (0.95) since these are intentionally written guidelines.</p>
+    </div>
+
+    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:1rem;">
+      <strong style="font-size:0.9em">Trigger 3 — gyst self-document / codebase scan</strong>
+      <p style="margin:0.4rem 0 0;font-size:0.85em;color:#374151">Glob scan for all <code>*.md</code> files. Hash-check each against <code>source_file_hash</code> stored in DB — skip if unchanged, reingest if modified. Runs on install and on every <code>git pull</code> hook.</p>
+    </div>
+
+  </div>
+</div>
+
+<div class="section" style="margin-top:1.5rem;">
+  <p class="label">What gets extracted from each MD file</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-top:0.5rem;">
+    <div style="background:#f9fafb;border-radius:8px;padding:0.75rem;font-size:0.85em;">
+      <strong>Title</strong> → KB entry title<br>
+      <strong>H2/H3 headings</strong> → section summaries<br>
+      <strong>Frontmatter tags</strong> → KB tags<br>
+      <strong>File path</strong> → source_file pointer
+    </div>
+    <div style="background:#f9fafb;border-radius:8px;padding:0.75rem;font-size:0.85em;">
+      <strong>Named entities</strong> → graph edges to structural nodes<br>
+      <strong>Code blocks</strong> → pattern extraction<br>
+      <strong>Decision headers</strong> → auto-type as <code>decision</code><br>
+      <strong>File hash</strong> → change detection
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:1.5rem;">
+  <p class="label">gyst self-document — 3-phase bootstrap</p>
+  <div style="display:grid;gap:0.5rem;margin-top:0.5rem;">
+
+    <div style="border-left:3px solid #2563eb;padding:0.75rem 1rem;background:#eff6ff;border-radius:0 8px 8px 0;">
+      <strong>Phase 1 — Structural Skeleton</strong> (zero tokens)
+      <p style="margin:0.3rem 0 0;font-size:0.85em">Run Graphify AST on the entire codebase. Every module, function, and import relationship → KB entries (type: <code>structural</code>). Build the initial call graph edges. ~2s for a medium codebase.</p>
+    </div>
+
+    <div style="border-left:3px solid #0891b2;padding:0.75rem 1rem;background:#ecfeff;border-radius:0 8px 8px 0;">
+      <strong>Phase 2 — MD Corpus Scan</strong> (zero tokens)
+      <p style="margin:0.3rem 0 0;font-size:0.85em">Glob all <code>*.md</code> files, parse + ingest. Stores <code>source_file</code> pointer on every entry. Links to structural nodes via entity match. Ingests: README, CLAUDE.md, docs/**, decisions/**, specs/**, ARCHITECTURE.md, any plan docs.</p>
+    </div>
+
+    <div style="border-left:3px solid #7c3aed;padding:0.75rem 1rem;background:#f5f3ff;border-radius:0 8px 8px 0;">
+      <strong>Phase 3 — Ghost Knowledge Generation</strong> (Haiku, token-efficient)
+      <p style="margin:0.3rem 0 0;font-size:0.85em">Compute graph centrality. Top 10 nodes → one Haiku call each. Input: structural entry + linked MD docs + git blame summary. Output: a concise ghost entry ("How does [concept] work?") with infinite confidence. Total cost: ~10 Haiku calls × ~500 tokens = ~5000 tokens for the entire bootstrap.</p>
+    </div>
+
+  </div>
+</div>
+
+<div class="section" style="margin-top:1.5rem;">
+  <p class="label">Dashboard — Docs tab (new)</p>
+  <div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+    <div style="background:#f9fafb;padding:0.5rem 1rem;border-bottom:1px solid #e5e7eb;font-size:0.8em;font-weight:600;color:#374151">DOCS</div>
+    <div style="padding:0.75rem 1rem;font-size:0.85em;">
+      <p style="margin:0;color:#374151">Browseable list of all ingested MD files. Click any file → full rendered markdown in the right pane + linked KB entries shown alongside. Node in graph view is clickable → opens corresponding doc. Agents can surface doc links via <code>recall()</code> — response includes <code>source_file</code> path + relevant excerpt.</p>
+    </div>
+  </div>
+</div>
+
+<div style="background:#f0fdf4;border-radius:8px;padding:1rem;border-left:3px solid #22c55e;margin-top:1.5rem;">
+  <p class="label">End state: what an agent experiences</p>
+  <p style="margin:0;font-size:0.9em">Agent calls <code>recall("how does the search pipeline work")</code> → gets: ghost knowledge entry (always tier 0) + structural node for <code>store/search.ts</code> + ARCHITECTURE.md excerpt with the search section + any session learnings about RRF tuning. <strong>Zero source file reads needed.</strong></p>
+</div>
+
+<p style="margin-top:1rem;color:#6b7280;font-size:0.9em">Does this ingestion design look right? If so, I'll write the full spec doc and we can move to implementation planning.</p>

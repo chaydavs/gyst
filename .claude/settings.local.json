@@ -226,7 +226,8 @@
       "Bash(curl -sI http://localhost:3579/assets/index-DZ7w96ej.js)",
       "Bash(lsof -i:3579 -i:3580)",
       "Bash(curl -s \"http://localhost:3579/\")",
-      "Bash(curl -sI \"http://localhost:3579/\")"
+      "Bash(curl -sI \"http://localhost:3579/\")",
+      "Bash(curl -s http://localhost:55745)"
     ]
   },
   "enableAllProjectMcpServers": true,

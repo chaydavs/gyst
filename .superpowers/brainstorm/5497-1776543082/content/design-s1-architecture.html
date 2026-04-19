@@ -1,0 +1,43 @@
+<h2>Design: Section 1 — Architecture Overview</h2>
+<p class="subtitle">Four layers working together so agents never read source files</p>
+
+<div class="mockup">
+  <div class="mockup-header">The 4-Layer Self-Documenting KB</div>
+  <div class="mockup-body">
+    <div style="display:grid;gap:0.75rem;">
+
+      <div style="background:#7c3aed;color:white;border-radius:8px;padding:1rem;">
+        <strong>Layer 0 — Ghost Knowledge (always surfaces, infinite confidence)</strong>
+        <p style="margin:0.4rem 0 0;font-size:0.85em;opacity:0.9">Auto-generated from Graphify: top 10 most graph-central nodes become ghost entries. "How does the search pipeline work?", "What are the three graph layers?", "How does RRF fusion work?" — guaranteed tier 0 retrieval. Updated on structural change detection.</p>
+      </div>
+
+      <div style="background:#2563eb;color:white;border-radius:8px;padding:1rem;">
+        <strong>Layer 1 — Structural Skeleton (Graphify → KB promotion)</strong>
+        <p style="margin:0.4rem 0 0;font-size:0.85em;opacity:0.9">Every module/file in the codebase gets a KB entry auto-derived from its exports, imports, and git blame. Zero LLM tokens. Runs on every git commit. Entries link to each other via call-graph edges — traversal from any entry reaches the full module context.</p>
+      </div>
+
+      <div style="background:#0891b2;color:white;border-radius:8px;padding:1rem;">
+        <strong>Layer 2 — MD File Corpus (plans, specs, ADRs, docs)</strong>
+        <p style="margin:0.4rem 0 0;font-size:0.85em;opacity:0.9">All markdown files auto-ingested: README, ARCHITECTURE, decisions/*, docs/**, CLAUDE.md, superpowers/specs/**. Stored with source_file pointer. Re-ingested on file change (hash check). Shown in dashboard "Docs" tab. Agents retrieve full content + surrounding KB entries in one recall().</p>
+      </div>
+
+      <div style="background:#059669;color:white;border-radius:8px;padding:1rem;">
+        <strong>Layer 3 — Harvest Corpus (WHY, decisions, failure patterns)</strong>
+        <p style="margin:0.4rem 0 0;font-size:0.85em;opacity:0.9">Extracted from agent sessions (PostToolUse + Stop), git commit messages (post-commit hook), and PR descriptions. Confidence-scored, decay-eligible. These are the entries that capture intent: why a decision was made, what failed, what the tradeoff was. Self-populates as the team works.</p>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:1.5rem;">
+  <p class="label">How a recall() call traverses all 4 layers</p>
+  <ol style="margin:0;padding-left:1.2rem;line-height:2;">
+    <li>Ghost entries (Layer 0) always pre-loaded in tier 0</li>
+    <li>BM25 + RRF fusion hits Layers 1, 2, and 3 simultaneously</li>
+    <li>Graph traversal walks edges from any match into related modules</li>
+    <li>Agent gets: structural context + MD docs + session learnings in one response</li>
+  </ol>
+</div>
+
+<p style="margin-top:1.5rem;color:#6b7280;font-size:0.9em">Does this 4-layer architecture feel right? Any layer you'd remove, add, or change before we go deeper?</p>
