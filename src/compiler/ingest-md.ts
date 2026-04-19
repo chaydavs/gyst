@@ -229,8 +229,8 @@ export function ingestMdFile(
     return { updated: true, entryId: existing.id };
   }
 
-  // Insert new entry
-  const id = `md_doc_${hash}`;
+  // Use path-based ID so two files with identical content don't collide
+  const id = `md_doc_${computeHash(relPath)}`;
   db.transaction(() => {
     db.run(
       `INSERT INTO entries
