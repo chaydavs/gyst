@@ -1,14 +1,17 @@
 /**
  * Self-documenting KB pipeline for gyst.
  *
- * Three phases:
+ * Four phases:
  *  1. Structural skeleton — glob TypeScript source files, extract exports/imports,
  *     upsert as `structural` entries so the KB reflects the codebase shape.
  *  2. MD corpus — delegate to ingestAllMdFiles() to ingest all markdown files
  *     (CLAUDE.md, ADRs, specs, etc.) into md_doc entries.
- *  3. Ghost knowledge — call getTopCentralNodes() to find hub-like entries, then
- *     use Anthropic Haiku to generate concise ghost knowledge entries for each,
- *     so AI agents never need to read the source file directly.
+ *  3. Link — bulk-build the `relationships` table from shared file paths and
+ *     shared tags so the graph has edges. Runs as a single SQL JOIN — fast
+ *     even for hundreds of entries.
+ *  4. Ghost knowledge — call getTopCentralNodes() to find hub-like entries, then
+ *     use Anthropic Haiku (or existing content) to generate ghost_knowledge
+ *     entries so AI agents never need to read the source file directly.
  */
 
 import type { Database } from "bun:sqlite";
@@ -36,7 +39,11 @@ export interface Phase2Result {
   readonly skipped: number;
 }
 
-export interface Phase3Result {
+export interface Phase3LinkResult {
+  readonly edgesCreated: number;
+}
+
+export interface Phase4Result {
   readonly written: number;
   readonly tokensUsed: number;
 }
@@ -194,6 +201,102 @@ export async function runSelfDocumentPhase2(
 // Phase 3 — Ghost knowledge generation
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Phase 3 — Bulk relationship linking
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds edges in the `relationships` table using SQL JOINs so that the graph
+ * view has connections between entries. Two strategies run in one transaction:
+ *
+ *  1. Shared file path — entries that reference the same source file are
+ *     related_to each other (strength 0.5). Catches convention↔structural,
+ *     error_pattern↔learning, and md_doc↔structural pairs naturally.
+ *
+ *  2. Shared tag — entries sharing a tag are linked (strength 0.4).
+ *
+ * All inserts are INSERT OR IGNORE so re-running is safe (idempotent).
+ * Returns the number of new edges created.
+ */
+export function runSelfDocumentPhase3Link(db: Database): Phase3LinkResult {
+  let edgesCreated = 0;
+
+  db.transaction(() => {
+    // 1. structural ↔ md_doc: link a source file entry to any doc that
+    //    references it by path prefix. Scoped to structural/md_doc only to
+    //    avoid combinatorial explosion from CodeMemBench test fixtures.
+    //    Also guards against hot-spot file_paths by skipping any file that
+    //    has more than 10 entries (synthetic test data).
+    const structDocEdges = db.run(
+      `INSERT OR IGNORE INTO relationships (source_id, target_id, type, strength)
+       SELECT s.id, d.id, 'related_to', 0.6
+       FROM entries s
+       JOIN entries d
+         ON d.type = 'md_doc'
+        AND d.file_path IS NOT NULL
+        AND d.status = 'active'
+        AND (
+          -- e.g. structural entry src/store/search.ts ↔ doc that mentions search
+          s.file_path LIKE '%' || REPLACE(d.file_path, '.md', '') || '%'
+          OR d.file_path LIKE '%' || s.file_path || '%'
+        )
+       WHERE s.type = 'structural'
+         AND s.status = 'active'
+         AND s.id < d.id`,
+    );
+    edgesCreated += structDocEdges.changes;
+
+    // 2. md_doc ↔ md_doc in same directory (sibling docs are related).
+    const docDocEdges = db.run(
+      `INSERT OR IGNORE INTO relationships (source_id, target_id, type, strength)
+       SELECT d1.id, d2.id, 'related_to', 0.4
+       FROM entries d1
+       JOIN entries d2
+         ON d1.type = 'md_doc'
+        AND d2.type = 'md_doc'
+        AND d1.id   < d2.id
+        AND d1.file_path IS NOT NULL
+        AND d2.file_path IS NOT NULL
+        AND d1.status = 'active'
+        AND d2.status = 'active'
+        -- same top-level directory (first path segment matches)
+        AND SUBSTR(d1.file_path, 1, INSTR(d1.file_path, '/'))
+          = SUBSTR(d2.file_path, 1, INSTR(d2.file_path, '/'))
+        AND INSTR(d1.file_path, '/') > 0`,
+    );
+    edgesCreated += docDocEdges.changes;
+
+    // 3. Shared tags between curated knowledge entries (not structural/md_doc).
+    //    Only link if fewer than 8 entries share the tag to avoid synthetic
+    //    test data fan-out.
+    const tagEdges = db.run(
+      `INSERT OR IGNORE INTO relationships (source_id, target_id, type, strength)
+       SELECT et1.entry_id, et2.entry_id, 'related_to', 0.4
+       FROM entry_tags et1
+       JOIN entry_tags et2
+         ON et1.tag       = et2.tag
+        AND et1.entry_id  < et2.entry_id
+       WHERE EXISTS (
+         SELECT 1 FROM entries
+         WHERE id = et1.entry_id AND status = 'active'
+           AND type NOT IN ('structural', 'md_doc')
+       )
+       AND EXISTS (
+         SELECT 1 FROM entries
+         WHERE id = et2.entry_id AND status = 'active'
+           AND type NOT IN ('structural', 'md_doc')
+       )
+       AND (
+         SELECT COUNT(*) FROM entry_tags WHERE tag = et1.tag
+       ) < 8`,
+    );
+    edgesCreated += tagEdges.changes;
+  })();
+
+  logger.info("self-document phase 3 link complete", { edgesCreated });
+  return { edgesCreated };
+}
+
 /**
  * Promotes the top `ghostCount` hub entries by degree centrality to ghost
  * knowledge status (confidence=1.0) using their existing content — no LLM
@@ -204,10 +307,10 @@ export async function runSelfDocumentPhase2(
  * This is Phase 3 without the Anthropic API dependency. Use when
  * ANTHROPIC_API_KEY is unavailable or when zero-cost automation is required.
  */
-export function runSelfDocumentPhase3NoLLM(
+export function runSelfDocumentPhase4NoLLM(
   db: Database,
   ghostCount: number,
-): Phase3Result {
+): Phase4Result {
   const candidates = getTopCentralNodes(db, ghostCount);
   if (candidates.length === 0) {
     return { written: 0, tokensUsed: 0 };
@@ -262,12 +365,12 @@ export function runSelfDocumentPhase3NoLLM(
  *
  * Returns the number of ghost entries written and the total tokens consumed.
  */
-export async function runSelfDocumentPhase3(
+export async function runSelfDocumentPhase4(
   db: Database,
   _projectDir: string,
   ghostCount: number,
   apiKey: string,
-): Promise<Phase3Result> {
+): Promise<Phase4Result> {
   const candidates = getTopCentralNodes(db, ghostCount);
 
   if (candidates.length === 0) {

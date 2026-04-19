@@ -38,8 +38,9 @@ import { EventType, emitEvent, normaliseHookPayload } from "../store/events.js";
 import {
   runSelfDocumentPhase1,
   runSelfDocumentPhase2,
-  runSelfDocumentPhase3,
-  runSelfDocumentPhase3NoLLM,
+  runSelfDocumentPhase3Link,
+  runSelfDocumentPhase4,
+  runSelfDocumentPhase4NoLLM,
 } from "./commands/self-document.js";
 
 const WIKI_SUBDIRS = [
@@ -860,19 +861,23 @@ program
           `  ${p2.created} ingested, ${p2.updated} updated, ${p2.skipped} skipped\n`,
         );
 
+        process.stdout.write("Phase 3 — Linking graph edges…\n");
+        const p3 = runSelfDocumentPhase3Link(db);
+        process.stdout.write(`  ${p3.edgesCreated} edges created\n`);
+
         if (!opts.skipGhosts) {
           const n = parseInt(opts.ghostCount, 10);
           const apiKey = process.env["ANTHROPIC_API_KEY"];
 
           if (opts.noLlm || !apiKey) {
-            process.stdout.write(`Phase 3 — Ghost knowledge (no-LLM, top ${n})…\n`);
-            const p3 = runSelfDocumentPhase3NoLLM(db, n);
-            process.stdout.write(`  ${p3.written} ghost entries promoted\n`);
+            process.stdout.write(`Phase 4 — Ghost knowledge (no-LLM, top ${n})…\n`);
+            const p4 = runSelfDocumentPhase4NoLLM(db, n);
+            process.stdout.write(`  ${p4.written} ghost entries promoted\n`);
           } else {
-            process.stdout.write(`Phase 3 — Ghost knowledge (Haiku, top ${n})…\n`);
-            const p3 = await runSelfDocumentPhase3(db, opts.projectDir, n, apiKey);
+            process.stdout.write(`Phase 4 — Ghost knowledge (Haiku, top ${n})…\n`);
+            const p4 = await runSelfDocumentPhase4(db, opts.projectDir, n, apiKey);
             process.stdout.write(
-              `  ${p3.written} ghost entries written (${p3.tokensUsed} tokens)\n`,
+              `  ${p4.written} ghost entries written (${p4.tokensUsed} tokens)\n`,
             );
           }
         }
