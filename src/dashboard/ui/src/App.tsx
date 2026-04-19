@@ -37,6 +37,16 @@ export default function App() {
     setView('search');
   }, []);
 
+  // ── Deep-link: ?entry=<id> opens a specific entry on load ─────────────────
+  useEffect(() => {
+    const entryId = new URLSearchParams(window.location.search).get('entry');
+    if (entryId) {
+      setSelectedEntryId(entryId);
+      // Clean up the URL without a page reload
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
   // ── Initial data load ──────────────────────────────────────────────────────
   useEffect(() => {
     const load = async () => {

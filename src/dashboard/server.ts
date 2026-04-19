@@ -672,7 +672,12 @@ export async function startDashboardServer(
                 }
 
                 try {
-                  const bm25Results = searchByBM25(db, q, scope);
+                  // scope='team' → team+project entries only (team member view)
+                  // no scope → solo/personal mode: include all entries (personal+team+project)
+                  // developerId is not available in the dashboard HTTP context, so we use
+                  // includeAllPersonal=true for solo mode to avoid filtering out personal entries.
+                  const includeAllPersonal = !scope || scope !== 'team';
+                  const bm25Results = searchByBM25(db, q, undefined, undefined, includeAllPersonal);
                   const topIds = bm25Results.slice(0, limit).map((r) => r.id);
 
                   interface EntrySnippetRow {

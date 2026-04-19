@@ -165,6 +165,17 @@ export default function EntryDrawer({ id, onClose, onPromote }: EntryDrawerProps
           Back
         </button>
         <button
+          onClick={() => {
+            const url = `${window.location.origin}/?entry=${encodeURIComponent(id)}`;
+            void navigator.clipboard.writeText(url).then(() => {
+              const btn = document.activeElement as HTMLButtonElement | null;
+              if (btn) {
+                const orig = btn.textContent;
+                btn.textContent = 'Copied!';
+                setTimeout(() => { if (btn.textContent === 'Copied!') btn.textContent = orig; }, 1500);
+              }
+            });
+          }}
           style={{
             display: 'flex',
             alignItems: 'center',
