@@ -341,6 +341,26 @@ The `FileChanged` hook re-ingests any `.md` file as soon as you save it. The `In
 
 ---
 
+## Screenshots
+
+**Knowledge Graph** — relationship topology across all entries. Node size = connection density; colors map to entry type (blue = structural, purple = ghost knowledge, red = error pattern, yellow = decision).
+
+![Knowledge Graph](docs/images/screenshot-graph.png)
+
+**Feed** — browse all entries with type filters and live search. Sidebar shows context economics, drift score, review queue, and team activity.
+
+![Feed](docs/images/screenshot-feed.png)
+
+**Docs** — ingested markdown files (specs, plans, ADRs, CLAUDE.md) browsable and searchable. Populated automatically by `gyst self-document`.
+
+![Docs](docs/images/screenshot-docs.png)
+
+**Team** — member roster, pending invites, server URL, and danger zone. One invite link connects a new developer's AI tools to the shared knowledge base.
+
+![Team](docs/images/screenshot-team.png)
+
+---
+
 ## How it works
 
 Five search strategies run in parallel on every query, fused with Reciprocal Rank Fusion:
