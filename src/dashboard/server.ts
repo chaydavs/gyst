@@ -251,12 +251,22 @@ function buildStats(db: Database): Record<string, unknown> {
     byScope[r.scope] = r.n;
   }
 
+  const avgConfidenceRow = db
+    .query<{ avg: number | null }, []>(
+      "SELECT AVG(confidence) AS avg FROM entries WHERE status='active' AND type NOT IN ('structural','md_doc')",
+    )
+    .get();
+  const avgConfidence = avgConfidenceRow?.avg != null
+    ? Math.round(avgConfidenceRow.avg * 100)
+    : null;
+
   return {
     ...counts,
     structuralNodes: structural?.nodes ?? 0,
     structuralEdges: structural?.edges ?? 0,
     byType,
     byScope,
+    avgConfidence,
   };
 }
 

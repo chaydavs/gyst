@@ -27,12 +27,9 @@ function getInitials(name: string): string {
     .join('');
 }
 
-function confidenceAvg(byType: Record<string, number>): string {
-  const values = Object.values(byType);
-  if (values.length === 0) return '—';
-  const sum = values.reduce((a, b) => a + b, 0);
-  const avg = Math.round((sum / values.length) * 100);
-  return `${avg}%`;
+function formatConfidence(avgConfidence: number | null | undefined): string {
+  if (avgConfidence == null) return '—';
+  return `${avgConfidence}%`;
 }
 
 const REASON_COLORS: Record<string, string> = {
@@ -168,22 +165,28 @@ export default function Sidebar({
           <PulseMetric value={stats?.entries ?? 0} label="Entries" />
           <PulseMetric value={entriesThisWeek} label="This Week" />
           <PulseMetric value={stats?.coRetrievals ?? 0} label="Co-retrievals" />
-          <PulseMetric value={confidenceAvg(stats?.byType ?? {})} label="Confidence" />
+          <PulseMetric value={formatConfidence(stats?.avgConfidence ?? null)} label="Confidence" />
         </div>
       </section>
 
       {/* ── 3. Context Economics ── */}
-      {analytics && (analytics.totalRecalls > 0 || analytics.totalLearns > 0) && (
+      {analytics && (
         <section style={{ padding: '20px 20px 18px', borderBottom: '1px solid var(--line-soft)' }}>
           <header style={SECTION_HEADER_STYLE}>
             <span>Context Economics</span>
           </header>
+          {analytics.totalRecalls === 0 && analytics.totalLearns === 0 ? (
+            <p style={{ fontFamily: 'var(--font-sans)', fontSize: '12px', color: 'var(--ink-faint)', fontStyle: 'italic', margin: 0 }}>
+              No activity yet. Metrics appear after your first recall or learn.
+            </p>
+          ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 12px' }}>
             <PulseMetric value={analytics.totalRecalls.toLocaleString()} label="Total Recalls" />
             <PulseMetric value={analytics.leverageRatio > 0 ? `${analytics.leverageRatio}×` : '—'} label="Leverage" />
             <PulseMetric value={analytics.recallsToday} label="Recalls Today" />
             <PulseMetric value={`${analytics.zeroResultRate}%`} label="Zero-result" />
           </div>
+          )}
           {analytics.totalTokensInvested > 0 && (
             <div style={{ marginTop: '14px', padding: '10px 12px', background: 'var(--sunken)', borderRadius: '6px', border: '1px solid var(--line-soft)' }}>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--ink-faint)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
@@ -218,9 +221,9 @@ export default function Sidebar({
         </section>
       )}
 
-      {/* ── 4. Drift Score ── */}
-      {drift && (
-        <DriftSection
+      {/* ── 4. Drift Score — always render; DriftSection shows loading/empty state ── */}
+      <DriftSection
+        drift={drift ?? { score: 0, trend: 'unknown', recent7d: { zeroResultRate: 0, avgResults: 0, recallCount: 0, learnCount: 0 }, baseline30d: { zeroResultRate: 0, avgResults: 0, recallCount: 0, learnCount: 0 }, staleEntries: 0, fatigueWarning: false, anchorResults: [], recommendations: [] }}
           drift={drift}
           newAnchor={newAnchor}
           setNewAnchor={setNewAnchor}
@@ -245,7 +248,6 @@ export default function Sidebar({
             } catch { /* best-effort */ }
           }}
         />
-      )}
 
       {/* ── 5. Team Members ── */}
       <section style={{ padding: '20px 20px 18px', borderBottom: '1px solid var(--line-soft)' }}>

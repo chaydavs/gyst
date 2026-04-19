@@ -84,6 +84,7 @@ export interface Stats {
   coRetrievals: number;
   byType: Record<string, number>;
   byScope: Record<string, number>;
+  avgConfidence: number | null;
 }
 
 export interface SearchResult {
