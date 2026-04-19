@@ -82,9 +82,11 @@ export function getTopCentralNodes(db: Database, n: number): CentralNode[] {
          GROUP BY target_id
        ) in_c ON in_c.id = e.id
        LEFT JOIN (
-         SELECT entry_a AS id, SUM(count) AS c FROM co_retrievals GROUP BY entry_a
-         UNION ALL
-         SELECT entry_b AS id, SUM(count) AS c FROM co_retrievals GROUP BY entry_b
+         SELECT id, SUM(c) AS c FROM (
+           SELECT entry_a AS id, SUM(count) AS c FROM co_retrievals GROUP BY entry_a
+           UNION ALL
+           SELECT entry_b AS id, SUM(count) AS c FROM co_retrievals GROUP BY entry_b
+         ) GROUP BY id
        ) co ON co.id = e.id
        WHERE e.type NOT IN ('ghost_knowledge', 'md_doc')
          AND e.status = 'active'
