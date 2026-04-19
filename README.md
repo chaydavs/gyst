@@ -1,6 +1,6 @@
 # Gyst
 
-**Team knowledge compiler for AI coding agents.**
+**Team knowledge layer for AI coding agents.**
 
 ---
 
