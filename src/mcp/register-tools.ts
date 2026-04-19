@@ -118,6 +118,20 @@ To be effective, you must follow these behavioral rules:
  * Every tool registered AFTER this call will have its handler wrapped to
  * emit a `tool_use` event to the database upon completion.
  */
+const DIM   = "\x1b[2m";
+const GREEN = "\x1b[32m";
+const CYAN  = "\x1b[36m";
+const RST   = "\x1b[0m";
+
+function mcpBadge(toolName: string): void {
+  const label = toolName.slice(0, 26).padEnd(26);
+  process.stderr.write(
+    `${DIM}┌─ ${GREEN}gyst${RST}${DIM} ──────────────────────┐${RST}\n` +
+    `${DIM}│${RST} ${CYAN}◆${RST} ${label} ${DIM}│${RST}\n` +
+    `${DIM}└─────────────────────────────┘${RST}\n`,
+  );
+}
+
 export function instrumentServer(server: McpServer, db: Database): void {
   const original = server.tool.bind(server) as typeof server.tool;
 
@@ -128,6 +142,7 @@ export function instrumentServer(server: McpServer, db: Database): void {
     if (typeof last === "function") {
       const cb = last as (...cbArgs: unknown[]) => Promise<unknown> | unknown;
       const wrapped = async (...cbArgs: unknown[]) => {
+        mcpBadge(name);
         try {
           return await cb(...cbArgs);
         } finally {

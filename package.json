@@ -1,6 +1,6 @@
 {
   "name": "gyst-mcp",
-  "version": "0.1.36",
+  "version": "0.1.37",
   "description": "Persistent memory for AI native teams. Shared memory across Claude Code, Cursor, Codex, and self-hosted LLMs via MCP. ",
   "type": "module",
   "main": "./dist/server.js",

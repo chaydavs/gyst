@@ -5,6 +5,7 @@
  */
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { badge } from "./badge.js";
 
 function readHookInput() {
   try { const r = readFileSync(0, "utf8").trim(); return r ? JSON.parse(r) : {}; }
@@ -14,6 +15,7 @@ function readHookInput() {
 try {
   readHookInput(); // consume stdin
   const gystBin = process.env.GYST_BIN || "gyst";
+  badge("injecting subagent context");
 
   let ghostContext = "";
   try {

@@ -7,7 +7,7 @@
  * type and signal. Fire-and-forget: never blocks the agent.
  */
 import { readFileSync } from "node:fs";
-import { emitAsync } from "./badge.js";
+import { badge, emitAsync } from "./badge.js";
 
 function readHookInput() {
   try {
@@ -29,6 +29,7 @@ try {
     cwd:       typeof hookInput.cwd        === "string" ? hookInput.cwd        : null,
   };
 
+  badge("recording prompt");
   emitAsync(gyst, "prompt", payload);
 
   process.stdout.write(JSON.stringify({ continue: true }));
