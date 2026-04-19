@@ -143,10 +143,12 @@ export async function runSelfDocumentPhase1(
     }
 
     if (existing) {
-      db.run(
-        "UPDATE entries SET title=?, content=?, source_file_hash=?, last_confirmed=? WHERE id=?",
-        [relPath, moduleContent, hash, now, id],
-      );
+      db.transaction(() => {
+        db.run(
+          "UPDATE entries SET title=?, content=?, source_file_hash=?, last_confirmed=? WHERE id=?",
+          [relPath, moduleContent, hash, now, id],
+        );
+      })();
       updated++;
     } else {
       db.transaction(() => {
@@ -271,20 +273,22 @@ export async function runSelfDocumentPhase3(
 
       if (!text) continue;
 
-      db.run(
-        `INSERT OR REPLACE INTO entries
-           (id, type, title, content, confidence, source_count, created_at,
-            last_confirmed, status, scope, metadata)
-         VALUES (?, 'ghost_knowledge', ?, ?, 9999, 1, ?, ?, 'active', 'team', ?)`,
-        [
-          ghostId,
-          ghostTitle,
-          text,
-          now,
-          now,
-          JSON.stringify({ sourceId: entry.id, generatedAt: now }),
-        ],
-      );
+      db.transaction(() => {
+        db.run(
+          `INSERT OR REPLACE INTO entries
+             (id, type, title, content, confidence, source_count, created_at,
+              last_confirmed, status, scope, metadata)
+           VALUES (?, 'ghost_knowledge', ?, ?, 1.0, 1, ?, ?, 'active', 'team', ?)`,
+          [
+            ghostId,
+            ghostTitle,
+            text,
+            now,
+            now,
+            JSON.stringify({ sourceId: entry.id, generatedAt: now }),
+          ],
+        );
+      })();
       written++;
     } catch (err) {
       logger.warn("ghost generation failed", {
