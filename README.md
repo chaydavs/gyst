@@ -36,13 +36,17 @@ Two routes: let an agent do everything, or set it up yourself.
 Open your AI tool in a project and paste this:
 
 ```
-Install and set up Gyst for this project. Run `npx gyst-mcp install`,
-then scan the codebase — read the README, package.json, recent git
-history, and key source files. Use the learn tool to record conventions,
-decisions, error patterns, and anything a new developer should know.
+Install and set up Gyst for this project:
+
+1. Run `npx gyst-mcp install` and restart your MCP connection when it finishes.
+2. Run `gyst self-document --skip-ghosts` to bootstrap the knowledge base from
+   the codebase structure and all markdown files (specs, plans, ADRs, CLAUDE.md).
+3. Scan the project — read the README, package.json, recent git history, and
+   key source files. Use the learn tool to record conventions, decisions, error
+   patterns, and anything a new developer should know.
 ```
 
-The agent runs the installer (which registers itself as an MCP server), restarts the connection, and immediately populates the knowledge base. Every future session in the project automatically has Gyst context injected at startup.
+The agent runs the installer, bootstraps the KB from your codebase in seconds (zero LLM calls with `--skip-ghosts`), then enriches it with session knowledge. Every future session automatically has Gyst context injected at startup.
 
 ---
 
@@ -56,7 +60,15 @@ npx gyst-mcp install
 
 Restart your AI tool when it finishes.
 
-**2. Populate the knowledge base**
+**2. Bootstrap from codebase**
+
+```bash
+gyst self-document --skip-ghosts
+```
+
+This scans TypeScript source files and all markdown docs (specs, plans, ADRs, CLAUDE.md) and loads them into the KB — zero LLM calls, under 5 seconds.
+
+**3. Enrich with agent knowledge**
 
 Tell your agent:
 
@@ -66,7 +78,7 @@ history, and key source files. Use the learn tool to record conventions,
 decisions, error patterns, and anything a new developer should know.
 ```
 
-**3. Use it**
+**4. Use it**
 
 ```bash
 gyst recall "what should I know about this codebase"

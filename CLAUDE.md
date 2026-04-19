@@ -88,13 +88,19 @@ gyst/
 - `configure` — read/write project configuration
 
 ### Hook Coverage (plugin/hooks/hooks.json)
-All six Claude Code hook events are registered:
+All 12 Claude Code hook events are registered:
 - `SessionStart` — inject-context: injects ghost knowledge + top conventions at session start
 - `UserPromptSubmit` — emit prompt event for knowledge classification (fire-and-forget)
-- `PreToolUse` — status badge on stderr + pre_tool_use event (fire-and-forget)
+- `InstructionsLoaded` — auto-ingest CLAUDE.md / instructions files into the KB
+- `PreToolUse` — status badge on stderr + pre_tool_use event; tracks Read tool as KB miss signal
 - `PostToolUse` — emit tool_use + sidecar ADR/plan detection (concurrent detached spawns)
+- `PostToolUseFailure` — extract error_pattern from failed tool calls (fire-and-forget)
+- `SubagentStart` — inject ghost knowledge as additionalContext into every subagent
 - `Stop` — session distillation trigger (fire-and-forget)
 - `SubagentStop` — same distillation for subagent sessions
+- `PreCompact` — harvest session before context erased (fire-and-forget)
+- `PostCompact` — drift snapshot after compaction (fire-and-forget)
+- `FileChanged` (`**/*.md`) — re-ingest changed MD files immediately on save
 
 All hook scripts use detached spawn (badge.js) — never block the agent loop.
 
@@ -131,6 +137,7 @@ React UI at localhost:3579 with:
 - `gyst detect-conventions` — run convention detectors and print results
 - `gyst check <file>` — check a file for convention violations
 - `gyst export` — export all active knowledge entries to markdown files (derived from DB)
+- `gyst self-document [--skip-ghosts] [--ghost-count N]` — bootstrap KB from codebase (structural + MD + ghost)
 - `gyst dashboard` — start the dashboard HTTP server
 
 DO NOT build yet:
@@ -205,7 +212,7 @@ Run security.ts stripSensitiveData() on ALL content before storage.
 ## Build Commands
 - `bun run dev` — Start MCP server in dev mode
 - `bun run build` — Compile to dist/
-- `bun test` — Run all tests (895 tests, 47 files)
+- `bun test` — Run all tests (970 tests, 67 files)
 - `bun run setup` — First-time setup
 - `bun run install-hooks` — Install git hooks
 - `bun run lint` — TypeScript type check (tsc --noEmit)

@@ -391,7 +391,7 @@ program
 program
   .command("install")
   .alias("setup")
-  .description("First-time setup (detects tools, registers MCP + 6 hooks, scans conventions)")
+  .description("First-time setup (detects tools, registers MCP + 12 hooks, scans conventions)")
   .option("--minimal", "Use the minimal, non-interactive setup path")
   .option("--team <name>", "Create or join a team during setup (pass a team name or an invite key)")
   .action(async (opts: { minimal?: boolean; team?: string }) => {
