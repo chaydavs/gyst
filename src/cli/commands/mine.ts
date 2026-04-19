@@ -10,6 +10,9 @@
 
 import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join, relative } from "node:path";
 import { logger } from "../../utils/logger.js";
 import { addManualEntry } from "../../capture/manual.js";
 
@@ -172,6 +175,92 @@ export async function mineGitPhase(
     }
   } catch (err) {
     logger.warn("mineGitPhase: error", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+  return count;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: code comment mining
+// ---------------------------------------------------------------------------
+
+// Passed as an array to spawnSync — no shell interpolation, no injection risk.
+const GREP_PATTERN = "TODO|FIXME|NOTE|HACK|// Why:|# Why:";
+const GREP_EXCLUDE_DIRS = ["node_modules", "dist", "gyst-wiki", ".git"];
+
+function commentToEntryType(
+  line: string
+): "convention" | "learning" | "error_pattern" {
+  const upper = line.toUpperCase();
+  if (upper.includes("FIXME") || upper.includes("HACK")) return "error_pattern";
+  if (upper.includes("TODO")) return "convention";
+  return "learning";
+}
+
+/**
+ * Phase 2 of `gyst mine`: scans src/ for TODO/FIXME/NOTE/HACK/Why: markers
+ * and stores each unique comment as a KB entry. Uses spawnSync with array
+ * args to avoid shell injection. Returns the number of new entries created.
+ */
+export async function mineCommentsPhase(
+  db: Database,
+  opts: Omit<MineOptions, "commitHash">
+): Promise<number> {
+  let count = 0;
+  try {
+    const srcDir = join(opts.repoRoot, "src");
+    if (!existsSync(srcDir)) return 0;
+
+    const excludeArgs = GREP_EXCLUDE_DIRS.flatMap((d) => ["--exclude-dir", d]);
+    // spawnSync with array args — shell never invoked, srcDir not interpolated
+    const result = spawnSync(
+      "grep",
+      ["-rn", "--include=*.ts", "--include=*.js", ...excludeArgs, "-E", GREP_PATTERN, srcDir],
+      { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 }
+    );
+    const raw = (result.stdout ?? "").trim();
+    if (!raw) return 0;
+
+    for (const line of raw.split("\n").filter(Boolean)) {
+      // Format: /abs/path/file.ts:42:  // TODO: ...
+      const colonIdx = line.indexOf(":");
+      if (colonIdx === -1) continue;
+      const afterPath = line.slice(colonIdx + 1);
+      const secondColon = afterPath.indexOf(":");
+      if (secondColon === -1) continue;
+      const filePath = line.slice(0, colonIdx);
+      const commentText = afterPath.slice(secondColon + 1).trim();
+      if (!commentText) continue;
+
+      const hash = contentHash(commentText);
+      const alreadyStored = db
+        .query<{ id: string }, [string]>(
+          "SELECT id FROM entries WHERE content LIKE ? LIMIT 1"
+        )
+        .get(`%mine:comment:${hash}%`);
+      if (alreadyStored) continue;
+
+      const entryType = commentToEntryType(commentText);
+      const relPath = relative(opts.repoRoot, filePath);
+      const title = commentText
+        .replace(/^(TODO|FIXME|NOTE|HACK|\/\/\s*Why:|#\s*Why:)\s*/i, "")
+        .slice(0, 80)
+        .trim() || commentText.slice(0, 80);
+
+      await addManualEntry(db, {
+        type: entryType,
+        title,
+        content: `mine:comment:${hash}\nFile: ${relPath}\n\n${commentText}`,
+        files: [relPath],
+        tags: ["mined:comment"],
+      });
+      count++;
+    }
+
+    setMiningCursor(db, "last_comment_scan", new Date().toISOString());
+  } catch (err) {
+    logger.warn("mineCommentsPhase: error", {
       error: err instanceof Error ? err.message : String(err),
     });
   }

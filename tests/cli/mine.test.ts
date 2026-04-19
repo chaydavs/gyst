@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { getMiningCursor, setMiningCursor, shouldSkipCommitSubject, conventionalTypeToEntryType, mineGitPhase } from "../../src/cli/commands/mine.js";
+import { getMiningCursor, setMiningCursor, shouldSkipCommitSubject, conventionalTypeToEntryType, mineGitPhase, mineCommentsPhase } from "../../src/cli/commands/mine.js";
 import { initDatabase } from "../../src/store/database.js";
 import { join } from "node:path";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 
 describe("mining cursor helpers", () => {
@@ -91,6 +91,45 @@ describe("mineGitPhase", () => {
   it("returns 0 when not inside a git repo", async () => {
     const db = await initDatabase(join(tmpDir, "wiki.db"));
     const count = await mineGitPhase(db, { full: false, noLlm: true, repoRoot: tmpDir });
+    db.close();
+    expect(count).toBe(0);
+  });
+});
+
+describe("mineCommentsPhase", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "gyst-mine-comments-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("extracts TODO/FIXME/NOTE comments from src/", async () => {
+    const srcDir = join(tmpDir, "src");
+    mkdirSync(srcDir);
+    writeFileSync(join(srcDir, "example.ts"), [
+      "// TODO: refactor this when we upgrade to v2",
+      "const x = 1;",
+      "// FIXME: this breaks on Windows paths",
+      "const y = 2;",
+      "// NOTE: this must run before the DB is initialised",
+    ].join("\n"));
+    const db = await initDatabase(join(tmpDir, "wiki.db"));
+    const count = await mineCommentsPhase(db, { full: false, noLlm: true, repoRoot: tmpDir });
+    db.close();
+    expect(count).toBe(3);
+  });
+
+  it("deduplicates identical comments on re-run", async () => {
+    const srcDir = join(tmpDir, "src");
+    mkdirSync(srcDir);
+    writeFileSync(join(srcDir, "a.ts"), "// TODO: same comment\n");
+    const db = await initDatabase(join(tmpDir, "wiki.db"));
+    await mineCommentsPhase(db, { full: false, noLlm: true, repoRoot: tmpDir });
+    const count = await mineCommentsPhase(db, { full: false, noLlm: true, repoRoot: tmpDir });
     db.close();
     expect(count).toBe(0);
   });
