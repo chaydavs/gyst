@@ -272,6 +272,14 @@ const SCHEMA_STATEMENTS: readonly string[] = [
   `INSERT OR IGNORE INTO consolidation_state (id, last_run)
    VALUES (1, '1970-01-01T00:00:00.000Z')`,
 
+  // ----- codebase mining state -----
+  // Cursor table for tracking state during automated codebase mining.
+  // Stores arbitrary key-value pairs (e.g., last_commit_hash, last_scanned_file).
+  `CREATE TABLE IF NOT EXISTS codebase_mining_state (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  )`,
+
   // ----- indexes -----
   "CREATE INDEX IF NOT EXISTS idx_entries_type        ON entries(type)",
   "CREATE INDEX IF NOT EXISTS idx_entries_status      ON entries(status)",
