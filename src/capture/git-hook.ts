@@ -181,10 +181,22 @@ export async function captureCommit(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 if (import.meta.main) {
-  captureCommit().catch((err: unknown) => {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error("Failed to capture commit", { error: message });
-    // Never block the commit — always exit 0
-    process.exit(0);
-  });
+  captureCommit()
+    .then(async () => {
+      // Fire-and-forget mine of the just-landed commit.
+      // Never blocks the commit — unref() detaches the child immediately.
+      const gyst = process.env["GYST_BIN"] ?? "gyst";
+      const { spawn } = await import("node:child_process");
+      const mine = spawn(gyst, ["mine", "--commit", "HEAD", "--no-llm"], {
+        detached: true,
+        stdio: "ignore",
+      });
+      mine.unref();
+    })
+    .catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error("Failed to capture commit", { error: message });
+      // Never block the commit — always exit 0
+      process.exit(0);
+    });
 }
