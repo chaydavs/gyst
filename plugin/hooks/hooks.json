@@ -1,16 +1,16 @@
 {
   "hooks": [
-    { "event": "SessionStart", "script": "plugin/scripts/session-start.js", "timeout": 5000 },
-    { "event": "UserPromptSubmit", "script": "plugin/scripts/prompt.js", "timeout": 2000 },
-    { "event": "InstructionsLoaded", "script": "plugin/scripts/instructions-loaded.js", "timeout": 500 },
-    { "event": "PreToolUse", "matcher": "", "script": "plugin/scripts/pre-tool.js", "timeout": 500 },
-    { "event": "PostToolUse", "matcher": "", "script": "plugin/scripts/tool-use.js", "timeout": 500 },
-    { "event": "PostToolUseFailure", "matcher": "", "script": "plugin/scripts/tool-failure.js", "timeout": 500 },
-    { "event": "SubagentStart", "matcher": "", "script": "plugin/scripts/subagent-start.js", "timeout": 2000 },
-    { "event": "Stop", "script": "plugin/scripts/session-end.js", "timeout": 5000 },
-    { "event": "SubagentStop", "script": "plugin/scripts/session-end.js", "timeout": 5000 },
-    { "event": "PreCompact", "matcher": "", "script": "plugin/scripts/pre-compact.js", "timeout": 5000 },
-    { "event": "PostCompact", "matcher": "", "script": "plugin/scripts/post-compact.js", "timeout": 2000 },
-    { "event": "FileChanged", "matcher": "**/*.md", "script": "plugin/scripts/file-changed.js", "timeout": 500 }
+    { "event": "SessionStart", "script": "scripts/session-start.js", "timeout": 5000 },
+    { "event": "UserPromptSubmit", "script": "scripts/prompt.js", "timeout": 2000 },
+    { "event": "InstructionsLoaded", "script": "scripts/instructions-loaded.js", "timeout": 500 },
+    { "event": "PreToolUse", "matcher": "", "script": "scripts/pre-tool.js", "timeout": 500 },
+    { "event": "PostToolUse", "matcher": "", "script": "scripts/tool-use.js", "timeout": 500 },
+    { "event": "PostToolUseFailure", "matcher": "", "script": "scripts/tool-failure.js", "timeout": 500 },
+    { "event": "SubagentStart", "matcher": "", "script": "scripts/subagent-start.js", "timeout": 2000 },
+    { "event": "Stop", "script": "scripts/session-end.js", "timeout": 5000 },
+    { "event": "SubagentStop", "script": "scripts/session-end.js", "timeout": 5000 },
+    { "event": "PreCompact", "matcher": "", "script": "scripts/pre-compact.js", "timeout": 5000 },
+    { "event": "PostCompact", "matcher": "", "script": "scripts/post-compact.js", "timeout": 2000 },
+    { "event": "FileChanged", "matcher": "**/*.md", "script": "scripts/file-changed.js", "timeout": 500 }
   ]
 }

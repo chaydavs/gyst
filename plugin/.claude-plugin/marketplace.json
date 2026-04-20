@@ -1,7 +1,7 @@
 {
   "name": "gyst",
   "description": "Team knowledge compiler — shared memory across AI coding tools",
-  "version": "0.1.8",
+  "version": "0.1.40",
   "author": "Sai Chaitanya Davuluri",
   "repository": "https://github.com/chaydavs/gyst",
   "license": "MIT"

@@ -1,0 +1,21 @@
+{
+  "name": "gyst",
+  "version": "0.1.40",
+  "description": "Team knowledge layer for AI coding agents. Every session learns, every agent benefits.",
+  "contextFileName": "GEMINI.md",
+  "mcpServers": {
+    "gyst": {
+      "command": "bunx",
+      "args": ["gyst-mcp", "serve"]
+    }
+  },
+  "settings": [
+    {
+      "name": "Gyst Binary Path",
+      "description": "Path to the gyst binary if not on PATH (leave blank to use default).",
+      "envVar": "GYST_BIN",
+      "sensitive": false
+    }
+  ],
+  "keywords": ["knowledge-base", "memory", "team", "mcp", "ai-agents"]
+}

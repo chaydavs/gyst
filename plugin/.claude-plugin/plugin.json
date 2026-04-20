@@ -1,6 +1,12 @@
 {
   "name": "gyst",
-  "hooks": "plugin/hooks/hooks.json",
+  "version": "0.1.40",
+  "description": "Team knowledge layer for AI coding agents. Every session learns, every agent benefits.",
+  "author": "Sai Chaitanya Davuluri",
+  "license": "MIT",
+  "tier": "team",
+  "homepage": "https://github.com/chaydavs/gyst",
+  "hooks": "./hooks/hooks.json",
   "mcpServers": {
     "gyst": {
       "command": "bunx",

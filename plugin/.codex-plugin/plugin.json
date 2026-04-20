@@ -1,8 +1,8 @@
 {
   "name": "gyst",
-  "version": "0.1.8",
-  "description": "Team knowledge compiler — shared memory across AI coding tools",
-  "hooks": "plugin/hooks/hooks.json",
+  "version": "0.1.40",
+  "description": "Team knowledge layer for AI coding agents. Every session learns, every agent benefits.",
+  "hooks": "./hooks/hooks.json",
   "mcp": {
     "servers": {
       "gyst": {
