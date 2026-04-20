@@ -11,8 +11,9 @@
 import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { Glob } from "bun";
 import { logger } from "../../utils/logger.js";
 import { addManualEntry } from "../../capture/manual.js";
 
@@ -354,6 +355,111 @@ export async function mineHotPathsPhase(
     setMiningCursor(db, "last_hotpath_scan", new Date().toISOString());
   } catch (err) {
     logger.warn("mineHotPathsPhase: error", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+  return count;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4: integration/e2e test describe() mining
+// ---------------------------------------------------------------------------
+
+const IMPL_DETAIL_RE =
+  /\b(returns?|equals?|is true|should be|called with|throws?|instanceof)\b/i;
+const MIN_DESCRIBE_WORDS = 5;
+
+/**
+ * Extracts only TOP-LEVEL describe() string arguments from test source.
+ * Only matches describe() at column 0 (no leading whitespace) to avoid
+ * capturing nested describe blocks.
+ */
+export function extractDescribeNames(source: string): string[] {
+  const results: string[] = [];
+  // Only match describe() at column 0 (top-level, no leading whitespace)
+  const re = /^describe\s*\(\s*(['"`])([\s\S]*?)\1/gm;
+  for (const match of source.matchAll(re)) {
+    const name = match[2]?.trim();
+    if (name) results.push(name);
+  }
+  return results;
+}
+
+/**
+ * Returns true when a describe() name describes business domain behaviour
+ * rather than implementation details. Requires at least 5 words and rejects
+ * names containing common implementation-detail language.
+ */
+export function isBusinessDomainDescribe(name: string): boolean {
+  if (name.trim().split(/\s+/).length < MIN_DESCRIBE_WORDS) return false;
+  if (IMPL_DETAIL_RE.test(name)) return false;
+  return true;
+}
+
+const TEST_GLOB_PATTERNS = [
+  "**/*.integration.test.ts",
+  "**/*.integration.test.js",
+  "**/*.e2e.test.ts",
+  "**/*.e2e.test.js",
+  "**/*.spec.ts",
+  "**/*.spec.js",
+];
+const TEST_EXCLUDE_RE = /node_modules|dist|gyst-wiki/;
+
+/**
+ * Phase 4 of `gyst mine`: scans integration/e2e/spec test files for top-level
+ * describe() names, filters to business-domain descriptions, and stores each
+ * unique name as a convention entry. Uses contentHash for deduplication.
+ * Writes cursor `last_test_scan` on completion.
+ */
+export async function mineTestsPhase(
+  db: Database,
+  opts: Omit<MineOptions, "commitHash">
+): Promise<number> {
+  let count = 0;
+  try {
+    const seenHashes = new Set<string>();
+
+    for (const pattern of TEST_GLOB_PATTERNS) {
+      const glob = new Glob(pattern);
+      for await (const filePath of glob.scan({ cwd: opts.repoRoot, absolute: true })) {
+        if (TEST_EXCLUDE_RE.test(filePath)) continue;
+        let source: string;
+        try {
+          source = readFileSync(filePath, "utf8");
+        } catch {
+          continue;
+        }
+
+        const names = extractDescribeNames(source).filter(isBusinessDomainDescribe);
+        for (const name of names) {
+          const hash = contentHash(name);
+          if (seenHashes.has(hash)) continue;
+          seenHashes.add(hash);
+
+          const alreadyStored = db
+            .query<{ id: string }, [string]>(
+              "SELECT id FROM entries WHERE content LIKE ? LIMIT 1"
+            )
+            .get(`%mine:test:${hash}%`);
+          if (alreadyStored) continue;
+
+          const relPath = relative(opts.repoRoot, filePath);
+          await addManualEntry(db, {
+            type: "convention",
+            title: name,
+            content: `mine:test:${hash}\nSource: ${relPath}\n\nExpected system behaviour: ${name}`,
+            files: [relPath],
+            tags: ["mined:test"],
+          });
+          count++;
+        }
+      }
+    }
+
+    setMiningCursor(db, "last_test_scan", new Date().toISOString());
+  } catch (err) {
+    logger.warn("mineTestsPhase: error", {
       error: err instanceof Error ? err.message : String(err),
     });
   }

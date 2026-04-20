@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { getMiningCursor, setMiningCursor, shouldSkipCommitSubject, conventionalTypeToEntryType, mineGitPhase, mineCommentsPhase, parseHotPaths, mineHotPathsPhase } from "../../src/cli/commands/mine.js";
+import { getMiningCursor, setMiningCursor, shouldSkipCommitSubject, conventionalTypeToEntryType, mineGitPhase, mineCommentsPhase, parseHotPaths, mineHotPathsPhase, extractDescribeNames, isBusinessDomainDescribe } from "../../src/cli/commands/mine.js";
 import type { HotPathEntry } from "../../src/cli/commands/mine.js";
 import { initDatabase } from "../../src/store/database.js";
 import { join } from "node:path";
@@ -159,5 +159,43 @@ describe("parseHotPaths", () => {
     const result = parseHotPaths(raw, 10);
     expect(result).toHaveLength(1);
     expect(result[0]?.file).toBe("src/foo.ts");
+  });
+});
+
+import { extractDescribeNames, isBusinessDomainDescribe } from "../../src/cli/commands/mine.js";
+
+describe("extractDescribeNames", () => {
+  it("extracts only top-level describe() strings", () => {
+    const src = [
+      `describe("User authentication handles expired tokens correctly", () => {`,
+      `  it("should work", () => {});`,
+      `  describe("nested inner suite", () => {});`,
+      `});`,
+      `describe("Payment processing retries on network failure", () => {});`,
+    ].join("\n");
+    const result = extractDescribeNames(src);
+    expect(result).toContain("User authentication handles expired tokens correctly");
+    expect(result).toContain("Payment processing retries on network failure");
+    expect(result).not.toContain("nested inner suite");
+  });
+});
+
+describe("isBusinessDomainDescribe", () => {
+  it("accepts long business-domain names", () => {
+    expect(isBusinessDomainDescribe("User login flow handles session expiry gracefully")).toBe(true);
+    expect(isBusinessDomainDescribe("Knowledge base recall returns ranked results")).toBe(false);
+  });
+
+  it("rejects short names (fewer than 5 words)", () => {
+    expect(isBusinessDomainDescribe("login flow")).toBe(false);
+    expect(isBusinessDomainDescribe("user auth")).toBe(false);
+  });
+
+  it("rejects implementation-detail language", () => {
+    expect(isBusinessDomainDescribe("getUser returns the correct user object")).toBe(false);
+    expect(isBusinessDomainDescribe("should be equal to the expected value")).toBe(false);
+    expect(isBusinessDomainDescribe("called with the right arguments")).toBe(false);
+    expect(isBusinessDomainDescribe("throws when input is null")).toBe(false);
+    expect(isBusinessDomainDescribe("equals the snapshot fixture value")).toBe(false);
   });
 });
