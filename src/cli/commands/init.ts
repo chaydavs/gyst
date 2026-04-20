@@ -3,10 +3,6 @@
  * feel magical. Orchestrates existing KB phases with a clean progressive UI.
  */
 
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import { homedir } from "node:os";
-
 // ---------------------------------------------------------------------------
 // ANSI helpers
 // ---------------------------------------------------------------------------
@@ -37,7 +33,7 @@ function padVis(s: string, n: number): string {
 }
 
 function boxTop(title: string): string {
-  const dashes = BOX_WIDTH - 5 - title.length; // ╭─ {title} {dashes}╮
+  const dashes = BOX_WIDTH - 5 - visLen(title); // ╭─ {title} {dashes}╮
   return `╭─ ${title} ${"─".repeat(Math.max(0, dashes))}╮\n`;
 }
 
@@ -108,8 +104,8 @@ export class ProgressUI {
   step(label: string, count: number, warn: boolean = false): void {
     const icon = warn ? `${YELLOW}⚠${RST}` : `${GREEN}◇${RST}`;
     const right = warn ? "(failed)" : `${count} ${count === 1 ? "entry" : "entries"}`;
-    // Visible chars: 1 (icon) + 1 (space) + label + fill + right
-    const fixedVis = 1 + 1 + label.length + 1 + right.length; // icon space label space right
+    // Visible chars: 1 (icon) + 1 (space) + label + right
+    const fixedVis = 1 + 1 + label.length + right.length; // icon + space + label + right
     const fillLen = Math.max(1, BOX_INNER - 2 - fixedVis);
     const fill = fillLen > 1 ? ` ${"·".repeat(fillLen - 1)}` : " ";
     this.write(boxLine(`${icon} ${label}${fill}${right}`));

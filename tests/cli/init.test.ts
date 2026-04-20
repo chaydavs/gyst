@@ -2,9 +2,9 @@ import { test, expect } from "bun:test";
 import { ProgressUI } from "../../src/cli/commands/init.js";
 
 function capture(): { ui: ProgressUI; output: string[] } {
-  const lines: string[] = [];
-  const ui = new ProgressUI((s) => lines.push(s));
-  return { ui, lines: lines as unknown as string[], output: lines };
+  const output: string[] = [];
+  const ui = new ProgressUI((s) => output.push(s));
+  return { ui, output };
 }
 
 function stripAnsi(s: string): string {
@@ -64,6 +64,22 @@ test("step() renders a warn line when warn=true", () => {
   const line = stripAnsi(output[0] ?? "");
   expect(line).toContain("⚠");
   expect(line).toContain("(failed)");
+});
+
+test("step() renders singular 'entry' when count is 1", () => {
+  const { ui, output } = capture();
+  ui.step("Some phase", 1);
+  const line = stripAnsi(output[0] ?? "").replace("\n", "");
+  expect(line).toContain("1 entry");
+  expect(line).not.toContain("entries");
+  expect(line.length).toBe(51);
+});
+
+test("step() warn line is 51 chars wide", () => {
+  const { ui, output } = capture();
+  ui.step("Git history", 0, true);
+  const line = stripAnsi(output[0] ?? "").replace("\n", "");
+  expect(line.length).toBe(51);
 });
 
 test("summary() outputs elapsed time and stats", () => {
