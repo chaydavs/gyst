@@ -935,7 +935,6 @@ program
   .description("Bootstrap your AI agent context layer (one-time setup, ~90 seconds)")
   .option("--no-llm", "Skip LLM calls (auto-set when ANTHROPIC_API_KEY is absent)")
   .option("--no-git", "Skip git mining (auto-set for non-git projects)")
-  .option("--yes", "Skip confirmation prompts (for CI)")
   .option("--force", "Re-run even if already initialized")
   .action(async (options) => {
     const { runInit } = await import("./commands/init.js");
