@@ -129,3 +129,81 @@ export class ProgressUI {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Environment detection
+// ---------------------------------------------------------------------------
+
+export interface AgentInfo {
+  readonly name: string;
+  readonly marker: string;
+}
+
+export interface DetectResult {
+  readonly projectTypes: string[];
+  readonly hasGit: boolean;
+  readonly commitCount: number;
+  readonly detectedAgents: AgentInfo[];
+  readonly hasLlmKey: boolean;
+}
+
+/**
+ * Scans the project directory and user home to determine project type,
+ * git state, installed AI agents, and LLM key availability.
+ *
+ * Async because git commit count requires spawning git via simple-git.
+ * All errors are caught internally — never throws.
+ */
+export async function detectEnvironment(projectDir: string): Promise<DetectResult> {
+  const { existsSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { homedir } = await import("node:os");
+
+  // --- Project type ---
+  const projectTypes: string[] = [];
+  if (existsSync(join(projectDir, "tsconfig.json"))) {
+    projectTypes.push("TypeScript");
+  } else if (existsSync(join(projectDir, "package.json"))) {
+    projectTypes.push("Node.js");
+  }
+  if (existsSync(join(projectDir, "Cargo.toml")))    projectTypes.push("Rust");
+  if (existsSync(join(projectDir, "pyproject.toml")) ||
+      existsSync(join(projectDir, "requirements.txt"))) projectTypes.push("Python");
+  if (existsSync(join(projectDir, "go.mod")))         projectTypes.push("Go");
+  if (existsSync(join(projectDir, "Gemfile")))        projectTypes.push("Ruby");
+  if (projectTypes.length === 0) projectTypes.push("Unknown");
+
+  // --- Git state ---
+  let hasGit = false;
+  let commitCount = 0;
+  try {
+    const { default: simpleGit } = await import("simple-git");
+    const git = simpleGit(projectDir);
+    hasGit = await git.checkIsRepo().catch(() => false);
+    if (hasGit) {
+      const log = await git.log();
+      commitCount = log.total;
+    }
+  } catch {
+    hasGit = false;
+    commitCount = 0;
+  }
+
+  // --- Agent detection ---
+  const home = homedir();
+  const agentChecks: Array<{ name: string; marker: string; path: string }> = [
+    { name: "Claude Code", marker: ".mcp.json",            path: join(projectDir, ".mcp.json") },
+    { name: "Cursor",      marker: ".cursor/",             path: join(projectDir, ".cursor") },
+    { name: "Gemini CLI",  marker: "~/.gemini/",           path: join(home, ".gemini") },
+    { name: "Windsurf",    marker: "~/.codeium/windsurf/", path: join(home, ".codeium", "windsurf") },
+    { name: "Codex CLI",   marker: "~/.codex/",            path: join(home, ".codex") },
+  ];
+  const detectedAgents: AgentInfo[] = agentChecks
+    .filter((a) => existsSync(a.path))
+    .map(({ name, marker }) => ({ name, marker }));
+
+  // --- LLM key ---
+  const hasLlmKey = !!process.env["ANTHROPIC_API_KEY"];
+
+  return { projectTypes, hasGit, commitCount, detectedAgents, hasLlmKey };
+}

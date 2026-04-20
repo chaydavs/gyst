@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test";
-import { ProgressUI } from "../../src/cli/commands/init.js";
+import { join } from "node:path";
+import { ProgressUI, detectEnvironment } from "../../src/cli/commands/init.js";
 
 function capture(): { ui: ProgressUI; output: string[] } {
   const output: string[] = [];
@@ -91,4 +92,87 @@ test("summary() outputs elapsed time and stats", () => {
   expect(text).toContain("3 decisions");
   expect(text).toContain("2 error patterns");
   expect(text).toContain("8 learnings");
+});
+
+// --- detectEnvironment tests ---
+
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+
+function makeTmp(): string {
+  return mkdtempSync(join(tmpdir(), "gyst-init-test-"));
+}
+
+test("detectEnvironment: identifies TypeScript project via tsconfig.json", async () => {
+  const tmp = makeTmp();
+  try {
+    writeFileSync(join(tmp, "tsconfig.json"), "{}");
+    const result = await detectEnvironment(tmp);
+    expect(result.projectTypes).toContain("TypeScript");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("detectEnvironment: identifies Node.js project via package.json (no tsconfig)", async () => {
+  const tmp = makeTmp();
+  try {
+    writeFileSync(join(tmp, "package.json"), "{}");
+    const result = await detectEnvironment(tmp);
+    expect(result.projectTypes).toContain("Node.js");
+    expect(result.projectTypes).not.toContain("TypeScript");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("detectEnvironment: non-git dir has hasGit=false and commitCount=0", async () => {
+  const tmp = makeTmp();
+  try {
+    const result = await detectEnvironment(tmp);
+    expect(result.hasGit).toBe(false);
+    expect(result.commitCount).toBe(0);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("detectEnvironment: detects Claude Code via .mcp.json", async () => {
+  const tmp = makeTmp();
+  try {
+    writeFileSync(join(tmp, ".mcp.json"), "{}");
+    const result = await detectEnvironment(tmp);
+    expect(result.detectedAgents.map((a) => a.name)).toContain("Claude Code");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("detectEnvironment: detects Cursor via .cursor dir", async () => {
+  const tmp = makeTmp();
+  try {
+    mkdirSync(join(tmp, ".cursor"), { recursive: true });
+    const result = await detectEnvironment(tmp);
+    expect(result.detectedAgents.map((a) => a.name)).toContain("Cursor");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("detectEnvironment: hasLlmKey reflects ANTHROPIC_API_KEY presence", async () => {
+  const tmp = makeTmp();
+  try {
+    const original = process.env["ANTHROPIC_API_KEY"];
+    process.env["ANTHROPIC_API_KEY"] = "sk-test";
+    const withKey = await detectEnvironment(tmp);
+    expect(withKey.hasLlmKey).toBe(true);
+
+    delete process.env["ANTHROPIC_API_KEY"];
+    const withoutKey = await detectEnvironment(tmp);
+    expect(withoutKey.hasLlmKey).toBe(false);
+
+    if (original !== undefined) process.env["ANTHROPIC_API_KEY"] = original;
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
 });
