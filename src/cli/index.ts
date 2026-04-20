@@ -42,6 +42,7 @@ import {
   runSelfDocumentPhase4,
   runSelfDocumentPhase4NoLLM,
 } from "./commands/self-document.js";
+import { runMine } from "./commands/mine.js";
 
 const WIKI_SUBDIRS = [
   "error_pattern",
@@ -830,6 +831,33 @@ program
       logger.error("export failed", { error: msg });
       process.exit(1);
     }
+  });
+
+program
+  .command("mine")
+  .description("Mine codebase for institutional knowledge (git history, comments, hot paths, tests)")
+  .option("--commit <hash>", "Mine only this specific commit (post-commit hook path)")
+  .option("--full", "Full scan ignoring incremental cursor", false)
+  .option("--no-llm", "Skip LLM summarisation", false)
+  .action(async (opts) => {
+    const { default: simpleGit } = await import("simple-git");
+    const git = simpleGit();
+    let repoRoot: string;
+    try {
+      repoRoot = (await git.revparse(["--show-toplevel"])).trim();
+    } catch {
+      repoRoot = process.cwd();
+    }
+    const result = await runMine({
+      commitHash: typeof opts.commit === "string" ? opts.commit : undefined,
+      full: opts.full === true,
+      noLlm: opts.noLlm !== false,
+      repoRoot,
+    });
+    process.stdout.write(
+      `gyst mine: +${result.git} git, +${result.comments} comments, ` +
+        `+${result.hotpaths} hotpaths, +${result.tests} tests\n`
+    );
   });
 
 program

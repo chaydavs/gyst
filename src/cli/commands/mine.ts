@@ -16,6 +16,8 @@ import { join, relative } from "node:path";
 import { Glob } from "bun";
 import { logger } from "../../utils/logger.js";
 import { addManualEntry } from "../../capture/manual.js";
+import { loadConfig } from "../../utils/config.js";
+import { initDatabase } from "../../store/database.js";
 
 // ---------------------------------------------------------------------------
 // Cursor helpers
@@ -464,4 +466,27 @@ export async function mineTestsPhase(
     });
   }
   return count;
+}
+
+// ---------------------------------------------------------------------------
+// Orchestrator
+// ---------------------------------------------------------------------------
+
+/**
+ * Runs all four mining phases in sequence.
+ * Called by `gyst mine` CLI command and by hook scripts as a detached spawn.
+ */
+export async function runMine(opts: MineOptions): Promise<MineResult> {
+  const config = loadConfig(opts.repoRoot);
+  const db = initDatabase(config.dbPath);
+  try {
+    const git = await mineGitPhase(db, opts);
+    const comments = await mineCommentsPhase(db, opts);
+    const hotpaths = await mineHotPathsPhase(db, opts);
+    const tests = await mineTestsPhase(db, opts);
+    logger.info("runMine: complete", { git, comments, hotpaths, tests });
+    return { git, comments, hotpaths, tests };
+  } finally {
+    db.close();
+  }
 }
