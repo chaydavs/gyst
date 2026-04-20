@@ -304,7 +304,9 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
 
       // --- mode='single': fetch full entry by id ---
       if (mode === "single") {
-        if (!input.id) {
+        // Accept id field (explicit) or query field (documented alias: "pass id in query")
+        const entryId = input.id ?? input.query;
+        if (!entryId) {
           return {
             content: [{
               type: "text" as const,
@@ -312,8 +314,6 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
             }],
           };
         }
-
-        const entryId = input.id;
         emitEvent(db, "tool_use", { tool: "recall:single", id: entryId });
         logger.info("recall[single] called", { id: entryId });
 
