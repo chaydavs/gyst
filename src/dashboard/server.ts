@@ -1290,6 +1290,25 @@ export async function startDashboardServer(
                 }
               }
 
+              // /api/export-context — triggers context file regeneration (gyst export)
+              if (path === "/api/export-context") {
+                try {
+                  // Fire-and-forget: spawn gyst export asynchronously so the response returns fast.
+                  // We use Bun.spawn (non-blocking) instead of awaiting the full subprocess.
+                  Bun.spawn(["bun", "run", "src/cli/index.ts", "export"], {
+                    stdin: "ignore",
+                    stdout: "ignore",
+                    stderr: "ignore",
+                  });
+                  logAccess(requestId, method, path, start, 202);
+                  return jsonResponse({ ok: true, message: "Context file regeneration started." }, 202, requestId);
+                } catch (err) {
+                  logger.error("export-context error", { error: err instanceof Error ? err.message : String(err) });
+                  logAccess(requestId, method, path, start, 500);
+                  return jsonResponse({ error: "internal" }, 500, requestId);
+                }
+              }
+
               // /api/shutdown — gracefully stop the dashboard server
               if (path === "/api/shutdown") {
                 logAccess(requestId, method, path, start, 200);
