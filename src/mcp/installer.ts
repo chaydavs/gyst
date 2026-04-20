@@ -305,7 +305,16 @@ export function installHooksForDetectedTools(
       const configPath = tool.hookConfigPath(homeDir);
       const newConfig = tool.buildConfig(absoluteScriptsDir);
       const existing = readJsonConfig(configPath);
-      const merged = { ...existing, ...newConfig };
+      const existingHooks =
+        typeof existing.hooks === "object" && existing.hooks !== null
+          ? (existing.hooks as Record<string, unknown>)
+          : {};
+      const newHooks = newConfig.hooks as Record<string, unknown>;
+      const merged: Record<string, unknown> = {
+        ...existing,
+        ...newConfig,
+        hooks: { ...existingHooks, ...newHooks },
+      };
       writeJsonConfig(configPath, merged as McpConfig);
       logger.info("Hook config written", { tool: tool.name, configPath });
       configured.push(tool.name);

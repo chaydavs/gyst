@@ -1,5 +1,5 @@
 import { test, expect, beforeEach } from "bun:test";
-import { mkdirSync, existsSync, readFileSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { installHooksForDetectedTools } from "../../src/mcp/installer.js";
@@ -83,6 +83,25 @@ test("is idempotent — running twice does not create duplicate hook entries", (
     installHooksForDetectedTools(tmp, scripts);
     const config = JSON.parse(readFileSync(join(tmp, ".gemini", "settings.json"), "utf-8"));
     expect(config.hooks.SessionStart).toHaveLength(1);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("preserves pre-existing hook entries in settings.json", () => {
+  const tmp = makeTmp();
+  try {
+    mkdirSync(join(tmp, ".gemini"), { recursive: true });
+    writeFileSync(
+      join(tmp, ".gemini", "settings.json"),
+      JSON.stringify({ hooks: { MyCustomHook: [{ command: "custom" }] } }),
+      "utf-8"
+    );
+    installHooksForDetectedTools(tmp, join(tmp, "scripts"));
+    const config = JSON.parse(readFileSync(join(tmp, ".gemini", "settings.json"), "utf-8"));
+    expect(config.hooks.SessionStart).toBeDefined();
+    expect(config.hooks.MyCustomHook).toBeDefined();
+    expect(config.hooks.MyCustomHook[0].command).toBe("custom");
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
