@@ -46,7 +46,7 @@ This pattern ensures that even if `gyst emit` takes several seconds to process a
 
 ```json
 { "event": "SessionStart",        "script": "plugin/scripts/session-start.js",       "timeout": 5000 }
-{ "event": "UserPromptSubmit",    "script": "plugin/scripts/prompt.js",               "timeout": 500  }
+{ "event": "UserPromptSubmit",    "script": "plugin/scripts/prompt.js",               "timeout": 2000 }
 { "event": "InstructionsLoaded",  "script": "plugin/scripts/instructions-loaded.js",  "timeout": 500  }
 { "event": "PreToolUse",          "script": "plugin/scripts/pre-tool.js",             "timeout": 500  }
 { "event": "PostToolUse",         "script": "plugin/scripts/tool-use.js",             "timeout": 500  }
@@ -78,13 +78,29 @@ Fires once when the agent session begins.
 
 The `inject-context` call is intentional blocking because `additionalContext` must be present in the hook response. The 5-second timeout is set to accommodate this.
 
-### `prompt.js` (UserPromptSubmit, 500ms timeout)
+### `prompt.js` (UserPromptSubmit, 2000ms timeout)
 
 Fires on every user message before the agent processes it.
 
-**What it does**: Emits a `prompt` event asynchronously with `{ text, sessionId, cwd }`. The `gyst emit prompt` handler classifies the prompt's intent and type so downstream processing (harvest, knowledge classification) has signal about what kind of session is running.
+**Two-phase behavior:**
 
-No `additionalContext` is returned — this hook is purely observational.
+**First prompt of a session** — active context injection:
+
+1. Checks for a flag file at `tmpdir()/.gyst-sessions/{sessionId}-injected`. Absence means this is the first prompt.
+2. Writes the flag file immediately (in all code paths — prevents infinite retry on crash).
+3. Runs `gyst recall <promptText> -n 3 --format json` synchronously with a 1500ms timeout.
+4. If results are returned and non-empty, formats them as a `## Task-Relevant Context (from gyst)` markdown block and returns it as `additionalContext`.
+5. Falls through silently on any error — always returns `{ continue: true }`.
+
+**Subsequent prompts** — observational only:
+
+Emits a `prompt` event asynchronously with `{ text, sessionId, cwd }`. The `gyst emit prompt` handler classifies the prompt's intent and type so downstream processing (harvest, knowledge classification) has signal about what kind of session is running.
+
+No `additionalContext` is returned on subsequent prompts.
+
+**Flag file cleanup:** Flag files older than 24h are cleaned up opportunistically at the start of each hook invocation. The `session_end` event also deletes the flag for the current session.
+
+**Timeout:** 2000ms (hook timeout). The internal recall call uses a 1500ms timeout, leaving margin for process startup overhead.
 
 ### `instructions-loaded.js` (InstructionsLoaded, 500ms timeout)
 
@@ -178,8 +194,8 @@ The `GYST_BIN` environment variable is used by all hook scripts to locate the bi
 
 | Timeout | Used for |
 |---------|---------|
-| 500ms | Fast fire-and-forget hooks (prompt, pre-tool, post-tool, file-changed) |
-| 2000ms | Subagent context injection (needs synchronous recall) |
+| 500ms | Fast fire-and-forget hooks (pre-tool, post-tool, file-changed) |
+| 2000ms | First-prompt injection (prompt.js) and subagent context injection |
 | 5000ms | Session start/end and compaction (may run self-document synchronously) |
 
 All hooks return within their timeout because the heavy work is always in detached subprocesses. The timeout applies to the hook script process itself, not the detached children it spawns.

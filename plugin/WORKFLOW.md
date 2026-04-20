@@ -12,7 +12,7 @@ The plugin is a set of Node.js scripts wired to 12 Claude Code lifecycle hooks. 
 Claude Code lifecycle
       │
       ├─ SessionStart ────────► inject team context + self-document (detached)
-      ├─ UserPromptSubmit ────► record prompt event
+      ├─ UserPromptSubmit ────► first prompt: inject task context; subsequent: record prompt event
       ├─ InstructionsLoaded ──► ingest CLAUDE.md
       ├─ PreToolUse ──────────► status badge
       ├─ PostToolUse ─────────► capture tool event; detect ADR/plan writes
@@ -94,7 +94,26 @@ The agent reads this before responding to the first user message. No recall() ca
 
 **Fires:** Every time the user submits a prompt.
 
-**What it does:** Emits `user_prompt` with the prompt text (fire-and-forget). The classifier buckets the intent (temporal / debugging / code_quality / conceptual) and stores it in `usage_metrics` for the Context Economics dashboard.
+**What it does (two-phase behavior):**
+
+**First prompt of a session** — performs active context injection:
+1. Checks for a flag file at `tmpdir()/.gyst-sessions/{sessionId}-injected`. If it does not exist, this is the first prompt.
+2. Writes the flag file immediately (prevents infinite retry if the script crashes mid-run).
+3. Runs `gyst recall <promptText> -n 3 --format json` synchronously (1500ms timeout, cwd set to project root).
+4. If results are returned, formats them as a `## Task-Relevant Context (from gyst)` markdown block and returns it as `additionalContext` — Claude Code injects this before the agent responds.
+5. Falls through silently on any error (recall failure, empty results, timeout) — always returns `{ continue: true }`.
+
+**Subsequent prompts** — purely observational:
+- Emits `user_prompt` with the prompt text as a fire-and-forget async event.
+- The classifier buckets the intent (temporal / debugging / code_quality / conceptual) and stores it in `usage_metrics` for the Context Economics dashboard.
+- No `additionalContext` is returned.
+
+**Flag file lifecycle:**
+- Written on first prompt (both success and failure paths)
+- Opportunistic 24h cleanup: any flag file older than 24h is deleted at the start of each hook invocation
+- Deleted on `session_end` via the Stop hook
+
+**Timeout:** 2000ms (hook timeout). The synchronous recall call uses a 1500ms internal timeout, leaving 500ms margin for process startup and flag file I/O.
 
 ---
 

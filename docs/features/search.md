@@ -2,7 +2,13 @@
 
 ## Overview
 
-Every `recall` and `search` call runs five independent search strategies in parallel, fuses the results with Reciprocal Rank Fusion (RRF), then applies post-fusion boosts based on entry type, query intent, and user feedback history. All five strategies are implemented in `src/store/search.ts` and `src/store/temporal.ts`.
+Every `recall` call (in default `search` mode) runs five independent search strategies in parallel, fuses the results with Reciprocal Rank Fusion (RRF), then applies post-fusion boosts based on entry type, query intent, and user feedback history. All five strategies are implemented in `src/store/search.ts` and `src/store/temporal.ts`.
+
+### Intent-Aware Injection: a layer on top of recall
+
+The `UserPromptSubmit` hook (`plugin/scripts/prompt.js`) adds a second retrieval layer that runs *before* the agent begins responding. On the first prompt of a session, `prompt.js` calls `gyst recall <promptText> --format json` and injects the results as `additionalContext` — the agent receives relevant knowledge automatically without calling `recall()` itself.
+
+This injection layer uses the same underlying search pipeline described in this document (BM25 + graph + temporal + vector + file-path, fused with RRF). The `--format json` flag returns a machine-readable object with `results[]` and `intent` fields rather than the human-readable formatted string. See [intent-aware-injection.md](./intent-aware-injection.md) for the full lifecycle.
 
 ---
 

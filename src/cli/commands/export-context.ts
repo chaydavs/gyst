@@ -326,7 +326,7 @@ export function writeContextFile(
   if (beginIdx !== -1 && endIdx !== -1 && beginIdx < endIdx) {
     // Replace content between markers (inclusive of markers)
     const before = existing.slice(0, beginIdx);
-    const after  = existing.slice(endIdx + end.length);
+    const after  = existing.slice(endIdx + end.length).trimStart();
     // Ensure a newline between before content and markers
     const separator = before.length > 0 && !before.endsWith("\n") ? "\n" : "";
     writeFileSync(filePath, `${before}${separator}${markedBlock}${after}`, "utf-8");

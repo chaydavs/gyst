@@ -1,12 +1,18 @@
 # MCP Tools Reference
 
-Gyst exposes 14 tools over the Model Context Protocol. All tools use the stdio transport by default; an HTTP transport is available for team mode. Tools are registered in `src/mcp/server.ts` via individual `register*Tool()` functions.
+Gyst exposes **3 primary tools** over the Model Context Protocol, plus **5 extended tools** that can be enabled when needed. All tools use the stdio transport by default; an HTTP transport is available for team mode. Tools are registered in `src/mcp/register-tools.ts`.
 
 All inputs are validated with Zod before processing. All outputs are plain text formatted for AI consumption.
 
 ---
 
-## `learn`
+## Primary Tools (always available)
+
+These three tools cover all everyday agent workflows. Extended tools add power-user capabilities for graph queries, feedback loops, and configuration.
+
+---
+
+### `learn`
 
 **Purpose**: Record a knowledge entry into the team knowledge base.
 
@@ -33,49 +39,49 @@ Use this after solving a bug, making an architectural decision, discovering a co
 5. Extracts code entities from title and content, attaches them as `entity:Name` tags
 6. Persists to SQLite (entries, entry_files, entry_tags, sources tables) in a transaction
 7. Optionally writes a markdown file (if `autoExport` is enabled)
-8. If `globalDb` is configured, writes a personal copy there
-9. Fires embedding storage asynchronously (if system SQLite supports extensions)
-10. Auto-links to existing entries sharing entity tags (up to 20 links)
-11. Logs activity in team mode
+8. Fires embedding storage asynchronously (if system SQLite supports extensions)
+9. Auto-links to existing entries sharing entity tags (up to 20 links)
+10. Logs activity in team mode
 
 **Returns**: `"Learned: \"<title>\" (<type>, id: <uuid>)"` or `"Updated existing entry (merged): ..."` on dedup.
 
 ---
 
-## `recall`
+### `recall`
 
-**Purpose**: Full-content search of the knowledge base, formatted for immediate agent use.
+**Purpose**: Multi-mode access to the knowledge base.
 
-Use before writing code to surface applicable rules, decisions, and error patterns. Returns formatted content within a configurable token budget.
+Use `recall` for all knowledge retrieval. The `mode` parameter selects the behavior; `search` (full ranked retrieval) is the default.
 
 **Key parameters**:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `query` | string (2–500) | — | Natural language search query |
+| `mode` | enum | `search` | Operating mode (see below) |
+| `query` | string (1–500) | — | Natural language search query or entry id (for `single`) |
 | `type` | enum | `all` | Filter to a specific entry type |
 | `files` | string[] | `[]` | Boost entries associated with these files |
 | `max_results` | 1–10 | `5` | Maximum entries to return |
 | `scope` | enum | — | Optional scope filter |
 | `developer_id` | string | — | Show personal entries belonging to this developer |
 | `context_budget` | 200–20000 | config default | Token budget for response |
+| `id` | string | — | For `mode=single`: the entry id to fetch |
+| `directory` | string | — | For `mode=conventions`: directory prefix filter |
+| `tags` | string[] | — | For `mode=conventions`: tag filter |
+| `error_message` | string | — | For `mode=failures`: the error text to match |
+| `error_type` | string | — | For `mode=failures`: optional error type |
 
-**What it does**:
-1. Runs 5 search strategies in parallel (see `docs/features/search.md`)
-2. Classifies query intent (temporal, debugging, code_quality, conceptual)
-3. Fuses results with Reciprocal Rank Fusion (k=60)
-4. Over-fetches (3× `max_results`) then hydrates entries from DB
-5. Applies scope-based visibility filtering
-6. Applies post-hydration boosts: ghost_knowledge +0.15, convention +0.05, consolidated +0.10
-7. Applies intent-based boosts (e.g., `debugging` boosts `error_pattern`)
-8. Sorts by tier (ghost=0, convention=1, everything else=2) then by boosted score
-9. Filters entries below `config.confidenceThreshold` (ghost_knowledge always included)
-10. Falls back to `globalDb` if local results are empty
-11. Records co-retrieval for pairs of results
-12. Appends structural sidecar context when budget allows (≥1500 tokens)
-13. Formats to one of four tiers based on `context_budget`
+**Modes**:
 
-**Formatting tiers**:
+| Mode | What it does | Migration note |
+|------|-------------|----------------|
+| `search` (default) | Full ranked recall with RRF fusion. Runs 5 search strategies in parallel, fuses with RRF (k=60), applies intent boosts, returns formatted results within token budget. | Was the standalone `recall` tool |
+| `index` | Compact token-efficient index. Returns `id · type · confidence · title` for each result — roughly 7x more efficient than `search` for discovery. Follow with `mode=single` for full content. | Was the standalone `search` tool |
+| `single` | Fetch full content for one entry by id. Pass the id in either `query` or `id`. | Was the standalone `get_entry` tool |
+| `conventions` | List team coding standards. Filters by `directory` and/or `tags`. Returns all active `convention` entries matching the filters. | Was the standalone `conventions` tool |
+| `failures` | Match an error against known error patterns. Normalizes the incoming error, checks for exact signature match, falls back to BM25. | Was the standalone `failures` tool |
+
+**Formatting tiers** (for `mode=search`):
 | Budget | Tier | Content |
 |--------|------|---------|
 | ≥5000 | full | Up to 5 entries with title, body, files, tags |
@@ -83,102 +89,15 @@ Use before writing code to surface applicable rules, decisions, and error patter
 | 800–1999 | minimal | Top 2, 80-char summary |
 | <800 | ultra-minimal | Top 1, first sentence only |
 
-**Returns**: Formatted markdown text. Ghost entries prefixed `⚠️ Team Rule:`. Convention entries prefixed `📏 Convention:`.
+**Returns**: Formatted markdown text. Ghost entries prefixed with a warning indicator. Convention entries prefixed with a ruler indicator.
 
 ---
 
-## `search`
-
-**Purpose**: Compact knowledge index — same pipeline as `recall` but returns only metadata.
-
-Use when browsing multiple entries before deciding which to read in full. Roughly 7× more token-efficient than `recall` for discovery.
-
-**Key parameters**: Same as `recall` except `context_budget` is replaced by `limit` (1–50, default 10).
-
-**Returns**: One block per result:
-```
-<uuid> · <type> · <confidence%> · <age>
-<title>
-ref: gyst://entry/<uuid>
-```
-
-Follow up with `get_entry` for full content on entries of interest.
-
----
-
-## `get_entry`
-
-**Purpose**: Fetch the full content of a single entry by ID.
-
-**Key parameters**:
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | string | yes | Entry UUID or hash-based ID |
-
-**Returns**: Full formatted entry content including title, body, files, tags, confidence, scope, and a `gyst://entry/<id>` citation URI.
-
----
-
-## `conventions`
-
-**Purpose**: List coding standards relevant to a specific directory or tag set.
-
-**Key parameters**:
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `directory` | string | no | Filter to conventions associated with this path |
-| `tags` | string[] | no | Filter by tags |
-
-**Returns**: All active `convention` entries matching the filters, formatted as a list. Returns team-wide conventions if no directory is specified.
-
----
-
-## `check_conventions`
-
-**Purpose**: Check whether a specific file violates any stored conventions.
-
-**Key parameters**:
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `file_path` | string | yes | Path of the file to check |
-| `content` | string | yes | The file's current content |
-
-**What it does**: Loads all `convention` entries, runs each convention's rules against the provided content, and returns a list of violations with line-level guidance.
-
-**Returns**: List of violations, or confirmation that the file passes all known conventions.
-
----
-
-## `failures`
-
-**Purpose**: Match a new error against known error patterns.
-
-**Key parameters**:
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `error_message` | string | yes | The error text to match |
-| `error_type` | string | no | Exception class or error code |
-| `files` | string[] | no | Files involved (boosts file-path matches) |
-
-**What it does**:
-1. Normalizes the incoming error message using the same pipeline as `learn`
-2. Checks for an exact `error_signature` match in the DB
-3. Falls back to BM25 search on the normalized text
-4. Returns matching entries with their fix descriptions
-
-**Returns**: Matching error pattern entries or `"No matching patterns found"`.
-
----
-
-## `check`
+### `check`
 
 **Purpose**: Run all violation detectors against a file in one call.
 
-Combines `check_conventions` and `failures` for a comprehensive pre-commit or pre-review check.
+Combines convention checking and error pattern matching for a comprehensive pre-commit or pre-review check.
 
 **Key parameters**:
 
@@ -187,11 +106,25 @@ Combines `check_conventions` and `failures` for a comprehensive pre-commit or pr
 | `file_path` | string | yes | File to check |
 | `content` | string | yes | Current file content |
 
-**Returns**: Aggregated list of convention violations and known error patterns relevant to this file.
+**What it does**: Loads all `convention` entries, runs each convention's rules against the provided content, and returns a list of violations with line-level guidance. Also checks the content against known error patterns.
+
+**Returns**: Aggregated list of convention violations and known error patterns relevant to this file, or confirmation that the file passes.
 
 ---
 
-## `graph`
+## Extended Tools (enabled by `exposeExtendedTools: true`)
+
+Enable in `.gyst-wiki.json`:
+```json
+{ "exposeExtendedTools": true }
+```
+Or via CLI: `gyst configure --extended-tools`.
+
+When disabled (the default), these tools are not registered at all — they do not appear in the agent's tool list and cannot be accidentally called.
+
+---
+
+### `graph`
 
 **Purpose**: Query the relationship graph between knowledge entries.
 
@@ -215,7 +148,7 @@ Combines `check_conventions` and `failures` for a comprehensive pre-commit or pr
 
 ---
 
-## `feedback`
+### `feedback`
 
 **Purpose**: Rate a knowledge entry helpful or unhelpful after using it.
 
@@ -236,7 +169,7 @@ Drives the confidence calibration loop. Over time, entries that are consistently
 
 ---
 
-## `harvest`
+### `harvest`
 
 **Purpose**: Extract knowledge entries automatically from a raw session transcript.
 
@@ -250,56 +183,36 @@ This is the zero-effort adoption path: the agent calls `harvest` at session end 
 | `session_id` | string | no | Deduplication key — re-harvesting same session is a no-op |
 | `developer_id` | string | no | Attribute extracted entries to this developer |
 
-**Processing pipeline**:
-1. Noise filter: drop pure code output, system prompts, tool blocks
-2. Pattern extraction: regex-based scanning for errors fixed, decisions made, conventions discovered, learnings
-3. Error pairing: error descriptions linked with nearby fix descriptions
-4. Each extracted item is passed through the full `learn` pipeline (normalize → dedupe → store)
-5. Session tracked in `sources` table keyed by `session_id` so re-harvest is idempotent
-
 **Returns**: Summary: `"Harvested N entries: X created, Y merged, Z skipped"`
 
 ---
 
-## `activity`
+### `status`
 
-**Purpose**: Query recent team activity — who did what and when.
+**Purpose**: Health check, team awareness snapshot, and recent activity.
 
-Only available in team mode (requires `activity_log` table).
-
-**Key parameters**:
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `hours` | 1–168 | `24` | Lookback window in hours |
-| `developer_id` | string | — | Filter to a specific developer |
-| `action` | string | — | Filter to a specific action type |
-
-**Returns**: List of activity events with developer, action, timestamp, and affected files. Returns guidance message if team features are not configured.
-
----
-
-## `status`
-
-**Purpose**: Health check and team awareness snapshot.
+Absorbs the former `activity` tool — use the `hours` parameter to look back at recent team events.
 
 **Key parameters**:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `hours` | 1–48 | `2` | Lookback window for active developers |
+| `hours` | 1–168 | `2` | Lookback window for active developers and activity |
+| `developer_id` | string | — | Filter activity to a specific developer |
+| `action` | string | — | Filter activity to a specific action type |
 
 **What it returns**:
 - Total active entries, broken down by type
 - Developers active in the last N hours with their recent actions and files touched
 - Count of conflicted entries needing resolution
+- Recent activity events with developer, action, timestamp, and affected files
 - If team features are not configured, a setup guidance message
 
 The response is capped at 2,000 tokens.
 
 ---
 
-## `configure`
+### `configure`
 
 **Purpose**: Read or write project configuration at runtime without editing `.gyst-wiki.json` manually.
 
@@ -311,6 +224,7 @@ The response is capped at 2,000 tokens.
 | `autoExport` | boolean | Auto-write markdown files on learn |
 | `maxRecallTokens` | integer (≤32,000) | Default token budget for recall responses |
 | `confidenceThreshold` | number (0–1) | Minimum confidence for recall results |
+| `exposeExtendedTools` | boolean | Enable/disable extended tool registration |
 | `logLevel` | `debug` \| `info` \| `warn` \| `error` | Log verbosity |
 
 Fields that require a server restart (`dbPath`, `wikiDir`, `globalDbPath`) are intentionally not exposed by this tool.

@@ -274,7 +274,7 @@ Config file: `.gyst-wiki.json` in your project root. All keys are optional — m
 | `logLevel` | string | `"info"` | Log level: `debug`, `info`, `warn`, `error` |
 | `autoExport` | boolean | `false` | Write markdown files after every `learn()` call |
 | `teamMode` | boolean | `false` | Enable team-scoped entries (set automatically by `gyst team init`) |
-| `exposeExtendedTools` | boolean | `false` | Register all 14 MCP tools instead of the default 3 |
+| `exposeExtendedTools` | boolean | `false` | Register 5 extended tools (graph, feedback, harvest, status, configure) in addition to the default 3 primary tools |
 
 ---
 
