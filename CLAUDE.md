@@ -69,20 +69,27 @@ gyst/
 
 ## Current Phase: V1 (Complete)
 
-### MCP Tools (13 total — both stdio and HTTP transports)
+### MCP Tools (stdio and HTTP transports)
+
+**Core surface (preferred):**
+- `read` — unified read. `action: "recall"` (default, ranked full-content with RRF fusion, intent boost, ghost_knowledge tier 0) · `action: "search"` (compact index, id/type/confidence/title) · `action: "get_entry"` (full markdown by id)
+- `check` — unified check. `action: "violations"` (default, run all violation detectors against a file) · `action: "conventions"` (check a file against stored conventions) · `action: "failures"` (match known error patterns by signature or BM25)
+- `admin` — unified observability. `action: "activity"` (default, team activity log) · `action: "status"` (who's active + conflicts)
 - `learn` — record team knowledge with entity extraction, auto-linking
-- `recall` — ranked search with RRF fusion, intent boost, ghost_knowledge tier 0
-- `search` — compact index (id/type/confidence/title) for progressive disclosure
-- `get_entry` — full markdown for a single entry by ID
 - `conventions` — list coding standards by directory/tags
-- `check_conventions` — check a file against stored conventions
-- `failures` — match known error patterns by signature or BM25
-- `check` — run all violation detectors against a file
 - `graph` — query the relationship graph (neighbors, path, similar)
 - `feedback` — rate an entry helpful/unhelpful (adjusts confidence ±0.02/0.05)
 - `harvest` — extract knowledge from a session transcript
-- `activity` — query team activity log
-- `status` — health check / stats
+- `configure` — adjust server configuration at runtime
+
+**Deprecated (still registered for backward compat, will be removed):**
+- `recall` → `read({ action: "recall", ... })`
+- `search` → `read({ action: "search", ... })`
+- `get_entry` → `read({ action: "get_entry", id })`
+- `check_conventions` → `check({ action: "conventions", file_path })`
+- `failures` → `check({ action: "failures", error_message })`
+- `activity` → `admin({ action: "activity" })`
+- `status` → `admin({ action: "status" })`
 
 ### CLI Commands
 - `gyst setup` — detect conventions from a sample project
@@ -192,3 +199,24 @@ Check .claude/memory/ at the start of every session for:
 - NEVER run `git log` without `--oneline -10` limit.
 - ALWAYS run `git status --short` instead of `git status`.
 - Before any git operation that might produce large output, estimate the output size and ask me first.
+
+## Gyst — Team Knowledge Layer
+
+Gyst gives you access to your team's accumulated knowledge: conventions,
+decisions, known error patterns, and learnings from past sessions.
+
+**Always use Gyst when:**
+- Starting a new task → call `read({ action: "recall", query: "<task description>" })` to surface relevant context
+- Discovering something important → call `learn` to record it for the team
+- Validating a file → call `check({ file_path })` to catch convention violations
+
+**Core tools:**
+- `read` — read team knowledge. `action: "recall"` (default, full-content ranked search), `action: "search"` (compact index), `action: "get_entry"` (by id)
+- `learn` — record conventions, decisions, and learnings
+- `check` — check code/errors. `action: "violations"` (default, validate a file), `action: "conventions"` (rules for a path), `action: "failures"` (look up a known error)
+- `admin` — team observability. `action: "activity"` (default), `action: "status"`
+- `conventions` — list coding standards for a directory
+
+Legacy names `recall`, `search`, `get_entry`, `check_conventions`, `failures`, `activity`, `status` still work but print a deprecation notice — prefer the unified tools.
+
+Run `gyst status` to confirm the MCP server is active.

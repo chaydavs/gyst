@@ -26,6 +26,8 @@ import { registerGetEntryTool } from "./tools/get-entry.js";
 import { registerCheckTool } from "./tools/check.js";
 import { registerGraphTool } from "./tools/graph.js";
 import { registerConfigureTool } from "./tools/configure.js";
+import { registerReadTool } from "./tools/read.js";
+import { registerAdminTool } from "./tools/admin.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -73,20 +75,29 @@ export interface ToolContext {
 export function registerAllTools(server: McpServer, ctx: ToolContext): void {
   instrumentServer(server, ctx.db);
 
+  // --- Unified tools (preferred surface) ---------------------------------
+  registerReadTool(server, ctx);   // recall / search / get_entry
+  registerCheckTool(server, ctx);  // violations / conventions / failures
+  registerAdminTool(server, ctx);  // activity / status
+
+  // --- Write-side tools ---------------------------------------------------
   registerLearnTool(server, ctx);
-  registerRecallTool(server, ctx);
-  registerConventionsTool(server, ctx);
-  registerFailuresTool(server, ctx);
-  registerActivityTool(server, ctx);
-  registerStatusTool(server, ctx);
   registerFeedbackTool(server, ctx);
   registerHarvestTool(server, ctx);
-  registerCheckConventionsTool(server, ctx);
-  registerSearchTool(server, ctx);
-  registerGetEntryTool(server, ctx);
-  registerCheckTool(server, ctx);
+
+  // --- Specialized read tools --------------------------------------------
+  registerConventionsTool(server, ctx);
   registerGraphTool(server, ctx);
   registerConfigureTool(server, ctx);
+
+  // --- Legacy tools (DEPRECATED, kept for backward compat) ---------------
+  registerRecallTool(server, ctx);
+  registerSearchTool(server, ctx);
+  registerGetEntryTool(server, ctx);
+  registerFailuresTool(server, ctx);
+  registerCheckConventionsTool(server, ctx);
+  registerActivityTool(server, ctx);
+  registerStatusTool(server, ctx);
 
   // --- Proactive Learning Prompt ---
   // Tells the agent how to behave without the user repeating instructions.

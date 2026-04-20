@@ -32,9 +32,13 @@ jobs:
         run: bun run lint
 
   test:
-    name: Test
-    runs-on: ubuntu-latest
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
 
@@ -50,17 +54,39 @@ jobs:
           restore-keys: |
             node-modules-${{ runner.os }}-
 
+      - name: Install SQLite with extension support (macOS)
+        if: runner.os == 'macOS'
+        run: brew install sqlite
+
+      - name: Install SQLite with extension support (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Chocolatey is preinstalled on windows-latest runners.
+          choco install sqlite --no-progress -y
+          # Expose the probe path database.ts looks for.
+          $dll = "C:\ProgramData\chocolatey\lib\SQLite\tools\sqlite3.dll"
+          if (-not (Test-Path $dll)) {
+            $found = Get-ChildItem -Path "C:\ProgramData\chocolatey\lib\SQLite" -Recurse -Filter sqlite3.dll -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) { $dll = $found.FullName }
+          }
+          echo "GYST_SQLITE_PATH=$dll" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
       - name: Run tests
         run: bun test
 
+      - name: Smoke-test doctor
+        shell: bash
+        run: bun run src/cli/index.ts doctor || true
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-results
+          name: test-results-${{ matrix.os }}
           path: |
             test-results/
             *.xml

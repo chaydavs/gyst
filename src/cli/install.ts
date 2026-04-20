@@ -534,6 +534,92 @@ async function askYesNo(
   return answer === "y" || answer === "yes";
 }
 
+/**
+ * Reads a single line of free-form input from stdin.
+ *
+ * Same reader-reuse rules as `askYesNo` — the caller must pass the single
+ * reader acquired at the top of the flow, not re-acquire one per prompt.
+ */
+async function askLine(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  question: string,
+): Promise<string> {
+  process.stdout.write(`\n  ? ${question} `);
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    if (buffer.includes("\n")) break;
+  }
+  return buffer.split("\n")[0]!.trim();
+}
+
+/**
+ * Prompts the user to pick a number in [1, max] and re-prompts on bad input.
+ */
+async function askChoice(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  question: string,
+  max: number,
+): Promise<number> {
+  while (true) {
+    const raw = await askLine(reader, question);
+    const n = Number.parseInt(raw, 10);
+    if (Number.isFinite(n) && n >= 1 && n <= max) return n;
+    process.stdout.write(`    Please enter a number between 1 and ${max}.\n`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Privacy mode helpers — .gitignore and .gyst-wiki.json writers
+// ---------------------------------------------------------------------------
+
+/** Idempotently append a pattern to `.gitignore`. Creates the file if missing. */
+function appendGitignoreLine(projectDir: string, pattern: string): boolean {
+  const path = join(projectDir, ".gitignore");
+  const existing = existsSync(path) ? readFileSync(path, "utf-8") : "";
+  const lines = existing.split(/\r?\n/).map((l) => l.trim());
+  if (lines.includes(pattern)) return false;
+  const prefix = existing.length > 0 && !existing.endsWith("\n") ? "\n" : "";
+  writeFileSync(path, `${existing}${prefix}${pattern}\n`, "utf-8");
+  return true;
+}
+
+/**
+ * Ensures the project's `.gitignore` hides Gyst's local state so agent-authored
+ * knowledge does not leak into the client repo.
+ *
+ * @returns The patterns that were newly added (empty array = already present).
+ */
+export function ensureGitignore(projectDir: string = process.cwd()): string[] {
+  const patterns = ["gyst-wiki/", ".gyst/"] as const;
+  const added: string[] = [];
+  for (const p of patterns) {
+    if (appendGitignoreLine(projectDir, p)) added.push(p);
+  }
+  return added;
+}
+
+/** Merges the given partial config into `.gyst-wiki.json`. Creates the file if missing. */
+export function writeProjectConfig(
+  projectDir: string,
+  updates: Record<string, unknown>,
+): void {
+  const path = join(projectDir, ".gyst-wiki.json");
+  let existing: Record<string, unknown> = {};
+  if (existsSync(path)) {
+    try {
+      existing = JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>;
+    } catch {
+      logger.warn("install: could not parse .gyst-wiki.json, overwriting", { path });
+    }
+  }
+  const merged = { ...existing, ...updates };
+  writeFileSync(path, JSON.stringify(merged, null, 2) + "\n", "utf-8");
+}
+
 // ---------------------------------------------------------------------------
 // Step 3 (interactive) — Register MCP configs
 // ---------------------------------------------------------------------------
@@ -783,16 +869,18 @@ Gyst gives you access to your team's accumulated knowledge: conventions,
 decisions, known error patterns, and learnings from past sessions.
 
 **Always use Gyst when:**
-- Starting a new task → call \`recall\` with a description to surface relevant context
+- Starting a new task → call \`read({ action: "recall", query: "<task description>" })\` to surface relevant context
 - Discovering something important → call \`learn\` to record it for the team
-- Validating a file → call \`check\` to catch convention violations
+- Validating a file → call \`check({ file_path })\` to catch convention violations
 
 **Core tools:**
-- \`recall\` — search team knowledge before implementing anything
+- \`read\` — read team knowledge. \`action\`: \`recall\` (default, ranked full-content) · \`search\` (compact index) · \`get_entry\` (by id)
 - \`learn\` — record conventions, decisions, and learnings
-- \`check\` — validate a file against stored conventions
+- \`check\` — check code/errors. \`action\`: \`violations\` (default, validate a file) · \`conventions\` (rules for a path) · \`failures\` (known-error lookup)
+- \`admin\` — team observability. \`action\`: \`activity\` (default) · \`status\`
 - \`conventions\` — list coding standards for a directory
-- \`failures\` — look up known error patterns before debugging
+
+Legacy names \`recall\`, \`search\`, \`get_entry\`, \`check_conventions\`, \`failures\`, \`activity\`, \`status\` still work with a deprecation notice — prefer the unified tools.
 
 Run \`gyst status\` to confirm the MCP server is active.
 `;
@@ -907,16 +995,104 @@ export async function runInstall(): Promise<void> {
     process.stdout.write(`    ${tool.name} ${tool.detected ? "✓" : "✗"}\n`);
   }
 
-  // Step 3: MCP registration
+  // Scope-selection prompt — see ARCHITECTURE.md §3 "Install-Time Privacy Prompt".
+  // Determines where the knowledge base lives: local dir, sibling private repo,
+  // or a shared HTTP server. Written to .gyst-wiki.json so `gyst privacy` can
+  // switch modes later without reinstalling.
+  process.stdout.write(`
+  Where should this knowledge base live?
+    1. Just me (solo)                        → local only
+    2. My team, internal/OSS code            → local only
+    3. My team, some client work             → private wiki repo
+    4. My team, strict privacy required      → HTTP server
+`);
+  const scopeChoice = await askChoice(stdinReader, "Choose [1-4]:", 4);
+  type PrivacyMode = "local" | "private-repo" | "http-server";
+  const privacyMode: PrivacyMode =
+    scopeChoice === 3 ? "private-repo" : scopeChoice === 4 ? "http-server" : "local";
+
+  // Path 2 — ask where the sibling wiki repo lives.
+  let privateWikiDir: string | null = null;
+  if (privacyMode === "private-repo") {
+    const parentDefault = join(process.cwd(), "..", "gyst-wiki-private");
+    const raw = await askLine(
+      stdinReader,
+      `Path to your private wiki repo (default: ${parentDefault}):`,
+    );
+    const resolved = raw.length > 0 ? raw : parentDefault;
+    privateWikiDir = resolved.startsWith("/") || /^[A-Za-z]:[\\/]/.test(resolved)
+      ? resolved
+      : join(process.cwd(), resolved);
+  }
+
+  // Path 3 — ask for server URL + invite key, then remote-join to get a member key.
+  let httpServerUrl: string | null = null;
+  let httpMemberKey: string | null = null;
+  if (privacyMode === "http-server") {
+    httpServerUrl = await askLine(
+      stdinReader,
+      "Gyst HTTP server URL (e.g. http://team.example.com:3456):",
+    );
+    if (!httpServerUrl) {
+      process.stdout.write("    Server URL is required for this path. Aborting.\n");
+      process.exit(1);
+    }
+    const inviteKey = await askLine(stdinReader, "Invite key from `gyst team invite`:");
+    if (!inviteKey) {
+      process.stdout.write("    Invite key is required for this path. Aborting.\n");
+      process.exit(1);
+    }
+    const displayName =
+      (await askLine(stdinReader, "Your display name:")) || process.env["USER"] || "Developer";
+
+    try {
+      const joinUrl = httpServerUrl.replace(/\/$/, "") + "/team/join";
+      const res = await fetch(joinUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${inviteKey}`,
+        },
+        body: JSON.stringify({ displayName }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        process.stdout.write(`    Remote join failed: ${res.status} ${body}\n`);
+        process.exit(1);
+      }
+      const data = (await res.json()) as { memberKey?: string };
+      if (!data.memberKey) {
+        process.stdout.write("    Server did not return a member key. Aborting.\n");
+        process.exit(1);
+      }
+      httpMemberKey = data.memberKey;
+      process.stdout.write(`    ✓ Joined. Member key: ${httpMemberKey}\n`);
+      process.stdout.write(`    Add to your shell: export GYST_API_KEY="${httpMemberKey}"\n`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stdout.write(`    Could not reach server: ${msg}\n`);
+      process.exit(1);
+    }
+  }
+
+  // Step 3: MCP registration — HTTP mode writes Bearer-token configs instead of stdio.
   const detectedTools = tools.filter((t) => t.detected);
   if (detectedTools.length > 0) {
     process.stdout.write("\n  ✓ Registering Gyst MCP server...\n");
-    await registerMcpForTools(tools, stdinReader);
+    if (privacyMode === "http-server" && httpServerUrl && httpMemberKey) {
+      const configured = writeHttpMcpConfig(httpServerUrl, httpMemberKey);
+      for (const name of configured) {
+        process.stdout.write(`    ${name}: wrote Bearer-token HTTP config ✓\n`);
+      }
+    } else {
+      await registerMcpForTools(tools, stdinReader);
+    }
   }
 
   // Step 4: Project init
   process.stdout.write("\n  ✓ Initializing project...\n");
-  const alreadyInit = existsSync(join(process.cwd(), ".gyst"));
+  const cwd = process.cwd();
+  const alreadyInit = existsSync(join(cwd, ".gyst"));
   if (alreadyInit) {
     const reinit = await askYesNo(stdinReader, "Gyst already initialized. Reinitialize?");
     if (reinit) {
@@ -926,14 +1102,74 @@ export async function runInstall(): Promise<void> {
       process.stdout.write("    Skipping project initialization.\n");
     }
   } else {
-    initProject();
-    process.stdout.write("    Created .gyst/\n");
-    process.stdout.write("    Created gyst-wiki/\n");
+    // Warn if an ancestor directory already has a Gyst project — running
+    // install here would create a second, nested knowledge base and the
+    // user would lose track of which is which.
+    const { findProjectRoot } = await import("../utils/config.js");
+    const ancestorRoot = findProjectRoot(cwd);
+    if (ancestorRoot && ancestorRoot !== cwd) {
+      process.stdout.write(
+        `    ⚠  A Gyst project already exists at: ${ancestorRoot}\n` +
+          `       Running install here would create a second, nested project.\n`,
+      );
+      const forced = process.env["GYST_FORCE_NESTED"] === "1";
+      const proceed = forced
+        ? true
+        : await askYesNo(
+            stdinReader,
+            "Create a nested project anyway? (say no to use the existing one)",
+          );
+      if (!proceed) {
+        process.stdout.write(
+          `    Using existing project at ${ancestorRoot}. You can run 'gyst' commands from any subfolder.\n`,
+        );
+        return;
+      }
+      if (forced) {
+        process.stdout.write("    GYST_FORCE_NESTED=1 — creating nested project.\n");
+      }
+    }
+    // Paths 2 & 3 skip in-project gyst-wiki/ creation — Path 2's wiki lives at a
+    // sibling repo path (created later from privateWikiDir), Path 3's wiki lives
+    // on the HTTP server. Keeping gyst-wiki/ out of the client repo is the whole
+    // point of those modes.
+    if (privacyMode === "local") {
+      initProject();
+      process.stdout.write("    Created .gyst/\n");
+      process.stdout.write("    Created gyst-wiki/\n");
+    } else {
+      mkdirSync(join(cwd, ".gyst"), { recursive: true });
+      process.stdout.write("    Created .gyst/\n");
+      const reason = privacyMode === "http-server" ? "HTTP server mode" : "private repo mode";
+      process.stdout.write(`    Skipped gyst-wiki/ (${reason})\n`);
+    }
+  }
+
+  // Persist scope selection so `gyst privacy` can read the current mode later.
+  const configUpdates: Record<string, unknown> = { privacyMode };
+  if (privacyMode === "private-repo" && privateWikiDir) {
+    configUpdates["wikiDir"] = privateWikiDir;
+    mkdirSync(privateWikiDir, { recursive: true });
+    process.stdout.write(`    Wiki dir → ${privateWikiDir}\n`);
+  }
+  if (privacyMode === "http-server" && httpServerUrl) {
+    configUpdates["serverUrl"] = httpServerUrl.replace(/\/$/, "");
+  }
+  writeProjectConfig(cwd, configUpdates);
+
+  // Path 1 auto-gitignore — hide local Gyst state from the project's git history.
+  if (privacyMode === "local") {
+    const added = ensureGitignore(cwd);
+    if (added.length > 0) {
+      process.stdout.write(`    Added to .gitignore: ${added.join(", ")}\n`);
+    } else {
+      process.stdout.write("    .gitignore already hides Gyst state — skipped\n");
+    }
   }
 
   // Step 5: Convention scanning (automated, capped at 30)
   const { loadConfig } = await import("../utils/config.js");
-  const db = initDatabase(loadConfig().dbPath);
+  const db = initDatabase(loadConfig(cwd).dbPath);
   const conventionCount = await scanAndSaveConventions(db, process.cwd());
   db.close();
 
@@ -973,6 +1209,12 @@ export async function runInstall(): Promise<void> {
 
   // Step 9: Agent instructions
   const configuredNames = detectedTools.map((t) => t.name).join(", ") || "none";
+  const modeLabel =
+    privacyMode === "local"
+      ? "Local only"
+      : privacyMode === "private-repo"
+      ? `Private wiki repo (${privateWikiDir ?? "?"})`
+      : `HTTP server (${httpServerUrl ?? "?"})`;
   process.stdout.write(`
   ${"═".repeat(56)}
   ✓ Gyst installed. Restart your AI tool to activate.
@@ -980,6 +1222,7 @@ export async function runInstall(): Promise<void> {
   Tools configured:  ${configuredNames}
   Database:          .gyst/wiki.db
   Conventions:       ${conventionCount} detected
+  Privacy mode:      ${modeLabel}
   ${"═".repeat(56)}
 
   On your next session, tell your agent:

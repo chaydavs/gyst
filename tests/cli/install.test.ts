@@ -7,7 +7,7 @@
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { mkdtempSync, rmSync, existsSync, writeFileSync, chmodSync, readFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir, homedir } from "node:os";
 import {
   checkBunVersion,
@@ -19,7 +19,8 @@ import {
   installGitHooks,
   writeAgentRules,
 } from "../../src/cli/install.js";
-import { loadConfig } from "../../src/utils/config.js";
+import { findAllProjects, findProjectRoot, loadConfig } from "../../src/utils/config.js";
+import { NoProjectError } from "../../src/utils/errors.js";
 
 // ---------------------------------------------------------------------------
 // Test 1 — checkBunVersion
@@ -268,6 +269,121 @@ describe("loadConfig", () => {
     const cfg = loadConfig(tmpDir);
     expect(cfg.autoExport).toBe(true);
     rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test("loadConfig: resolves relative dbPath against the project root", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "gyst-cfg-abs-"));
+    mkdirSync(join(tmpDir, ".gyst"));
+    const cfg = loadConfig(tmpDir);
+    // dbPath default is ".gyst/wiki.db" — should be resolved absolute to tmpDir.
+    expect(cfg.dbPath).toBe(join(tmpDir, ".gyst", "wiki.db"));
+    expect(cfg.wikiDir).toBe(join(tmpDir, "gyst-wiki"));
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 7b — findProjectRoot
+// ---------------------------------------------------------------------------
+
+describe("findProjectRoot", () => {
+  test("returns null when no .gyst/ exists in any ancestor", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "gyst-noroot-"));
+    try {
+      const leaf = join(tmpDir, "a", "b", "c");
+      mkdirSync(leaf, { recursive: true });
+      // tmpdir itself may be inside a gyst project on dev machines, so verify
+      // only that the function either returns null or an ancestor of tmpDir —
+      // NOT the leaf (since we never put .gyst/ there).
+      const root = findProjectRoot(leaf);
+      expect(root === null || !root.startsWith(leaf)).toBe(true);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test("returns the directory containing .gyst/ when called from it", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "gyst-root-"));
+    try {
+      mkdirSync(join(tmpDir, ".gyst"));
+      // findProjectRoot normalises with path.resolve (does NOT follow symlinks),
+      // so compare to the same normalisation.
+      expect(findProjectRoot(tmpDir)).toBe(resolve(tmpDir));
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test("walks up to find an ancestor .gyst/", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "gyst-walk-"));
+    try {
+      mkdirSync(join(tmpDir, ".gyst"));
+      const leaf = join(tmpDir, "src", "deep", "nested");
+      mkdirSync(leaf, { recursive: true });
+      expect(findProjectRoot(leaf)).toBe(resolve(tmpDir));
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 7c — loadConfig refuses when no project root exists
+// ---------------------------------------------------------------------------
+
+describe("loadConfig: NoProjectError", () => {
+  test("throws NoProjectError when no projectDir is passed and no .gyst/ exists upward", () => {
+    // We can't easily make process.cwd() be a directory without any ancestor
+    // .gyst/ on a dev machine, so we simulate by using process.chdir into
+    // tmpDir. Note: tmpDir on most systems (e.g. /tmp, C:\Users\…\AppData\Local\Temp)
+    // is NOT inside a gyst project, so findProjectRoot returns null.
+    const tmpDir = mkdtempSync(join(tmpdir(), "gyst-noproject-"));
+    const prev = process.cwd();
+    try {
+      process.chdir(tmpDir);
+      // On machines where tmpdir() is somehow inside a gyst project, this
+      // test is a no-op — skip the assertion.
+      if (findProjectRoot(tmpDir) !== null) return;
+      expect(() => loadConfig()).toThrow(NoProjectError);
+    } finally {
+      process.chdir(prev);
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test("does not throw when projectDir is passed explicitly", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "gyst-explicit-"));
+    try {
+      // No .gyst/ in tmpDir — but because we pass it explicitly, loadConfig
+      // uses it verbatim without a walk.
+      const cfg = loadConfig(tmpDir);
+      expect(cfg.dbPath).toBe(join(tmpDir, ".gyst", "wiki.db"));
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test 7d — findAllProjects
+// ---------------------------------------------------------------------------
+
+describe("findAllProjects", () => {
+  test("finds multiple .gyst/ folders under a directory and skips node_modules", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "gyst-scan-"));
+    try {
+      mkdirSync(join(tmpDir, "projectA", ".gyst"), { recursive: true });
+      mkdirSync(join(tmpDir, "nested", "projectB", ".gyst"), { recursive: true });
+      // noise: node_modules subtree should be ignored
+      mkdirSync(join(tmpDir, "node_modules", "fake", ".gyst"), { recursive: true });
+      const found = findAllProjects(tmpDir);
+      const realTmp = resolve(tmpDir);
+      expect(found).toContain(join(realTmp, "projectA"));
+      expect(found).toContain(join(realTmp, "nested", "projectB"));
+      expect(found.some((p) => p.includes("node_modules"))).toBe(false);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });
 

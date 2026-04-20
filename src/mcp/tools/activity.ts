@@ -1,11 +1,8 @@
 /**
- * The `activity` MCP tool — surface recent team activity relevant to the
- * current working context.
+ * The `activity` MCP tool — DEPRECATED.
  *
- * Queries the `activity_log` table (a team-collaboration extension) for
- * recent learn/recall events from other developers' agents.  If the table
- * does not exist — i.e. team features have not been configured — a helpful
- * guidance message is returned instead of crashing.
+ * Prefer `admin({ action: "activity", ... })`. Core logic is exported as
+ * `handleActivity` so the unified `admin` tool can dispatch to it.
  */
 
 import { z } from "zod";
@@ -15,33 +12,18 @@ import { truncateToTokenBudget } from "../../utils/tokens.js";
 import { logger } from "../../utils/logger.js";
 import type { ToolContext } from "../register-tools.js";
 
-// ---------------------------------------------------------------------------
-// Input schema
-// ---------------------------------------------------------------------------
-
-const ActivityInput = z.object({
-  /** How many hours back to look. Min 1, max 168 (one week). Default 24. */
+export const ActivityInput = z.object({
   hours: z.number().min(1).max(168).optional().default(24),
-  /** Optional file paths — activity touching these files is surfaced first. */
   files: z.array(z.string()).optional().default([]),
-  /** Restrict results to specific knowledge types. Omit for all types. */
   types: z
-    .array(
-      z.enum(["error_pattern", "convention", "decision", "learning"]),
-    )
+    .array(z.enum(["error_pattern", "convention", "decision", "learning"]))
     .optional(),
 });
 
-type ActivityInputType = z.infer<typeof ActivityInput>;
+export type ActivityInputType = z.infer<typeof ActivityInput>;
 
-/** Token budget for the activity tool response. */
 const ACTIVITY_TOKEN_BUDGET = 3_000;
 
-// ---------------------------------------------------------------------------
-// Database row types
-// ---------------------------------------------------------------------------
-
-/** A row returned by the activity_log + entries join query. */
 interface ActivityRow {
   readonly id: number;
   readonly developer_id: string | null;
@@ -54,20 +36,10 @@ interface ActivityRow {
   readonly confidence: number | null;
 }
 
-/** Result of the sqlite_master existence check. */
 interface TableExistsRow {
   readonly name: string;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Returns `true` when the `activity_log` table exists in the database.
- *
- * @param db - Open database connection.
- */
 function activityLogTableExists(db: Database): boolean {
   const row = db
     .query<TableExistsRow, [string]>(
@@ -77,15 +49,6 @@ function activityLogTableExists(db: Database): boolean {
   return row !== null;
 }
 
-/**
- * Queries recent activity rows from `activity_log`, optionally filtered by
- * knowledge type.
- *
- * @param db - Open database connection.
- * @param hours - How many hours back to query.
- * @param types - Optional type filter applied to the joined `entries` row.
- * @returns Array of activity rows ordered newest-first, capped at 50.
- */
 function fetchActivityRows(
   db: Database,
   hours: number,
@@ -122,21 +85,8 @@ function fetchActivityRows(
     .all(`-${hours}`);
 }
 
-/**
- * Scores a single activity row by how many of the `files` filter list it
- * touches.  Rows with no file overlap score 0 and are listed last.
- *
- * @param row - Activity row to score.
- * @param files - Files to check against.
- * @returns Number of matching files.
- */
-function fileOverlapScore(
-  row: ActivityRow,
-  files: readonly string[],
-): number {
-  if (files.length === 0 || row.files === null) {
-    return 0;
-  }
+function fileOverlapScore(row: ActivityRow, files: readonly string[]): number {
+  if (files.length === 0 || row.files === null) return 0;
 
   let rowFiles: unknown;
   try {
@@ -144,22 +94,11 @@ function fileOverlapScore(
   } catch {
     return 0;
   }
-
-  if (!Array.isArray(rowFiles)) {
-    return 0;
-  }
-
+  if (!Array.isArray(rowFiles)) return 0;
   const rowFileSet = new Set(rowFiles as string[]);
   return files.filter((f) => rowFileSet.has(f)).length;
 }
 
-/**
- * Formats a list of activity rows as a markdown string within the token budget.
- *
- * @param rows - Activity rows to format, already sorted by priority.
- * @param hours - Window used to fetch the rows (for the header).
- * @returns Formatted markdown string, truncated to `ACTIVITY_TOKEN_BUDGET` tokens.
- */
 function formatActivityRows(rows: ActivityRow[], hours: number): string {
   const lines = rows.map((row) => {
     const dev = row.developer_id ?? "unknown";
@@ -169,84 +108,77 @@ function formatActivityRows(rows: ActivityRow[], hours: number): string {
       row.confidence !== null ? row.confidence.toFixed(2) : "N/A";
     return `[${row.timestamp}] ${dev} ${row.action}: ${title} (${entryType}, confidence: ${confidence})`;
   });
-
   const body = lines.join("\n");
   const header = `## Recent Team Activity (last ${hours}h)\n\n`;
   return truncateToTokenBudget(header + body, ACTIVITY_TOKEN_BUDGET);
 }
 
-// ---------------------------------------------------------------------------
-// Public registration function
-// ---------------------------------------------------------------------------
-
 /**
- * Registers the `activity` tool on the given MCP server.
- *
- * Returns recent team activity from the `activity_log` table. If team features
- * are not configured (table absent) a guidance message is returned.
- *
- * @param server - The McpServer instance to register on.
- * @param ctx - Tool context containing db, mode, and optional team identifiers.
+ * Core activity handler, exported so the unified `admin` tool can reuse it.
  */
-export function registerActivityTool(server: McpServer, ctx: ToolContext): void {
+export async function handleActivity(
+  ctx: ToolContext,
+  input: ActivityInputType,
+): Promise<{ content: Array<{ type: "text"; text: string }> }> {
   const { db } = ctx;
+  logger.info("activity called", {
+    hours: input.hours,
+    files: input.files,
+    types: input.types,
+  });
+
+  if (!activityLogTableExists(db)) {
+    logger.info("activity_log table not found, returning guidance");
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: "Team activity features are not configured. Run `gyst team create` to set up team collaboration.",
+        },
+      ],
+    };
+  }
+
+  const rows = fetchActivityRows(db, input.hours, input.types);
+
+  if (rows.length === 0) {
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: `No team activity in the last ${input.hours} hours.`,
+        },
+      ],
+    };
+  }
+
+  const sorted =
+    input.files.length > 0
+      ? [...rows].sort(
+          (a, b) =>
+            fileOverlapScore(b, input.files) -
+            fileOverlapScore(a, input.files),
+        )
+      : rows;
+
+  const formatted = formatActivityRows(sorted, input.hours);
+
+  return { content: [{ type: "text" as const, text: formatted }] };
+}
+
+export function registerActivityTool(server: McpServer, ctx: ToolContext): void {
   server.tool(
     "activity",
-    "Show recent team knowledge activity — what other developers have been learning, what errors were fixed, and what decisions were recorded.",
+    "[DEPRECATED — use `admin` with action: \"activity\"] Show recent team knowledge activity. Still functional; will be removed in a future release.",
     ActivityInput.shape,
     async (input: ActivityInputType) => {
-      logger.info("activity tool called", {
-        hours: input.hours,
-        files: input.files,
-        types: input.types,
-      });
-
-      if (!activityLogTableExists(db)) {
-        logger.info("activity_log table not found, returning guidance");
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: "Team activity features are not configured. Run `gyst team create` to set up team collaboration.",
-            },
-          ],
-        };
-      }
-
-      const rows = fetchActivityRows(db, input.hours, input.types);
-
-      if (rows.length === 0) {
-        logger.info("activity tool: no rows found", { hours: input.hours });
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `No team activity in the last ${input.hours} hours.`,
-            },
-          ],
-        };
-      }
-
-      // Sort: rows with file overlap first, then by recency (already sorted).
-      const sorted =
-        input.files.length > 0
-          ? [...rows].sort(
-              (a, b) =>
-                fileOverlapScore(b, input.files) -
-                fileOverlapScore(a, input.files),
-            )
-          : rows;
-
-      logger.info("activity tool results", { count: sorted.length });
-
-      const formatted = formatActivityRows(sorted, input.hours);
-
+      logger.warn('activity tool is deprecated, use `admin` with action: "activity"');
+      const result = await handleActivity(ctx, input);
+      const prefix =
+        '⚠️ `activity` is deprecated — use `admin({ action: "activity", ... })`. Forwarding for now.\n\n';
       return {
         content: [
-          {
-            type: "text" as const,
-            text: formatted,
-          },
+          { type: "text" as const, text: prefix + (result.content[0]?.text ?? "") },
         ],
       };
     },

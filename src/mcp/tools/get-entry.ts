@@ -1,12 +1,12 @@
 /**
  * MCP tool: get_entry
  *
- * Fetches the full detail of a single knowledge entry by id.
- * Returns a markdown document with content, files, entities, tags,
- * related entries, and evidence (sources).
+ * DEPRECATED: prefer `read({ action: "get_entry", id })`. The legacy `get_entry`
+ * tool remains for backward compat; the core logic is exported as
+ * `handleGetEntry` so the unified `read` tool can dispatch to it.
  *
- * Intended as a "read-full" companion to recall/search — callers search
- * first to get ids, then call get_entry to retrieve the complete record.
+ * Fetches full detail of a single knowledge entry by id and returns a markdown
+ * document with content, files, entities, tags, related entries, and evidence.
  */
 
 import { z } from "zod";
@@ -16,20 +16,12 @@ import { getEntryById } from "../../store/entries.js";
 import { formatAge } from "../../utils/age.js";
 import { logger } from "../../utils/logger.js";
 
-// ---------------------------------------------------------------------------
-// Input schema
-// ---------------------------------------------------------------------------
-
-const GetEntryInput = z.object({
+export const GetEntryInput = z.object({
   id: z.string().min(1),
   developer_id: z.string().optional(),
 });
 
-type GetEntryInputType = z.infer<typeof GetEntryInput>;
-
-// ---------------------------------------------------------------------------
-// DB row types
-// ---------------------------------------------------------------------------
+export type GetEntryInputType = z.infer<typeof GetEntryInput>;
 
 interface FileRow {
   file_path: string;
@@ -59,12 +51,8 @@ interface SourceRow {
   timestamp: string;
 }
 
-// ---------------------------------------------------------------------------
-// Helper: format evidence line
-// ---------------------------------------------------------------------------
-
 function formatEvidenceLine(row: SourceRow): string {
-  const date = row.timestamp.slice(0, 10); // YYYY-MM-DD
+  const date = row.timestamp.slice(0, 10);
   const who = row.developer_id ?? "unknown";
   const tool = row.tool ?? "unknown";
   const base = `${who} · ${tool} · ${date}`;
@@ -73,10 +61,6 @@ function formatEvidenceLine(row: SourceRow): string {
   }
   return base;
 }
-
-// ---------------------------------------------------------------------------
-// Helper: build markdown output
-// ---------------------------------------------------------------------------
 
 function buildMarkdown(params: {
   entry: NonNullable<ReturnType<typeof getEntryById>>;
@@ -100,23 +84,17 @@ function buildMarkdown(params: {
 
   if (files.length > 0) {
     lines.push("", "## Files");
-    for (const f of files) {
-      lines.push(`- ${f}`);
-    }
+    for (const f of files) lines.push(`- ${f}`);
   }
 
   if (entities.length > 0) {
     lines.push("", "## Entities");
-    for (const e of entities) {
-      lines.push(`- ${e}`);
-    }
+    for (const e of entities) lines.push(`- ${e}`);
   }
 
   if (plainTags.length > 0) {
     lines.push("", "## Tags");
-    for (const t of plainTags) {
-      lines.push(`- ${t}`);
-    }
+    for (const t of plainTags) lines.push(`- ${t}`);
   }
 
   if (related.length > 0) {
@@ -128,150 +106,132 @@ function buildMarkdown(params: {
 
   if (evidence.length > 0) {
     lines.push("", "## Evidence");
-    for (const ev of evidence) {
-      lines.push(`- ${formatEvidenceLine(ev)}`);
-    }
+    for (const ev of evidence) lines.push(`- ${formatEvidenceLine(ev)}`);
   }
 
   return lines.join("\n");
 }
 
-// ---------------------------------------------------------------------------
-// Registration
-// ---------------------------------------------------------------------------
-
 /**
- * Registers the `get_entry` tool on the MCP server.
- *
- * The tool resolves a single knowledge entry by id, enriches it with
- * files, tags, relationships, and evidence, then returns a formatted
- * markdown document.
- *
- * @param server - The McpServer instance to register on.
- * @param ctx    - Tool context containing db, mode, and optional team identifiers.
+ * Fetches a single entry and its enrichments. Exported so the unified `read`
+ * tool can call it.
  */
-export function registerGetEntryTool(
-  server: McpServer,
+export async function handleGetEntry(
   ctx: ToolContext,
-): void {
+  input: GetEntryInputType,
+): Promise<{ content: Array<{ type: "text"; text: string }> }> {
   const { db } = ctx;
+  logger.info("get_entry called", { id: input.id, developer_id: input.developer_id });
 
+  const entry = getEntryById(db, input.id, input.developer_id);
+  if (entry === null) {
+    return {
+      content: [{ type: "text" as const, text: `Entry not found: ${input.id}` }],
+    };
+  }
+
+  const fileRows = db
+    .query<FileRow, [string]>("SELECT file_path FROM entry_files WHERE entry_id = ?")
+    .all(input.id);
+  const files = fileRows.map((r) => r.file_path);
+
+  const tagRows = db
+    .query<TagRow, [string]>("SELECT tag FROM entry_tags WHERE entry_id = ?")
+    .all(input.id);
+
+  const ENTITY_PREFIX = "entity:";
+  const entities: string[] = [];
+  const plainTags: string[] = [];
+  for (const { tag } of tagRows) {
+    if (tag.startsWith(ENTITY_PREFIX)) {
+      entities.push(tag.slice(ENTITY_PREFIX.length));
+    } else {
+      plainTags.push(tag);
+    }
+  }
+
+  const relRows = db
+    .query<RelRow, [string, string]>(`
+      SELECT target_id AS other_id, type, strength
+        FROM relationships WHERE source_id = ?
+      UNION ALL
+      SELECT source_id AS other_id, type, strength
+        FROM relationships WHERE target_id = ?
+    `)
+    .all(input.id, input.id);
+
+  const related: Array<{ otherId: string; type: string; title: string }> = [];
+  if (relRows.length > 0) {
+    const seen = new Set<string>();
+    const uniqueRelRows: RelRow[] = [];
+    for (const row of relRows) {
+      if (!seen.has(row.other_id)) {
+        seen.add(row.other_id);
+        uniqueRelRows.push(row);
+      }
+    }
+
+    const otherIds = uniqueRelRows.map((r) => r.other_id);
+    const placeholders = otherIds.map(() => "?").join(", ");
+    const stubRows = db
+      .query<EntryStubRow, string[]>(
+        `SELECT id, title, type FROM entries WHERE id IN (${placeholders})`,
+      )
+      .all(...otherIds);
+
+    const stubMap = new Map(stubRows.map((s) => [s.id, s]));
+
+    for (const row of uniqueRelRows) {
+      const stub = stubMap.get(row.other_id);
+      related.push({
+        otherId: row.other_id,
+        type: row.type,
+        title: stub?.title ?? row.other_id,
+      });
+    }
+  }
+
+  let evidence: SourceRow[] = [];
+  try {
+    evidence = db
+      .query<SourceRow, [string]>(`
+        SELECT developer_id, tool, session_id, git_commit, timestamp
+          FROM sources
+         WHERE entry_id = ?
+         ORDER BY timestamp DESC
+         LIMIT 5
+      `)
+      .all(input.id);
+  } catch {
+    logger.info("get_entry: sources table unavailable, skipping evidence query");
+  }
+
+  const text = buildMarkdown({ entry, files, entities, plainTags, related, evidence });
+
+  if (
+    ctx.mode === "team" &&
+    ctx.teamId !== undefined &&
+    ctx.developerId !== undefined
+  ) {
+    const { logActivity } = await import("../../server/activity.js");
+    logActivity(db, ctx.teamId, ctx.developerId, "get_entry");
+  }
+
+  return { content: [{ type: "text" as const, text }] };
+}
+
+export function registerGetEntryTool(server: McpServer, ctx: ToolContext): void {
   server.tool(
     "get_entry",
-    "Get full details of a knowledge entry by ID. Use after search returns relevant results. Returns content, affected files, related entries, and a gyst://entry/{id} citation URI you can include in responses.",
+    "[DEPRECATED — use `read` with action: \"get_entry\"] Fetch a knowledge entry by id. Still functional; will be removed in a future release.",
     GetEntryInput.shape,
     async (input: GetEntryInputType) => {
-      logger.info("get_entry tool called", { id: input.id, developer_id: input.developer_id });
-
-      // 1. Fetch the main entry.
-      const entry = getEntryById(db, input.id, input.developer_id);
-      if (entry === null) {
-        return {
-          content: [{ type: "text" as const, text: `Entry not found: ${input.id}` }],
-        };
-      }
-
-      // 2. Query files.
-      const fileRows = db
-        .query<FileRow, [string]>(
-          "SELECT file_path FROM entry_files WHERE entry_id = ?",
-        )
-        .all(input.id);
-      const files = fileRows.map((r) => r.file_path);
-
-      // 3. Query tags — split into entities and plain tags.
-      const tagRows = db
-        .query<TagRow, [string]>(
-          "SELECT tag FROM entry_tags WHERE entry_id = ?",
-        )
-        .all(input.id);
-
-      const ENTITY_PREFIX = "entity:";
-      const entities: string[] = [];
-      const plainTags: string[] = [];
-      for (const { tag } of tagRows) {
-        if (tag.startsWith(ENTITY_PREFIX)) {
-          entities.push(tag.slice(ENTITY_PREFIX.length));
-        } else {
-          plainTags.push(tag);
-        }
-      }
-
-      // 4. Query relationships (bidirectional), then batch-fetch titles.
-      const relRows = db
-        .query<RelRow, [string, string]>(`
-          SELECT target_id AS other_id, type, strength
-            FROM relationships WHERE source_id = ?
-          UNION ALL
-          SELECT source_id AS other_id, type, strength
-            FROM relationships WHERE target_id = ?
-        `)
-        .all(input.id, input.id);
-
-      const related: Array<{ otherId: string; type: string; title: string }> = [];
-
-      if (relRows.length > 0) {
-        // Deduplicate other_ids preserving first-seen order.
-        const seen = new Set<string>();
-        const uniqueRelRows: RelRow[] = [];
-        for (const row of relRows) {
-          if (!seen.has(row.other_id)) {
-            seen.add(row.other_id);
-            uniqueRelRows.push(row);
-          }
-        }
-
-        const otherIds = uniqueRelRows.map((r) => r.other_id);
-        const placeholders = otherIds.map(() => "?").join(", ");
-        const stubRows = db
-          .query<EntryStubRow, string[]>(
-            `SELECT id, title, type FROM entries WHERE id IN (${placeholders})`,
-          )
-          .all(...otherIds);
-
-        const stubMap = new Map(stubRows.map((s) => [s.id, s]));
-
-        for (const row of uniqueRelRows) {
-          const stub = stubMap.get(row.other_id);
-          related.push({
-            otherId: row.other_id,
-            type: row.type,
-            title: stub?.title ?? row.other_id,
-          });
-        }
-      }
-
-      // 5. Query sources/evidence — guard against missing table.
-      let evidence: SourceRow[] = [];
-      try {
-        evidence = db
-          .query<SourceRow, [string]>(`
-            SELECT developer_id, tool, session_id, git_commit, timestamp
-              FROM sources
-             WHERE entry_id = ?
-             ORDER BY timestamp DESC
-             LIMIT 5
-          `)
-          .all(input.id);
-      } catch {
-        // sources table may not exist in older databases; skip gracefully.
-        logger.info("get_entry: sources table unavailable, skipping evidence query");
-      }
-
-      // 6. Format markdown and return.
-      const text = buildMarkdown({ entry, files, entities, plainTags, related, evidence });
-
-      // 7. Activity logging — team mode only.
-      if (
-        ctx.mode === "team" &&
-        ctx.teamId !== undefined &&
-        ctx.developerId !== undefined
-      ) {
-        const { logActivity } = await import("../../server/activity.js");
-        logActivity(db, ctx.teamId, ctx.developerId, "get_entry");
-      }
-
-      return { content: [{ type: "text" as const, text }] };
+      logger.warn("get_entry tool is deprecated, use `read` with action: \"get_entry\"");
+      const result = await handleGetEntry(ctx, input);
+      const prefix = "⚠️ `get_entry` is deprecated — use `read({ action: \"get_entry\", id })`. Forwarding for now.\n\n";
+      return {
+        content: [{ type: "text" as const, text: prefix + (result.content[0]?.text ?? "") }],
+      };
     },
   );
 }

@@ -15,7 +15,8 @@
 
 import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
+import { homedir, platform as osPlatform } from "node:os";
 import { logger } from "../utils/logger.js";
 import { DatabaseError } from "../utils/errors.js";
 
@@ -27,54 +28,111 @@ import { DatabaseError } from "../utils/errors.js";
 // This is done lazily on first Database construction, process-wide.
 //
 // Probe order:
-//   1. GYST_SQLITE_PATH environment override
-//   2. Homebrew on macOS (/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib)
-//   3. Homebrew Intel (/usr/local/opt/sqlite/lib/libsqlite3.dylib)
-//   4. Ubuntu / Debian (/usr/lib/x86_64-linux-gnu/libsqlite3.so.0)
-//   5. Ubuntu ARM64 (/usr/lib/aarch64-linux-gnu/libsqlite3.so.0)
+//   1. GYST_SQLITE_PATH environment override (all platforms)
+//   2. Platform-specific well-known paths (macOS / Linux / Windows)
 //
 // If none found, fall back to Bun's bundled SQLite — extensions won't
 // work (semantic search will be disabled), but every other feature
 // keeps running.
 
-const SQLITE_PROBE_PATHS = [
+const MACOS_PROBE_PATHS: readonly string[] = [
   "/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib",
   "/usr/local/opt/sqlite/lib/libsqlite3.dylib",
+];
+
+const LINUX_PROBE_PATHS: readonly string[] = [
   "/usr/lib/x86_64-linux-gnu/libsqlite3.so.0",
   "/usr/lib/aarch64-linux-gnu/libsqlite3.so.0",
   "/usr/lib/libsqlite3.so.0",
-] as const;
+];
+
+function windowsProbePaths(): readonly string[] {
+  const home = homedir();
+  const programFiles = process.env["ProgramFiles"] ?? "C:\\Program Files";
+  const programFilesX86 =
+    process.env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)";
+  const programData = process.env["ProgramData"] ?? "C:\\ProgramData";
+  const windir = process.env["WINDIR"] ?? "C:\\Windows";
+  return [
+    // Manual install
+    join(programFiles, "SQLite", "sqlite3.dll"),
+    join(programFilesX86, "SQLite", "sqlite3.dll"),
+    "C:\\sqlite\\sqlite3.dll",
+    // System directory (many Windows apps drop an sqlite3.dll here)
+    join(windir, "System32", "sqlite3.dll"),
+    // Scoop
+    join(home, "scoop", "apps", "sqlite", "current", "sqlite3.dll"),
+    // Chocolatey
+    join(programData, "chocolatey", "lib", "SQLite", "tools", "sqlite3.dll"),
+    // MSYS2 / Git-for-Windows
+    "C:\\msys64\\mingw64\\bin\\sqlite3.dll",
+    "C:\\Program Files\\Git\\mingw64\\bin\\sqlite3.dll",
+  ];
+}
+
+/** Platform-appropriate probe path list. Exported for `gyst doctor`. */
+export function getSqliteProbePaths(): readonly string[] {
+  const plat = osPlatform();
+  if (plat === "darwin") return MACOS_PROBE_PATHS;
+  if (plat === "win32") return windowsProbePaths();
+  return LINUX_PROBE_PATHS;
+}
+
+export interface SqliteProbeResult {
+  readonly applied: boolean;
+  readonly appliedPath?: string;
+  readonly tried: readonly { path: string; exists: boolean; error?: string }[];
+}
 
 let customSqliteApplied = false;
+let lastProbeResult: SqliteProbeResult | null = null;
 
 function applyCustomSqliteOnce(): boolean {
-  if (customSqliteApplied) {
-    return true;
-  }
+  if (customSqliteApplied) return true;
+
   const overridePath = process.env["GYST_SQLITE_PATH"];
+  const probePaths = getSqliteProbePaths();
   const candidates = overridePath !== undefined
-    ? [overridePath, ...SQLITE_PROBE_PATHS]
-    : [...SQLITE_PROBE_PATHS];
+    ? [overridePath, ...probePaths]
+    : [...probePaths];
+
+  const tried: { path: string; exists: boolean; error?: string }[] = [];
 
   for (const candidate of candidates) {
-    if (existsSync(candidate)) {
-      try {
-        Database.setCustomSQLite(candidate);
-        customSqliteApplied = true;
-        logger.info("Custom SQLite loaded", { path: candidate });
-        return true;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        logger.warn("setCustomSQLite failed", { path: candidate, error: msg });
-      }
+    const exists = existsSync(candidate);
+    if (!exists) {
+      tried.push({ path: candidate, exists: false });
+      continue;
+    }
+    try {
+      Database.setCustomSQLite(candidate);
+      customSqliteApplied = true;
+      tried.push({ path: candidate, exists: true });
+      lastProbeResult = { applied: true, appliedPath: candidate, tried };
+      logger.info("Custom SQLite loaded", { path: candidate });
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      tried.push({ path: candidate, exists: true, error: msg });
+      logger.warn("setCustomSQLite failed", { path: candidate, error: msg });
     }
   }
 
+  lastProbeResult = { applied: false, tried };
   logger.warn(
     "No system libsqlite3 found — falling back to bundled Bun SQLite. " +
       "Semantic search will be disabled.",
   );
   return false;
+}
+
+/**
+ * Runs the probe eagerly and returns the result. Safe to call multiple
+ * times — caches the outcome after first run. Intended for `gyst doctor`.
+ */
+export function probeCustomSqlite(): SqliteProbeResult {
+  applyCustomSqliteOnce();
+  return lastProbeResult ?? { applied: false, tried: [] };
 }
 
 /**
@@ -328,12 +386,17 @@ export function initDatabase(path: string = ".gyst/wiki.db"): Database {
   // Safe to call repeatedly — internal guard makes it a one-shot.
   applyCustomSqliteOnce();
 
-  // Ensure parent directory exists (bun:sqlite won't create it)
-  try {
-    mkdirSync(dirname(path), { recursive: true });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new DatabaseError(`Failed to create database directory: ${msg}`);
+  // Ensure parent directory exists (bun:sqlite won't create it).
+  // Skip for `:memory:` and when the parent is already the cwd (`.`) —
+  // Bun on Windows throws EEXIST on mkdirSync(".", { recursive: true }).
+  const parent = dirname(path);
+  if (path !== ":memory:" && parent !== "." && parent !== "") {
+    try {
+      mkdirSync(parent, { recursive: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new DatabaseError(`Failed to create database directory: ${msg}`);
+    }
   }
 
   let db: Database;

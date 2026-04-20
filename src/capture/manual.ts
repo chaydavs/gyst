@@ -34,11 +34,21 @@ export interface ManualInput {
   readonly files?: readonly string[];
   readonly tags?: readonly string[];
   /**
-   * Visibility scope. Optional — when omitted, `extractEntry` applies type-based
-   * defaults (personal, except ghost_knowledge which defaults to team).
+   * Visibility scope. Optional — when omitted, defaults to `"team"`.
+   *
+   * Why the CLI defaults to team (not personal): a user typing
+   * `gyst add "..."` has consciously chosen to persist something. The
+   * search layer hides personal-scope rows from other developers *and*
+   * from the same developer when `developer_id` isn't stamped, which
+   * made CLI-added entries silently invisible from every `gyst recall`.
+   * Team is the correct default for the manual-CLI entry path; the
+   * `learn` MCP tool keeps its own per-type defaulting.
    */
   readonly scope?: "personal" | "team" | "project";
 }
+
+/** Default scope applied to CLI-added entries when the caller doesn't set one. */
+const CLI_DEFAULT_SCOPE: "personal" | "team" | "project" = "team";
 
 // ---------------------------------------------------------------------------
 // Validation helpers
@@ -122,13 +132,15 @@ export async function addManualEntry(
   const safeFiles = input.files?.map((f) => stripSensitiveData(f)) ?? [];
   const safeTags = input.tags?.map((t) => t.trim().toLowerCase()) ?? [];
 
+  const resolvedScope = input.scope ?? CLI_DEFAULT_SCOPE;
+
   const safeInput: ManualInput = {
     type: input.type,
     title: safeTitle,
     content: safeContent,
     files: safeFiles,
     tags: safeTags,
-    scope: input.scope,
+    scope: resolvedScope,
   };
 
   // 3. Extract entry (generate ID, normalize fields)
@@ -138,7 +150,7 @@ export async function addManualEntry(
     content: safeInput.content,
     files: [...safeFiles],
     tags: [...safeTags],
-    scope: safeInput.scope,
+    scope: resolvedScope,
   };
   const entry = extractEntry(learnInput);
 

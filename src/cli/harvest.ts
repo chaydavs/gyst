@@ -43,7 +43,7 @@ const MAX_SESSION_BYTES = 100_000;
  * @param cwd - Absolute directory path.
  * @returns Slug string.
  */
-function cwdToSlug(cwd: string): string {
+export function cwdToSlug(cwd: string): string {
   return cwd.replace(/[/\\: ]+/g, "-").replace(/^-+|-+$/g, "");
 }
 

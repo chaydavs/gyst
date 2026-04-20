@@ -2,11 +2,24 @@
 
 **Team knowledge compiler for AI coding agents.**
 
+*Open, self-hosted knowledge layer that every AI tool your team uses can read and write.*
+
 ---
 
 AI coding agents are everywhere. Claude Code, Cursor, Codex, Gemini — every developer on your team has one. But each agent only knows what happened in its own session. When your teammate's agent figures out why the auth service keeps timing out, or discovers that you should never deploy on Fridays because of the batch job, or learns the right way to structure API responses — that knowledge dies at the end of the session. Your agent starts fresh tomorrow. Their agent starts fresh next week. The team never gets smarter, even as each individual gets faster.
 
-Gyst is a shared memory layer that lives between your agents and your codebase. When an agent learns something worth keeping, it calls `learn()`. When any agent on the team needs context, it calls `recall()`. The knowledge base grows with every session, every fix, every decision — and every agent on the team has access to everything every other agent has ever learned. One developer's hard-won insight becomes the whole team's starting point.
+Gyst is the team's shared knowledge layer — open format, self-hosted, and multi-tool from day one. When any agent on the team learns something worth keeping, it calls `learn()`. When any other agent needs context, it calls `recall()`. The knowledge base grows with every session, every fix, every decision — and every agent on the team reads the same entries regardless of which vendor's tool they're running inside. One developer's hard-won insight becomes the whole team's starting point, and your knowledge doesn't get trapped in whichever AI tool a teammate happens to prefer.
+
+### Why not Claude memory / Mem0 / Cursor rules?
+
+| | Scope | Tool coverage | Format |
+|---|---|---|---|
+| **Claude Code built-in memory / CLAUDE.md** | Per-user, per-project | Claude-only | Proprietary |
+| **claudemem, Mem0** | Personal (single developer) | Single-agent | Vendor-hosted |
+| **Cursor rules** | Per-repo | Cursor-only | No decay, no structured types |
+| **Gyst** | **Team-scoped** | **Every tool on the team via MCP** | **Open `.gyst/` format, self-host or sync** |
+
+If the knowledge you want to capture only matters to you, use a personal-memory tool. If it matters to your teammates — conventions, decisions, postmortems, onboarding — that's the category Gyst is for.
 
 ---
 
@@ -123,23 +136,68 @@ Knowledge lives in your git repo or on a shared HTTP server. Nothing leaves your
 
 ---
 
-## MCP Tools (14)
+## How Gyst runs — MCP tools vs. lifecycle hooks
+
+Gyst runs on **two independent mechanisms**. Both write to the same knowledge base, but they are triggered by different things. Knowing the difference saves hours of debugging.
+
+| | MCP tools | Lifecycle hooks |
+|---|---|---|
+| **Who triggers** | The model (agent) | The harness (Claude Code / Codex / Gemini) |
+| **When** | Whenever the agent decides a tool is relevant | On fixed events: `SessionStart`, `PreCompact`, `SessionEnd` |
+| **Configured in** | `~/.claude.json` (or equivalent) as an MCP server | `~/.claude/settings.json` (or `hooks.json`) |
+| **What runs** | A tool handler in the Gyst MCP server | A shell command (`gyst inject-context`, `gyst harvest`, `gyst emit …`) |
+| **Deterministic?** | No — depends on the agent's choice | Yes — fires on every matching event |
+| **Examples** | `learn`, `recall`, `check`, `failures` | Inject ghost knowledge at session start; harvest before compaction |
+
+```
+                   Agent turn                         Harness event
+                       │                                  │
+                       ▼                                  ▼
+                 MCP tool call                        Shell command
+           (learn / recall / check …)        (gyst inject-context / harvest …)
+                       │                                  │
+                       └───────────┬──────────────────────┘
+                                   ▼
+                            .gyst/wiki.db
+```
+
+**One-line mental model:** MCP is what the model *can* call. Hooks are what Claude Code *will* call. Both end up in the same knowledge base.
+
+The `gyst install` command sets up both: step 3 registers the MCP server, step 7 registers the lifecycle hooks. You'll see them as separate lines in the install output.
+
+---
+
+## MCP Tools
+
+The surface is organized around three verbs — `read` (ranked search / compact index / single entry), `check` (convention violations / rule lookup / known error lookup), and `admin` (activity / status) — plus write-side and specialized tools.
+
+### Core surface
 
 | Tool | Purpose |
 |------|---------|
-| `learn` | Record knowledge: errors, conventions, decisions, learnings |
-| `recall` | Ranked search — returns full entries within a token budget |
-| `search` | Compact index (7× more token-efficient) — browse then `get_entry` |
-| `get_entry` | Full markdown for one entry by ID |
-| `conventions` | Coding standards for a file path or directory |
-| `check_conventions` | Which conventions apply to a file |
-| `check` | Run all violation detectors against a file |
-| `failures` | Match a known error pattern by signature or keywords |
-| `graph` | Query the relationship graph |
-| `feedback` | Rate an entry helpful/unhelpful — adjusts confidence |
-| `harvest` | Extract knowledge from a session transcript |
-| `activity` | Recent team activity log |
-| `status` | Health check and database stats |
+| `read` | Unified read. `action: "recall"` (default) returns ranked full-content results, `action: "search"` returns a compact index (7× fewer tokens), `action: "get_entry"` fetches full markdown for one entry by id. |
+| `check` | Unified check. `action: "violations"` (default) runs violation detectors against a file, `action: "conventions"` lists rules that apply to a path, `action: "failures"` looks up a known error pattern by message. |
+| `admin` | Team observability. `action: "activity"` (default) shows recent knowledge events; `action: "status"` shows who's currently active and what files they're touching. |
+| `learn` | Record knowledge: errors, conventions, decisions, learnings. |
+| `feedback` | Rate an entry helpful/unhelpful — adjusts confidence. |
+| `harvest` | Extract knowledge from a session transcript. |
+| `conventions` | Coding standards for a file path or directory. |
+| `graph` | Query the relationship graph. |
+| `configure` | Adjust server configuration at runtime. |
+
+### Deprecated (still registered for backward compat)
+
+| Old tool | Use instead |
+|----------|-------------|
+| `recall` | `read({ action: "recall", query })` |
+| `search` | `read({ action: "search", query })` |
+| `get_entry` | `read({ action: "get_entry", id })` |
+| `check_conventions` | `check({ action: "conventions", file_path })` |
+| `failures` | `check({ action: "failures", error_message })` |
+| `activity` | `admin({ action: "activity" })` |
+| `status` | `admin({ action: "status" })` |
+
+Deprecated tools continue to function but prepend a deprecation notice to responses. They will be removed in a future release.
 
 ### Ghost Knowledge
 
