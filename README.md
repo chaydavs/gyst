@@ -252,6 +252,19 @@ Gyst registers 12 hooks across every Claude Code lifecycle event:
 
 All hook emissions are fire-and-forget (detached spawns). Hooks return in under 1ms — no latency added to the agent loop.
 
+#### Multi-Tool Coverage
+
+Beyond Claude Code, `gyst install` writes native hook configs for every detected tool:
+
+| Tool | Config written | Events wired |
+|------|----------------|--------------|
+| Gemini CLI | `~/.gemini/settings.json` | SessionStart, SessionEnd, PreToolUse, PostToolUse |
+| Cursor | `~/.cursor/hooks.json` | sessionStart, sessionEnd, preToolUse, postToolUse |
+| Windsurf | `~/.codeium/windsurf/hooks.json` | pre_session, post_session, pre_tool_call, post_tool_call |
+| Codex CLI | `~/.codex/hooks.json` | SessionStart, SessionEnd, PreToolUse, PostToolUse |
+
+Run `gyst install` once — it auto-detects which tools are present and writes configs only for those.
+
 ---
 
 ## Dashboard

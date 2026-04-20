@@ -264,6 +264,23 @@ plugin/
 
 ---
 
+## Multi-Tool Hook Coverage
+
+`gyst install` writes native hook configs for every AI coding tool it detects on the machine. The same KB injection, session harvesting, and mine triggers that fire under Claude Code also fire under:
+
+| Tool | Detection | Hook config |
+|------|-----------|-------------|
+| Gemini CLI | `~/.gemini/` exists | `~/.gemini/settings.json` |
+| Cursor | `~/.cursor/` exists | `~/.cursor/hooks.json` |
+| Windsurf | `~/.codeium/windsurf/` exists | `~/.codeium/windsurf/hooks.json` |
+| Codex CLI | `~/.codex/` exists | `~/.codex/hooks.json` |
+
+Each tool's hook config maps its native event names to the same `plugin/scripts/*.js` files. A shared `normalize-stdin.js` normalizes each tool's stdin field names (`sessionId` vs `session_id`, `tool` vs `tool_name`, etc.) so scripts work correctly regardless of which tool invokes them.
+
+PreCompact, PostCompact, SubagentStart, and UserPromptSubmit hooks remain Claude Code-only — those tools have no equivalent events.
+
+---
+
 ## Requirements
 
 - **Bun** ≥ 1.0.0 — the `gyst` CLI is a Bun binary
