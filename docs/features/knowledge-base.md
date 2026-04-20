@@ -109,34 +109,85 @@ Supporting tables:
 
 ## Confidence System
 
-### Initial Value
+Confidence is a single `[0.0, 1.0]` value that answers: **"how much should the agent trust this entry right now?"** It is computed by `calculateConfidence()` in `src/store/confidence.ts` and stored on the `entries.confidence` column.
 
-All entries start at `confidence = 0.5` when created by the `learn` tool. Ghost knowledge starts at `1.0`. Structural entries start at `0.8`.
+### Initial Values
+
+| Entry origin | Starting confidence |
+|---|---|
+| `learn` tool | `0.5` |
+| Ghost knowledge | `1.0` (fixed, never decays) |
+| Structural entries | `0.8` |
 
 ### Confidence Threshold
 
 Entries with `confidence < config.confidenceThreshold` (default `0.15`) are excluded from all recall results. This is the archive floor — entries decay toward it, not past it (archival is a separate status transition).
 
-### Decay by Type
+---
 
-Confidence decays over time according to each type's half-life. Decay runs during consolidation passes and can be triggered manually.
+### The Formula
 
-| Type            | Half-life  |
-|-----------------|------------|
-| `error_pattern` | 30 days    |
-| `convention`    | none       |
-| `decision`      | 365 days   |
-| `learning`      | 60 days    |
-| `ghost_knowledge` | none (fixed 1.0) |
-| `structural`    | none (hash-gated update) |
-| `md_doc`        | none       |
+```
+saturation  = 1 - 1 / (1 + sourceCount)
+decay       = 0.5 ^ (daysSinceLastConfirmed / halfLife)
+raw         = saturation × decay
+penalised   = raw
+              × (hasContradiction ? 0.5 : 1.0)
+              × (codeChanged      ? 0.7 : 1.0)
+result      = clamp(penalised, 0.0, 1.0)
+```
 
-### Confidence Adjustments
+#### Factor 1: Source Saturation
 
-- **Merge/confirmation**: `source_count + 1`, `last_confirmed` updated. Confidence is bumped slightly.
-- **Feedback (helpful)**: `+0.02` (capped at 1.0)
-- **Feedback (unhelpful)**: `-0.05` (floored at 0.0)
-- **Decay**: exponential based on days since `last_confirmed`
+How many independent sources have confirmed this entry? The saturation formula asymptotically approaches 1.0 — the marginal value of each additional confirmation halves.
+
+```
+saturation = 1 - 1 / (1 + sourceCount)
+```
+
+| Source count | Saturation |
+|---|---|
+| 1 | 0.50 |
+| 3 | 0.75 |
+| 7 | 0.875 |
+| 9 | 0.90 |
+
+#### Factor 2: Time Decay
+
+Confidence decays over time according to each type's half-life. The formula is exponential — after exactly one half-life, the decay factor is 0.5. Conventions and ghost knowledge effectively never decay.
+
+```
+decay = 0.5 ^ (daysSinceLastConfirmed / halfLife)
+```
+
+| Type | Half-life | Behaviour |
+|---|---|---|
+| `ghost_knowledge` | ∞ | No decay — timeless constraints |
+| `convention` | 9,999 days (~27 years) | Stable until explicitly changed |
+| `decision` | 365 days | Architectural choices drift slowly |
+| `learning` | 60 days | Observations fade as context evolves |
+| `error_pattern` | 30 days | Fixes go stale as code changes |
+| `structural` | none | Hash-gated update, no time decay |
+| `md_doc` | none | No decay |
+
+#### Factor 3: Contradiction Penalty (×0.5)
+
+If a contradicting entry exists in the knowledge base, the score is halved. This signals that two entries disagree and human review is needed before the entry should be trusted.
+
+#### Factor 4: Code-Changed Penalty (×0.7)
+
+If the source file referenced by an entry has been modified since the entry was created, the score drops by 30%. The entry isn't necessarily wrong — but the code it describes has changed and needs re-verification.
+
+---
+
+### Confidence Adjustments (Post-Creation)
+
+| Event | Change |
+|---|---|
+| Merge / re-confirmation | `source_count + 1`, `last_confirmed` updated |
+| Feedback: helpful | `+0.02` (capped at 1.0) |
+| Feedback: unhelpful | `−0.05` (floored at 0.0) |
+| Consolidation decay pass | Recomputed from formula above |
 
 ---
 
