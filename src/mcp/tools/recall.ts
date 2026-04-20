@@ -269,7 +269,7 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
           entries.map((e) => {
             const base = scoreMap.get(e.id) ?? 0;
             let boosted = base;
-            if (e.type === "ghost_knowledge") boosted = Math.min(1.0, base + 0.1);
+            if (e.type === "ghost_knowledge") boosted = Math.min(1.0, base + 0.15);
             else if (e.type === "convention") boosted = Math.min(1.0, base + 0.05);
             return [e.id, boosted] as const;
           }),
@@ -304,7 +304,16 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
 
       // --- mode='single': fetch full entry by id ---
       if (mode === "single") {
-        const entryId = input.id ?? input.query;
+        if (!input.id) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: "mode='single' requires an `id` parameter. Use mode='search' to search by text.",
+            }],
+          };
+        }
+
+        const entryId = input.id;
         emitEvent(db, "tool_use", { tool: "recall:single", id: entryId });
         logger.info("recall[single] called", { id: entryId });
 
@@ -331,6 +340,64 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
           else plainTags.push(tag);
         }
 
+        // Query relationships (bidirectional), then batch-fetch titles.
+        interface RelRow { other_id: string; type: string; strength: number; }
+        interface EntryStubRow { id: string; title: string; type: string; }
+        const relRows = db.query<RelRow, [string, string]>(`
+          SELECT target_id AS other_id, type, strength
+            FROM relationships WHERE source_id = ?
+          UNION ALL
+          SELECT source_id AS other_id, type, strength
+            FROM relationships WHERE target_id = ?
+        `).all(entryId, entryId);
+
+        const related: Array<{ otherId: string; type: string; title: string }> = [];
+        if (relRows.length > 0) {
+          const seen = new Set<string>();
+          const uniqueRelRows: RelRow[] = [];
+          for (const row of relRows) {
+            if (!seen.has(row.other_id)) {
+              seen.add(row.other_id);
+              uniqueRelRows.push(row);
+            }
+          }
+          const otherIds = uniqueRelRows.map((r) => r.other_id);
+          const placeholders = otherIds.map(() => "?").join(", ");
+          const stubRows = db.query<EntryStubRow, string[]>(
+            `SELECT id, title, type FROM entries WHERE id IN (${placeholders})`,
+          ).all(...otherIds);
+          const stubMap = new Map(stubRows.map((s) => [s.id, s]));
+          for (const row of uniqueRelRows) {
+            const stub = stubMap.get(row.other_id);
+            related.push({
+              otherId: row.other_id,
+              type: row.type,
+              title: stub?.title ?? row.other_id,
+            });
+          }
+        }
+
+        // Query sources/evidence — guard against missing table.
+        interface SourceRow {
+          developer_id: string | null;
+          tool: string | null;
+          session_id: string | null;
+          git_commit: string | null;
+          timestamp: string;
+        }
+        let evidence: SourceRow[] = [];
+        try {
+          evidence = db.query<SourceRow, [string]>(`
+            SELECT developer_id, tool, session_id, git_commit, timestamp
+              FROM sources
+             WHERE entry_id = ?
+             ORDER BY timestamp DESC
+             LIMIT 5
+          `).all(entryId);
+        } catch {
+          logger.info("recall[single]: sources table unavailable, skipping evidence query");
+        }
+
         const confidencePct = (entry.confidence * 100).toFixed(0);
         const age = formatAge(entry.createdAt);
         const lines: string[] = [
@@ -342,6 +409,23 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
         if (files.length > 0) { lines.push("", "## Files"); for (const f of files) lines.push(`- ${f}`); }
         if (entities.length > 0) { lines.push("", "## Entities"); for (const e of entities) lines.push(`- ${e}`); }
         if (plainTags.length > 0) { lines.push("", "## Tags"); for (const t of plainTags) lines.push(`- ${t}`); }
+        if (related.length > 0) {
+          lines.push("", "## Related");
+          for (const r of related) lines.push(`- [${r.otherId}] ${r.type} → "${r.title}"`);
+        }
+        if (evidence.length > 0) {
+          lines.push("", "## Evidence");
+          for (const ev of evidence) {
+            const date = ev.timestamp.slice(0, 10);
+            const who = ev.developer_id ?? "unknown";
+            const tool = ev.tool ?? "unknown";
+            const base = `${who} · ${tool} · ${date}`;
+            const line = (ev.git_commit !== null && ev.git_commit.length > 0)
+              ? `${base} (commit ${ev.git_commit.slice(0, 7)})`
+              : base;
+            lines.push(`- ${line}`);
+          }
+        }
         lines.push("", `ref: gyst://entry/${entry.id}`);
 
         return { content: [{ type: "text" as const, text: lines.join("\n") }] };

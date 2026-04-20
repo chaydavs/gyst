@@ -13,6 +13,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Database } from "bun:sqlite";
 import { emitEvent, type EventType } from "../store/events.js";
 import { loadConfig } from "../utils/config.js";
+import { logger } from "../utils/logger.js";
 import { registerLearnTool } from "./tools/learn.js";
 import { registerRecallTool } from "./tools/recall.js";
 import { registerStatusTool } from "./tools/status.js";
@@ -86,6 +87,8 @@ export function registerAllTools(server: McpServer, ctx: ToolContext): void {
 
   // --- Extended tools (gated behind exposeExtendedTools config flag) ---
   const config = loadConfig();
+  const toolCount = config.exposeExtendedTools ? 8 : 3;
+  logger.info(`MCP server: registering ${toolCount} tools (exposeExtendedTools=${config.exposeExtendedTools})`);
   if (config.exposeExtendedTools) {
     registerGraphTool(server, ctx);
     registerFeedbackTool(server, ctx);
