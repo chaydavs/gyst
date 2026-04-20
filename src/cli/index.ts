@@ -930,6 +930,24 @@ program
     },
   );
 
+program
+  .command("init")
+  .description("Bootstrap your AI agent context layer (one-time setup, ~90 seconds)")
+  .option("--no-llm", "Skip LLM calls (auto-set when ANTHROPIC_API_KEY is absent)")
+  .option("--no-git", "Skip git mining (auto-set for non-git projects)")
+  .option("--yes", "Skip confirmation prompts (for CI)")
+  .option("--force", "Re-run even if already initialized")
+  .action(async (options) => {
+    const { runInit } = await import("./commands/init.js");
+    // Commander: --no-llm sets options.llm = false; --no-git sets options.git = false
+    await runInit({
+      noLlm: options.llm === false,
+      noGit: options.git === false,
+      force: options.force ?? false,
+      projectDir: process.cwd(),
+    });
+  });
+
 // Improve the "unknown command" error with a did-you-mean hint.
 program.on("command:*", (operands: string[]) => {
   const bad = operands.join(" ");
@@ -943,6 +961,16 @@ program.on("command:*", (operands: string[]) => {
   }
   process.stderr.write(`  Run \`gyst --help\` for the full command list.\n\n`);
   process.exit(1);
+});
+
+// Default action: runs when `gyst` is invoked with no subcommand and no flags
+program.action(() => {
+  process.stdout.write(
+    "\nGyst — context layer for AI coding agents\n" +
+    "  Quick start: gyst init\n" +
+    "  Explore:     gyst dashboard\n" +
+    "  Run 'gyst --help' for all commands.\n\n",
+  );
 });
 
 program.parse();
