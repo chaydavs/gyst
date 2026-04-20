@@ -43,6 +43,16 @@ try {
     // non-fatal
   }
 
+  try {
+    const mine = spawn(gyst, ["mine", "--no-llm"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    mine.unref();
+  } catch {
+    // non-fatal
+  }
+
   process.stdout.write(JSON.stringify({ continue: true }));
 } catch {
   process.stdout.write(JSON.stringify({ continue: true }));

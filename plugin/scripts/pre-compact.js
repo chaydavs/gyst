@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { badge, emitAsync } from "./badge.js";
 
 function readHookInput() {
@@ -16,5 +17,16 @@ try {
     transcriptPath: typeof input.transcript_path === "string" ? input.transcript_path : null,
     reason: "pre_compact",
   });
+
+  try {
+    const mine = spawn(gyst, ["mine", "--no-llm"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    mine.unref();
+  } catch {
+    // non-fatal
+  }
+
   process.stdout.write(JSON.stringify({ continue: true }));
 } catch { process.stdout.write(JSON.stringify({ continue: true })); }

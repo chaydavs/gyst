@@ -38,6 +38,16 @@ try {
     // non-fatal — KB refresh failure should not block the session
   }
 
+  try {
+    const mine = spawn(gyst, ["mine", "--no-llm"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    mine.unref();
+  } catch {
+    // non-fatal
+  }
+
   // inject-context must be synchronous because its output goes into the
   // additionalContext response field that Claude Code reads immediately.
   const context = tryCommand(gyst, ["inject-context", "--always-on", "--graph-traverse"]);
