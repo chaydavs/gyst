@@ -1,7 +1,7 @@
 {
   "hooks": [
     { "event": "SessionStart", "script": "plugin/scripts/session-start.js", "timeout": 5000 },
-    { "event": "UserPromptSubmit", "script": "plugin/scripts/prompt.js", "timeout": 500 },
+    { "event": "UserPromptSubmit", "script": "plugin/scripts/prompt.js", "timeout": 2000 },
     { "event": "InstructionsLoaded", "script": "plugin/scripts/instructions-loaded.js", "timeout": 500 },
     { "event": "PreToolUse", "matcher": "", "script": "plugin/scripts/pre-tool.js", "timeout": 500 },
     { "event": "PostToolUse", "matcher": "", "script": "plugin/scripts/tool-use.js", "timeout": 500 },

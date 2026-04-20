@@ -122,16 +122,47 @@ const checkConventionsAction = async (file: string | undefined) => {
   }
 };
 
-const searchAction = async (query: string, options: { type: string; max: string }) => {
+const searchAction = async (query: string, options: { type: string; max: string; format?: string }) => {
   try {
     const config = loadConfig();
     const db = initDatabase(config.dbPath);
     const maxResults = parseInt(options.max, 10);
     const { searchByBM25, reciprocalRankFusion } = await import("../store/search.js");
+    const { classifyIntent } = await import("../utils/analytics.js");
     const typeFilter = options.type === "all" ? undefined : options.type;
     const bm25Results = searchByBM25(db, query, typeFilter);
     const fused = reciprocalRankFusion([bm25Results]);
     const topResults = fused.slice(0, maxResults);
+
+    if (options.format === "json") {
+      // Fetch full content for each result from the entries table
+      const rows = topResults.map((r) => {
+        const row = db.query<
+          { id: string; type: string; title: string; content: string; confidence: number },
+          [string]
+        >("SELECT id, type, title, content, confidence FROM entries WHERE id = ?").get(r.id);
+        if (!row) return null;
+        const files = db
+          .query<{ file_path: string }, [string]>("SELECT file_path FROM entry_files WHERE entry_id = ?")
+          .all(row.id)
+          .map((f) => f.file_path);
+        return {
+          id: row.id,
+          type: row.type,
+          title: row.title,
+          content: row.content.slice(0, 500),
+          confidence: row.confidence,
+          files,
+        };
+      }).filter(Boolean);
+      db.close();
+      const intent = classifyIntent(query);
+      process.stdout.write(
+        JSON.stringify({ query, intent, results: rows }) + "\n",
+      );
+      return;
+    }
+
     db.close();
     if (topResults.length === 0) {
       process.stdout.write(`No results found for: "${query}"\n`);
@@ -452,8 +483,8 @@ program
     }
   });
 
-program.command("recall <query>").description("Search memory").option("-t, --type <type>", "Filter", "all").option("-n, --max <max>", "Limit", "5").action(searchAction);
-program.command("search <query>", { hidden: true }).description("Alias for recall").option("-t, --type <type>", "Filter", "all").option("-n, --max <max>", "Limit", "5").action(searchAction);
+program.command("recall <query>").description("Search memory").option("-t, --type <type>", "Filter", "all").option("-n, --max <max>", "Limit", "5").option("--format <format>", "Output format: text or json", "text").action(searchAction);
+program.command("search <query>", { hidden: true }).description("Alias for recall").option("-t, --type <type>", "Filter", "all").option("-n, --max <max>", "Limit", "5").option("--format <format>", "Output format: text or json", "text").action(searchAction);
 
 program.command("add [title] [content...]").description("Add knowledge (content can be unquoted; remaining args are joined)").option("-t, --type <type>", "Type", "learning").option("-f, --files <files...>", "Files").option("--tags <tags...>", "Tags").action(async (posTitle, posContentParts, options) => {
   try {

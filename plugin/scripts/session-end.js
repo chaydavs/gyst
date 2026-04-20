@@ -40,6 +40,15 @@ try {
     // non-fatal
   }
 
+  // Cleanup flag file for this session so the next session starts fresh
+  try {
+    const { join: pathJoin } = await import("node:path");
+    const { tmpdir: osTmpdir } = await import("node:os");
+    const { unlinkSync: fsUnlink, existsSync: fsExists } = await import("node:fs");
+    const sessionFlagFile = pathJoin(osTmpdir(), ".gyst-sessions", `${input.session_id ?? "unknown"}-injected`);
+    if (fsExists(sessionFlagFile)) fsUnlink(sessionFlagFile);
+  } catch { /* non-fatal */ }
+
   process.stdout.write(JSON.stringify({ continue: true }));
 } catch {
   process.stdout.write(JSON.stringify({ continue: true }));
