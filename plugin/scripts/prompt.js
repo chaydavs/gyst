@@ -15,6 +15,7 @@ try {
   const payload = {
     text:      input.prompt_text ?? "",
     sessionId: input.session_id  ?? null,
+    cwd:       input.cwd         ?? null,
   };
 
   badge("recording prompt");

@@ -14,6 +14,15 @@ try {
   const toolName  = input.tool_name  ?? "unknown";
   const sessionId = input.session_id ?? null;
 
+  // Track Read tool calls as KB miss signals — agent needed source, KB didn't have it
+  if (toolName === "Read" && input.tool_input?.file_path) {
+    emitAsync(gyst, "kb_miss_signal", {
+      filePath: input.tool_input.file_path,
+      sessionId,
+      reason: "read_tool_used",
+    });
+  }
+
   badge(`watching ${toolName}`);
   emitAsync(gyst, "pre_tool_use", { tool: toolName, sessionId });
 

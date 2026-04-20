@@ -16,18 +16,23 @@ import { readFileSync } from "node:fs";
  *   transcript_path:  transcript_path → transcriptPath
  *   prompt_text:      prompt → prompt_text → promptText
  *   stop_hook_active: stop_hook_active (boolean, default false)
+ *   cwd:              cwd (string or null)
+ *   tool_input:       tool_input → toolInput → parameters (object or null)
  *
  * @param {Record<string, unknown>} raw
- * @returns {{ session_id: string|null, tool_name: string|null, transcript_path: string|null, prompt_text: string|null, stop_hook_active: boolean }}
+ * @returns {{ session_id: string|null, tool_name: string|null, transcript_path: string|null, prompt_text: string|null, stop_hook_active: boolean, cwd: string|null, tool_input: object|null }}
  */
 export function normalizeHookInput(raw) {
   const str = (v) => (typeof v === "string" ? v : null);
+  const obj = (v) => (v !== null && typeof v === "object" ? v : null);
   return {
     session_id:       str(raw.session_id)       ?? str(raw.sessionId)       ?? null,
     tool_name:        str(raw.tool_name)         ?? str(raw.toolName)        ?? str(raw.tool) ?? null,
     transcript_path:  str(raw.transcript_path)   ?? str(raw.transcriptPath)  ?? null,
     prompt_text:      str(raw.prompt)            ?? str(raw.prompt_text)     ?? str(raw.promptText) ?? null,
     stop_hook_active: raw.stop_hook_active === true,
+    cwd:              str(raw.cwd)               ?? null,
+    tool_input:       obj(raw.tool_input)        ?? obj(raw.toolInput)       ?? obj(raw.parameters) ?? null,
   };
 }
 
@@ -35,7 +40,7 @@ export function normalizeHookInput(raw) {
  * Reads stdin (fd 0), parses JSON, and returns a normalized input object.
  * Returns all-null canonical object on any parse failure.
  *
- * @returns {{ session_id: string|null, tool_name: string|null, transcript_path: string|null, prompt_text: string|null, stop_hook_active: boolean }}
+ * @returns {{ session_id: string|null, tool_name: string|null, transcript_path: string|null, prompt_text: string|null, stop_hook_active: boolean, cwd: string|null, tool_input: object|null }}
  */
 export function readNormalizedInput() {
   try {

@@ -59,3 +59,20 @@ test("non-string values are coerced to null", () => {
   expect(result.session_id).toBeNull();
   expect(result.tool_name).toBeNull();
 });
+
+test("cwd and tool_input are extracted", () => {
+  const raw = {
+    session_id: "s1",
+    cwd: "/home/user/project",
+    tool_input: { file_path: "/src/foo.ts" },
+  };
+  const result = normalizeHookInput(raw);
+  expect(result.cwd).toBe("/home/user/project");
+  expect(result.tool_input).toEqual({ file_path: "/src/foo.ts" });
+});
+
+test("Cursor toolInput field is normalized", () => {
+  const raw = { toolInput: { content: "hello" } };
+  const result = normalizeHookInput(raw);
+  expect(result.tool_input).toEqual({ content: "hello" });
+});
