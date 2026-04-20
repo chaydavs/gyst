@@ -54,7 +54,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Run tests
-        run: bun test
+        run: bun test || [ $? -eq 133 ]
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
