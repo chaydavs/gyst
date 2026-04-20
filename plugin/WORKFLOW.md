@@ -189,6 +189,23 @@ Both emissions use detached spawns — they run after the hook returns.
 
 ---
 
+## Autonomous Mining Loop
+
+`gyst mine` fires automatically at all trigger points:
+
+| Trigger | Command |
+|---------|---------|
+| `git commit` → post-commit hook | `gyst mine --commit HEAD --no-llm` |
+| Session opens → SessionStart | `gyst mine --no-llm` |
+| Session ends → Stop | `gyst mine --no-llm` |
+| Before compact → PreCompact | `gyst mine --no-llm` |
+
+All spawns are detached and unref'd — fire-and-forget, zero latency added to the agent loop.
+
+Mining extracts from four sources: git commit history, `TODO`/`FIXME`/`NOTE`/`HACK` code comments, the top-20 most-edited files (stored as `ghost_knowledge`), and top-level `describe()` names from integration/e2e test files.
+
+---
+
 ## Event → KB Pipeline
 
 All hook scripts call `gyst emit <event> <payload>` (via the `emitAsync` helper in `badge.js`). The event flows through the gyst CLI into the compiler:

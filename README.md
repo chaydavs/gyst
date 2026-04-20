@@ -237,16 +237,16 @@ Gyst registers 12 hooks across every Claude Code lifecycle event:
 
 | Hook | What Gyst does |
 |------|---------------|
-| `SessionStart` | Injects team context + ghost knowledge into every session |
+| `SessionStart` | Injects team context + ghost knowledge; fires `self-document` + `mine` refresh |
 | `UserPromptSubmit` | Records prompt patterns for knowledge classification |
 | `InstructionsLoaded` | Auto-ingests CLAUDE.md / instructions files into the KB on load |
 | `PreToolUse` | Status badge + tracks `Read` tool calls as KB miss signals |
 | `PostToolUse` | Captures tool output; detects ADR/plan writes |
 | `PostToolUseFailure` | Extracts error_pattern entries from failed tool calls automatically |
 | `SubagentStart` | Injects ghost knowledge into every spawned subagent |
-| `Stop` | Triggers session distillation — extracts knowledge from the full session |
+| `Stop` | Triggers session distillation; fires `mine` incremental refresh |
 | `SubagentStop` | Same distillation for subagent sessions |
-| `PreCompact` | Harvests session knowledge before context is erased by compaction |
+| `PreCompact` | Harvests session knowledge before context is erased; fires `mine` incremental refresh |
 | `PostCompact` | Takes a drift snapshot after compaction completes |
 | `FileChanged` (`**/*.md`) | Re-ingests changed markdown files into the KB immediately on save |
 
@@ -285,6 +285,7 @@ Opens at `localhost:3579`. Includes:
 | `gyst detect-conventions` | Scan codebase for conventions |
 | `gyst dashboard` | Launch knowledge UI at localhost:3579 |
 | `gyst self-document [--skip-ghosts] [--ghost-count N]` | Bootstrap KB: structural skeleton + MD corpus + ghost knowledge |
+| `gyst mine [--full] [--commit <hash>] [--no-llm]` | Mine git history, comments, hot paths, and tests into the KB |
 | `gyst create team <name>` | Create a team and get an admin key |
 | `gyst team invite` | Generate an invite key for a new member |
 | `gyst team members` | List all team members |
@@ -338,6 +339,37 @@ gyst self-document --ghost-count 20  # generate top-20 ghost entries (default: 1
 ```
 
 The `FileChanged` hook re-ingests any `.md` file as soon as you save it. The `InstructionsLoaded` hook ingests `CLAUDE.md` at session start. Together they keep the KB current without any manual steps.
+
+---
+
+## Automated Context Construction
+
+Gyst mines four signal sources automatically — no manual entries required:
+
+| Source | What it captures | Entry type |
+|--------|-----------------|------------|
+| Git commit messages | Why things were built or changed | `decision`, `learning` |
+| Code comments (`TODO`/`FIXME`/`NOTE`/`HACK`/`// Why:`) | Design intent, known issues | `convention`, `error_pattern` |
+| Hot-path files (top-20 most-edited) | Core architecture modules | `ghost_knowledge` |
+| Integration/E2E `describe()` names | Expected system behaviour in business language | `convention` |
+
+```bash
+gyst mine                    # incremental run (all four phases)
+gyst mine --full             # full scan from the beginning
+gyst mine --commit HEAD      # mine a single commit (post-commit hook path)
+gyst mine --no-llm           # skip Haiku summarisation (default when no API key)
+```
+
+Mining runs automatically at every trigger point:
+
+```
+commit made     → post-commit hook → gyst mine --commit HEAD
+session opens   → SessionStart     → gyst self-document + gyst mine
+session ends    → Stop             → harvest-session + gyst mine
+before compact  → PreCompact       → harvest-session + gyst mine
+```
+
+Tests are filtered aggressively: only `.integration.test.*`, `.e2e.test.*`, and `.spec.*` files; only top-level `describe()` blocks; only names with 5+ words that contain no implementation-detail language ("returns", "equals", "should be", "throws", etc.).
 
 ---
 
