@@ -287,6 +287,7 @@ export function installHooksForDetectedTools(
   homeDir: string,
   scriptsDir: string,
 ): string[] {
+  const absoluteScriptsDir = resolve(scriptsDir);
   const configured: string[] = [];
 
   for (const tool of HOOK_TOOL_DESCRIPTORS) {
@@ -302,8 +303,10 @@ export function installHooksForDetectedTools(
 
     try {
       const configPath = tool.hookConfigPath(homeDir);
-      const config = tool.buildConfig(scriptsDir);
-      writeJsonConfig(configPath, config as McpConfig);
+      const newConfig = tool.buildConfig(absoluteScriptsDir);
+      const existing = readJsonConfig(configPath);
+      const merged = { ...existing, ...newConfig };
+      writeJsonConfig(configPath, merged as McpConfig);
       logger.info("Hook config written", { tool: tool.name, configPath });
       configured.push(tool.name);
     } catch (err) {
