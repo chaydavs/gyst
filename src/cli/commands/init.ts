@@ -3,6 +3,10 @@
  * feel magical. Orchestrates existing KB phases with a clean progressive UI.
  */
 
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
+
 // ---------------------------------------------------------------------------
 // ANSI helpers
 // ---------------------------------------------------------------------------
@@ -155,10 +159,6 @@ export interface DetectResult {
  * All errors are caught internally — never throws.
  */
 export async function detectEnvironment(projectDir: string): Promise<DetectResult> {
-  const { existsSync } = await import("node:fs");
-  const { join } = await import("node:path");
-  const { homedir } = await import("node:os");
-
   // --- Project type ---
   const projectTypes: string[] = [];
   if (existsSync(join(projectDir, "tsconfig.json"))) {
@@ -181,8 +181,12 @@ export async function detectEnvironment(projectDir: string): Promise<DetectResul
     const git = simpleGit(projectDir);
     hasGit = await git.checkIsRepo().catch(() => false);
     if (hasGit) {
-      const log = await git.log();
-      commitCount = log.total;
+      try {
+        const log = await git.log();
+        commitCount = log.total;
+      } catch {
+        // empty repo — hasGit stays true, commitCount stays 0
+      }
     }
   } catch {
     hasGit = false;

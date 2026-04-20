@@ -176,3 +176,26 @@ test("detectEnvironment: hasLlmKey reflects ANTHROPIC_API_KEY presence", async (
     rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+test("detectEnvironment: empty dir returns ['Unknown'] project type", async () => {
+  const tmp = makeTmp();
+  try {
+    const result = await detectEnvironment(tmp);
+    expect(result.projectTypes).toEqual(["Unknown"]);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("detectEnvironment: TypeScript + Rust detected together", async () => {
+  const tmp = makeTmp();
+  try {
+    writeFileSync(join(tmp, "tsconfig.json"), "{}");
+    writeFileSync(join(tmp, "Cargo.toml"), "");
+    const result = await detectEnvironment(tmp);
+    expect(result.projectTypes).toContain("TypeScript");
+    expect(result.projectTypes).toContain("Rust");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
