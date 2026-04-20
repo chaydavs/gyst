@@ -1,0 +1,9 @@
+{
+  "_note": "Reference only — installHooksForDetectedTools writes this with absolute paths to ~/.gemini/settings.json",
+  "hooks": {
+    "SessionStart": [{"type": "command", "command": "node <SCRIPTS_DIR>/session-start.js"}],
+    "SessionEnd":   [{"type": "command", "command": "node <SCRIPTS_DIR>/session-end.js"}],
+    "PreToolUse":   [{"type": "command", "command": "node <SCRIPTS_DIR>/pre-tool.js"}],
+    "PostToolUse":  [{"type": "command", "command": "node <SCRIPTS_DIR>/tool-use.js"}]
+  }
+}

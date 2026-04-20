@@ -1,0 +1,9 @@
+{
+  "_note": "Reference only — installHooksForDetectedTools writes this with absolute paths to ~/.codeium/windsurf/hooks.json",
+  "hooks": {
+    "pre_session":    [{"command": "node <SCRIPTS_DIR>/session-start.js"}],
+    "post_session":   [{"command": "node <SCRIPTS_DIR>/session-end.js"}],
+    "pre_tool_call":  [{"command": "node <SCRIPTS_DIR>/pre-tool.js"}],
+    "post_tool_call": [{"command": "node <SCRIPTS_DIR>/tool-use.js"}]
+  }
+}

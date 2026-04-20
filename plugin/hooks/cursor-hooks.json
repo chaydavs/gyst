@@ -1,0 +1,10 @@
+{
+  "_note": "Reference only — installHooksForDetectedTools writes this with absolute paths to ~/.cursor/hooks.json",
+  "version": 1,
+  "hooks": {
+    "sessionStart": [{"type": "command", "command": "node <SCRIPTS_DIR>/session-start.js", "timeout": 5}],
+    "sessionEnd":   [{"type": "command", "command": "node <SCRIPTS_DIR>/session-end.js",   "timeout": 5}],
+    "preToolUse":   [{"type": "command", "command": "node <SCRIPTS_DIR>/pre-tool.js",      "timeout": 1}],
+    "postToolUse":  [{"type": "command", "command": "node <SCRIPTS_DIR>/tool-use.js",      "timeout": 1}]
+  }
+}
