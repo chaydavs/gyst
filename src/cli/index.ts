@@ -16,13 +16,14 @@ if (!(process.versions as Record<string, string>)["bun"]) {
 import { Command } from "commander";
 import { mkdirSync, existsSync } from "fs";
 import { join } from "path";
+import { homedir } from "node:os";
 // @ts-ignore — JSON import resolved by Bun bundler; string fallback for dev mode
 import _pkg from "../../package.json" with { type: "json" };
 const _pkgVersion: string = (typeof _pkg === "object" && _pkg !== null && "version" in _pkg)
   ? String((_pkg as { version: string }).version)
   : "0.0.0";
 import { initDatabase } from "../store/database.js";
-import { installForDetectedTools } from "../mcp/installer.js";
+import { installForDetectedTools, installHooksForDetectedTools } from "../mcp/installer.js";
 import { logger } from "../utils/logger.js";
 import { loadConfig } from "../utils/config.js";
 import { addManualEntry } from "../capture/manual.js";
@@ -211,7 +212,16 @@ const setupAction = async () => {
     db.close();
     process.stdout.write(`  database : ${config.dbPath}\n`);
     const installed = installForDetectedTools(process.cwd());
-    for (const tool of installed) process.stdout.write(`  configured: ${tool}\n`);
+    for (const tool of installed) process.stdout.write(`  configured MCP: ${tool}\n`);
+
+    // Determine the absolute path to plugin/scripts from the package installation location.
+    const { fileURLToPath } = await import("node:url");
+    const { dirname: _dirname, join: _join, resolve: _resolve } = await import("node:path");
+    const thisFile = fileURLToPath(import.meta.url);
+    const repoRoot = _resolve(_dirname(thisFile), "..", "..");
+    const scriptsDir = _join(repoRoot, "plugin", "scripts");
+    const hookedTools = installHooksForDetectedTools(homedir(), scriptsDir);
+    for (const tool of hookedTools) process.stdout.write(`  configured hooks: ${tool}\n`);
     const { installGitHooks } = await import("./install.js");
     const gitResult = installGitHooks(process.cwd());
     if (!gitResult.noGit) {
