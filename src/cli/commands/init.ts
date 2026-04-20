@@ -362,6 +362,23 @@ export async function runInit(opts: InitOptions): Promise<void> {
     }
     ui.closeBox();
 
+    // --- Context file generation ---
+    ui.box("Generating context files");
+    try {
+      const { generateContextFiles } = await import("./export-context.js");
+      const written = generateContextFiles(db!, opts.projectDir, [...allAgents]);
+      for (const file of written) {
+        const { basename } = await import("node:path");
+        ui.detectionLine(basename(file), file, true);
+      }
+      if (written.length === 0) {
+        ui.detectionLine("No context files generated", "", false);
+      }
+    } catch {
+      ui.detectionLine("Context file generation failed", "", false);
+    }
+    ui.closeBox();
+
     // --- Stats + summary ---
     const stats: KBStats = {
       conventions: db!.query<{ n: number }, []>("SELECT count(*) n FROM entries WHERE type='convention'").get()?.n ?? 0,

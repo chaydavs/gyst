@@ -245,6 +245,19 @@ const setupAction = async () => {
     const installed = installForDetectedTools(process.cwd());
     for (const tool of installed) process.stdout.write(`  configured MCP: ${tool}\n`);
 
+    // Generate context files for detected agents
+    if (installed.length > 0) {
+      try {
+        const { generateContextFiles } = await import("./commands/export-context.js");
+        const dbForCtx = initDatabase(config.dbPath);
+        const written = generateContextFiles(dbForCtx, process.cwd(), installed);
+        dbForCtx.close();
+        for (const f of written) process.stdout.write(`  context file : ${f}\n`);
+      } catch {
+        // non-fatal
+      }
+    }
+
     // Determine the absolute path to plugin/scripts from the package installation location.
     const { fileURLToPath } = await import("node:url");
     const { dirname: _dirname, join: _join, resolve: _resolve } = await import("node:path");
@@ -975,6 +988,20 @@ program
       noGit: options.git === false,
       force: options.force ?? false,
       projectDir: process.cwd(),
+    });
+  });
+
+program
+  .command("export-context")
+  .description("Generate context files for detected AI agents (.cursorrules, CLAUDE.md, AGENTS.md, etc.)")
+  .option("--format <format>", "claude | codex | cursor | windsurf | gemini | generic | all")
+  .option("--dry-run", "Print to stdout without writing files")
+  .action(async (options) => {
+    const { runExportContext } = await import("./commands/export-context.js");
+    await runExportContext({
+      projectDir: process.cwd(),
+      format: options.format,
+      dryRun: options.dryRun ?? false,
     });
   });
 
