@@ -41,6 +41,12 @@ const ConfigSchema = z.object({
    * from accidentally polluting a shared team layer that does not exist.
    */
   teamMode: z.boolean().default(false),
+  /**
+   * When true, expose all extended MCP tools (graph, feedback, harvest,
+   * status, configure). Default: false — only 3 primary tools are registered
+   * (learn, recall, check). Toggle with `gyst configure --extended-tools`.
+   */
+  exposeExtendedTools: z.boolean().default(false),
 });
 
 /** Fully-resolved Gyst configuration. */

@@ -12,20 +12,18 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Database } from "bun:sqlite";
 import { emitEvent, type EventType } from "../store/events.js";
+import { loadConfig } from "../utils/config.js";
 import { registerLearnTool } from "./tools/learn.js";
 import { registerRecallTool } from "./tools/recall.js";
-import { registerConventionsTool } from "./tools/conventions.js";
-import { registerFailuresTool } from "./tools/failures.js";
-import { registerActivityTool } from "./tools/activity.js";
 import { registerStatusTool } from "./tools/status.js";
 import { registerFeedbackTool } from "./tools/feedback.js";
 import { registerHarvestTool } from "./tools/harvest.js";
-import { registerCheckConventionsTool } from "./tools/check-conventions.js";
-import { registerSearchTool } from "./tools/search.js";
-import { registerGetEntryTool } from "./tools/get-entry.js";
 import { registerCheckTool } from "./tools/check.js";
 import { registerGraphTool } from "./tools/graph.js";
 import { registerConfigureTool } from "./tools/configure.js";
+// Note: conventions, failures, activity, check-conventions, search, get-entry are
+// internal helpers used via inlined logic in recall.ts and check.ts. They are
+// NOT imported here to avoid unused-import lint errors.
 
 // ---------------------------------------------------------------------------
 // Types
@@ -57,15 +55,23 @@ export interface ToolContext {
 // ---------------------------------------------------------------------------
 
 /**
- * Registers all 14 Gyst MCP tools on the given server.
+ * Registers MCP tools on the given server.
+ *
+ * Primary tools (always registered — 3 total):
+ *   - learn   — record team knowledge
+ *   - recall  — search knowledge (absorbs search/get_entry/conventions/failures via mode param)
+ *   - check   — check file against conventions (absorbs check_conventions via mode param)
+ *
+ * Extended tools (registered only when `exposeExtendedTools: true` in config — 5 total):
+ *   - graph, feedback, harvest, status (absorbs activity), configure
+ *
+ * Legacy tools (search, get_entry, conventions, failures, activity, check_conventions)
+ * remain as internal helpers — their registration functions are NOT called by default.
+ * Enable them by setting `exposeExtendedTools: true` in `.gyst-wiki.json`, or use the
+ * `gyst configure --extended-tools` CLI flag.
  *
  * This is the single call site used by both transports — stdio passes
  * `{ mode: "personal", db }` and HTTP passes `{ mode: "team", db, teamId, developerId }`.
- *
- * Each tool receives the full context so it can:
- *  - Use `ctx.db` for database access
- *  - Conditionally call `logActivity` when `ctx.mode === "team"`
- *  - Apply the correct default scope to new entries
  *
  * @param server - McpServer instance to register tools on.
  * @param ctx    - Context object with database and optional team identifiers.
@@ -73,20 +79,20 @@ export interface ToolContext {
 export function registerAllTools(server: McpServer, ctx: ToolContext): void {
   instrumentServer(server, ctx.db);
 
+  // --- Primary tools (always visible, 3 total) ---
   registerLearnTool(server, ctx);
-  registerRecallTool(server, ctx);
-  registerConventionsTool(server, ctx);
-  registerFailuresTool(server, ctx);
-  registerActivityTool(server, ctx);
-  registerStatusTool(server, ctx);
-  registerFeedbackTool(server, ctx);
-  registerHarvestTool(server, ctx);
-  registerCheckConventionsTool(server, ctx);
-  registerSearchTool(server, ctx);
-  registerGetEntryTool(server, ctx);
-  registerCheckTool(server, ctx);
-  registerGraphTool(server, ctx);
-  registerConfigureTool(server, ctx);
+  registerRecallTool(server, ctx);   // absorbs search / get_entry / conventions / failures
+  registerCheckTool(server, ctx);    // absorbs check_conventions
+
+  // --- Extended tools (gated behind exposeExtendedTools config flag) ---
+  const config = loadConfig();
+  if (config.exposeExtendedTools) {
+    registerGraphTool(server, ctx);
+    registerFeedbackTool(server, ctx);
+    registerHarvestTool(server, ctx);
+    registerStatusTool(server, ctx);     // absorbs activity
+    registerConfigureTool(server, ctx);
+  }
 
   // --- Proactive Learning Prompt ---
   // Tells the agent how to behave without the user repeating instructions.

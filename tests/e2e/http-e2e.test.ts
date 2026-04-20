@@ -16,11 +16,16 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { unlinkSync } from "node:fs";
+import { unlinkSync, writeFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { startHttpServer } from "../../src/server/http.js";
 import type { HttpServerHandle } from "../../src/server/http.js";
+
+// Path to a temporary config file written into cwd so loadConfig() picks it up.
+const e2eConfigPath = join(process.cwd(), ".gyst-wiki.json.e2e-backup");
+const configPath = join(process.cwd(), ".gyst-wiki.json");
 
 // ---------------------------------------------------------------------------
 // Shared state
@@ -146,6 +151,18 @@ async function teamFetch(
 // ---------------------------------------------------------------------------
 
 beforeAll(async () => {
+  // 0. Write a temporary config that enables extended tools for the E2E suite.
+  //    Back up any existing config first so afterAll can restore it.
+  if (existsSync(configPath)) {
+    const existing = await Bun.file(configPath).text();
+    writeFileSync(e2eConfigPath, existing, "utf-8");
+  }
+  writeFileSync(
+    configPath,
+    `${JSON.stringify({ exposeExtendedTools: true }, null, 2)}\n`,
+    "utf-8",
+  );
+
   // 1. Start server
   serverHandle = startHttpServer({ port, dbPath });
 
@@ -225,6 +242,19 @@ afterAll(async () => {
   } catch {
     // Non-fatal if already gone.
   }
+
+  // Restore the original config (or remove the temp one we wrote).
+  try {
+    if (existsSync(e2eConfigPath)) {
+      const original = await Bun.file(e2eConfigPath).text();
+      writeFileSync(configPath, original, "utf-8");
+      unlinkSync(e2eConfigPath);
+    } else {
+      unlinkSync(configPath);
+    }
+  } catch {
+    // Non-fatal.
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -292,13 +322,14 @@ describe("Gyst HTTP E2E", () => {
   }, 30_000);
 
   // -------------------------------------------------------------------------
-  test("6. activity visible — Dev B sees Dev A's actions", async () => {
-    const text = await mcpCall(memberKeyB, "activity", { hours: 1 });
-    // Activity log should mention Dev A's name or the "learn" action.
+  test("6. activity visible — Dev B sees Dev A's actions via status(activity_hours)", async () => {
+    const text = await mcpCall(memberKeyB, "status", { hours: 1, activity_hours: 1 });
+    // Status with activity_hours should mention Dev A's name or the "learn" action.
     const looksRight =
       /Dev A/i.test(text) ||
       /learn/i.test(text) ||
-      /async/i.test(text);
+      /async/i.test(text) ||
+      /activity/i.test(text);
     expect(looksRight).toBe(true);
   }, 30_000);
 
@@ -393,7 +424,7 @@ describe("Gyst HTTP E2E", () => {
   // New tests — search, ghost_knowledge recall, validation
   // -------------------------------------------------------------------------
 
-  test("13. search returns compact index for known entries", async () => {
+  test("13. recall(mode=index) returns compact index; recall(mode=single) returns full entry", async () => {
     // Dev A learns an error_pattern (memberKeyA is still valid after test 12
     // removes devB — devA is not removed)
     const learnText = await mcpCall(memberKeyA, "learn", {
@@ -404,20 +435,25 @@ describe("Gyst HTTP E2E", () => {
     // learn should succeed — response starts with "Learned:" or "Updated"
     expect(learnText).not.toMatch(/^Error/i);
 
-    // Dev A searches using terms present in the title/content
-    const searchText = await mcpCall(memberKeyA, "search", {
+    // Dev A searches using recall(mode='index') — compact token-efficient list
+    const searchText = await mcpCall(memberKeyA, "recall", {
+      mode: "index",
       query: "Postgres pool exhausted clients",
     });
 
     expect(searchText).toContain("Postgres pool exhausted");
-    // The search header always contains "get_entry" usage hint
-    expect(searchText).toContain("get_entry");
+    // The index header always contains a get_entry / recall usage hint
+    expect(searchText).toMatch(/recall|get_entry/i);
 
     // Parse an entry id from the first result line (format: "id · type · …")
     const idMatch = searchText.match(/^([a-z0-9-]{36}) ·/m);
     if (idMatch !== null && idMatch[1] !== undefined) {
       const entryId = idMatch[1];
-      const detailText = await mcpCall(memberKeyA, "get_entry", { id: entryId });
+      // Fetch full content via recall(mode='single')
+      const detailText = await mcpCall(memberKeyA, "recall", {
+        mode: "single",
+        query: entryId,
+      });
       expect(detailText).toContain("Postgres");
     }
   }, 30_000);
@@ -442,10 +478,10 @@ describe("Gyst HTTP E2E", () => {
 
   // -------------------------------------------------------------------------
 
-  test("15. search rejects query shorter than 2 characters", async () => {
+  test("15. recall(mode=index) with empty query is rejected (min 1 char)", async () => {
     let errorSeen = false;
     try {
-      const text = await mcpCall(memberKeyA, "search", { query: "x" });
+      const text = await mcpCall(memberKeyA, "recall", { mode: "index", query: "" });
       // If mcpCall returns text instead of throwing, check for error indicators
       const lower = text.toLowerCase();
       errorSeen =

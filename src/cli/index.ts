@@ -947,6 +947,97 @@ program
     });
   });
 
+// ---------------------------------------------------------------------------
+// configure — read/write .gyst-wiki.json from the CLI
+// ---------------------------------------------------------------------------
+
+program
+  .command("configure")
+  .description("Read or update .gyst-wiki.json project config")
+  .option("--extended-tools", "Enable extended MCP tools (graph, feedback, harvest, status, configure)")
+  .option("--no-extended-tools", "Disable extended MCP tools (show only 3 primary tools)")
+  .option("--team-mode", "Enable team mode")
+  .option("--no-team-mode", "Disable team mode")
+  .option("--auto-export", "Enable auto-export of entries to markdown")
+  .option("--no-auto-export", "Disable auto-export")
+  .option("--max-recall-tokens <n>", "Set maximum recall token budget")
+  .option("--confidence-threshold <n>", "Set minimum confidence threshold (0.0–1.0)")
+  .action(async (opts: {
+    extendedTools?: boolean;
+    teamMode?: boolean;
+    autoExport?: boolean;
+    maxRecallTokens?: string;
+    confidenceThreshold?: string;
+  }) => {
+    const { existsSync, readFileSync, writeFileSync } = await import("fs");
+    const { join } = await import("path");
+    const configPath = join(process.cwd(), ".gyst-wiki.json");
+
+    const current: Record<string, unknown> = (() => {
+      if (!existsSync(configPath)) return {};
+      try {
+        const parsed: unknown = JSON.parse(readFileSync(configPath, "utf-8"));
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>;
+        }
+      } catch { /* ignore */ }
+      return {};
+    })();
+
+    const updates: Record<string, unknown> = {};
+
+    // --extended-tools / --no-extended-tools (Commander sets boolean for --no-X)
+    if (opts.extendedTools === true)  updates["exposeExtendedTools"] = true;
+    if (opts.extendedTools === false) updates["exposeExtendedTools"] = false;
+
+    if (opts.teamMode === true)  updates["teamMode"] = true;
+    if (opts.teamMode === false) updates["teamMode"] = false;
+
+    if (opts.autoExport === true)  updates["autoExport"] = true;
+    if (opts.autoExport === false) updates["autoExport"] = false;
+
+    if (opts.maxRecallTokens !== undefined) {
+      const n = parseInt(opts.maxRecallTokens, 10);
+      if (isNaN(n) || n <= 0) {
+        process.stderr.write("Error: --max-recall-tokens must be a positive integer\n");
+        process.exit(1);
+      }
+      updates["maxRecallTokens"] = n;
+    }
+
+    if (opts.confidenceThreshold !== undefined) {
+      const n = parseFloat(opts.confidenceThreshold);
+      if (isNaN(n) || n < 0 || n > 1) {
+        process.stderr.write("Error: --confidence-threshold must be between 0.0 and 1.0\n");
+        process.exit(1);
+      }
+      updates["confidenceThreshold"] = n;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      // No flags — show current config
+      process.stdout.write(`Current config (${configPath}):\n`);
+      process.stdout.write(`${JSON.stringify({ ...current }, null, 2)}\n`);
+      return;
+    }
+
+    const next = { ...current, ...updates };
+    writeFileSync(configPath, `${JSON.stringify(next, null, 2)}\n`, "utf-8");
+
+    for (const [key, value] of Object.entries(updates)) {
+      process.stdout.write(`  ${key}: ${JSON.stringify(current[key])} → ${JSON.stringify(value)}\n`);
+    }
+
+    if ("exposeExtendedTools" in updates) {
+      const enabled = updates["exposeExtendedTools"] === true;
+      process.stdout.write(
+        enabled
+          ? "Extended tools enabled. Restart MCP server to apply.\n"
+          : "Extended tools disabled. Restart MCP server to apply.\n",
+      );
+    }
+  });
+
 // Improve the "unknown command" error with a did-you-mean hint.
 program.on("command:*", (operands: string[]) => {
   const bad = operands.join(" ");

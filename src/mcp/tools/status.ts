@@ -21,8 +21,17 @@ import type { ToolContext } from "../register-tools.js";
 // ---------------------------------------------------------------------------
 
 const StatusInput = z.object({
-  /** How many hours back to look. Min 1, max 48. Default 2. */
+  /** How many hours back to look for team status. Min 1, max 48. Default 2. */
   hours: z.number().min(1).max(48).optional().default(2),
+  /**
+   * When provided, append an activity log section to the output.
+   * activity_hours: how far back to look for activity (1–168h, default 24).
+   */
+  activity_hours: z.number().min(1).max(168).optional(),
+  /** Restrict activity log to a specific developer. */
+  developer_id: z.string().optional(),
+  /** Restrict activity log to a specific action type. */
+  action: z.string().optional(),
 });
 
 type StatusInputType = z.infer<typeof StatusInput>;
@@ -204,10 +213,10 @@ export function registerStatusTool(server: McpServer, ctx: ToolContext): void {
   const { db } = ctx;
   server.tool(
     "status",
-    "See who on the team is currently active and what files/modules they're working on",
+    "Health check, team status, and optional activity log. Shows KB stats, active developers, and conflicts. Pass activity_hours to append recent team activity (learn/recall events). Optionally filter by developer_id or action.",
     StatusInput.shape,
     async (input: StatusInputType) => {
-      logger.info("status tool called", { hours: input.hours });
+      logger.info("status tool called", { hours: input.hours, activity_hours: input.activity_hours });
 
       if (!activityLogTableExists(db)) {
         logger.info("activity_log table not found, returning guidance");
@@ -254,7 +263,62 @@ export function registerStatusTool(server: McpServer, ctx: ToolContext): void {
         conflictCount,
       });
 
-      const formatted = formatStatus(activeDevs, devFiles, conflictCount, input.hours);
+      let formatted = formatStatus(activeDevs, devFiles, conflictCount, input.hours);
+
+      // --- Optional activity log section ---
+      if (input.activity_hours !== undefined && activityLogTableExists(db)) {
+        const actHours = input.activity_hours;
+
+        // Build dynamic query with optional developer_id / action filters
+        const conditions: string[] = [`al.timestamp > datetime('now', ? || ' hours')`];
+        const params: (string | number)[] = [`-${actHours}`];
+
+        if (input.developer_id !== undefined) {
+          conditions.push("al.developer_id = ?");
+          params.push(input.developer_id);
+        }
+        if (input.action !== undefined) {
+          conditions.push("al.action = ?");
+          params.push(input.action);
+        }
+
+        interface ActivityRow {
+          readonly developer_id: string | null;
+          readonly action: string;
+          readonly entry_id: string | null;
+          readonly files: string | null;
+          readonly timestamp: string;
+          readonly title: string | null;
+          readonly entry_type: string | null;
+          readonly confidence: number | null;
+        }
+
+        const actRows = db
+          .query<ActivityRow, (string | number)[]>(
+            `SELECT al.developer_id, al.action, al.entry_id,
+                    al.files, al.timestamp,
+                    e.title, e.type AS entry_type, e.confidence
+             FROM   activity_log al
+             LEFT JOIN entries e ON al.entry_id = e.id
+             WHERE  ${conditions.join(" AND ")}
+             ORDER  BY al.timestamp DESC
+             LIMIT  50`,
+          )
+          .all(...params);
+
+        if (actRows.length > 0) {
+          const actLines = actRows.map((row) => {
+            const dev = row.developer_id ?? "unknown";
+            const title = row.title ?? "(no entry)";
+            const entryType = row.entry_type ?? "";
+            const confidence = row.confidence !== null ? row.confidence.toFixed(2) : "N/A";
+            return `[${row.timestamp}] ${dev} ${row.action}: ${title} (${entryType}, confidence: ${confidence})`;
+          });
+          formatted += `\n\n## Recent Activity (last ${actHours}h)\n\n${actLines.join("\n")}`;
+        } else {
+          formatted += `\n\n## Recent Activity (last ${actHours}h)\n\nNo activity found.`;
+        }
+      }
 
       return {
         content: [

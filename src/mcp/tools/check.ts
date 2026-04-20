@@ -20,6 +20,12 @@ import type { ToolContext } from "../register-tools.js";
 // ---------------------------------------------------------------------------
 
 const CheckInput = z.object({
+  /**
+   * Operating mode:
+   *   - 'all' (default): run all violation detectors (current behavior)
+   *   - 'conventions': only check which conventions apply to this file path
+   */
+  mode: z.enum(["all", "conventions"]).optional().default("all"),
   file_path:    z.string().min(1).max(500),
   content:      z.string().max(200_000).optional(),
   developer_id: z.string().optional(),
@@ -55,10 +61,10 @@ export function registerCheckTool(server: McpServer, ctx: ToolContext): void {
 
   server.tool(
     "check",
-    "Check if code follows team conventions. Use before committing new code. Returns violations with line numbers and specific convention references.",
+    "Check code against team conventions. mode='all' (default): run all violation detectors, returns violations with line numbers. mode='conventions': list which conventions apply to this file path. Use before committing new code.",
     CheckInput.shape,
     async (input: CheckInputType) => {
-      logger.info("check tool called", { file_path: input.file_path });
+      logger.info("check tool called", { file_path: input.file_path, mode: input.mode });
 
       const parseResult = CheckInput.safeParse(input);
       if (!parseResult.success) {
@@ -68,8 +74,57 @@ export function registerCheckTool(server: McpServer, ctx: ToolContext): void {
         throw new ValidationError(`Invalid check input: ${msg}`);
       }
 
-      const { file_path, content } = parseResult.data;
+      const { file_path, content, mode } = parseResult.data;
 
+      // --- mode='conventions': show which conventions apply to this file ---
+      if (mode === "conventions") {
+        interface ConventionRow { id: string; title: string; content: string; confidence: number; }
+
+        // By file path prefix
+        const byPath = db.query<ConventionRow, [string]>(
+          `SELECT DISTINCT e.id, e.title, e.content, e.confidence
+           FROM   entries e
+           JOIN   entry_files ef ON ef.entry_id = e.id
+           WHERE  e.type = 'convention' AND e.status = 'active'
+             AND  ? LIKE ef.file_path || '%'
+           ORDER  BY e.confidence DESC LIMIT 10`,
+        ).all(file_path);
+
+        // By directory tag fallback
+        const lastSlash = file_path.lastIndexOf("/");
+        const byTag: ConventionRow[] = lastSlash !== -1
+          ? db.query<ConventionRow, [string]>(
+              `SELECT DISTINCT e.id, e.title, e.content, e.confidence
+               FROM   entries e
+               JOIN   entry_tags et ON et.entry_id = e.id
+               WHERE  e.type = 'convention' AND e.status = 'active'
+                 AND  et.tag = ?
+               ORDER  BY e.confidence DESC LIMIT 10`,
+            ).all(file_path.slice(0, lastSlash))
+          : [];
+
+        // Merge and deduplicate
+        const seen = new Set<string>();
+        const merged: ConventionRow[] = [];
+        for (const row of [...byPath, ...byTag]) {
+          if (!seen.has(row.id)) { seen.add(row.id); merged.push(row); }
+        }
+        merged.sort((a, b) => b.confidence - a.confidence);
+
+        if (merged.length === 0) {
+          return { content: [{ type: "text" as const, text: `No conventions found for ${file_path}.` }] };
+        }
+
+        const lines = [`Conventions applying to ${file_path}:\n`];
+        for (const row of merged) {
+          lines.push(`## ${row.title} (confidence: ${row.confidence.toFixed(2)})`);
+          lines.push(row.content);
+          lines.push("---");
+        }
+        return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+      }
+
+      // --- mode='all' (default): run full violation engine ---
       const violations = checkFileViolations(db, file_path, content);
 
       // Build formatted report.

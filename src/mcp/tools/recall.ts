@@ -43,7 +43,19 @@ import type { IntentBucket } from "../../utils/analytics.js";
 // ---------------------------------------------------------------------------
 
 const RecallInput = z.object({
-  query: z.string().min(2).max(500),
+  /**
+   * Operating mode — controls what this tool does:
+   *   - 'search' (default): full ranked recall with RRF fusion (current behavior)
+   *   - 'index': compact token-efficient index (id · type · confidence · title); use before get_entry
+   *   - 'single': fetch full content for one entry by id (pass id in query)
+   *   - 'conventions': list team coding standards by directory/tags
+   *   - 'failures': look up known error patterns by error message
+   */
+  mode: z
+    .enum(["search", "index", "single", "conventions", "failures"])
+    .optional()
+    .default("search"),
+  query: z.string().min(1).max(500),
   type: z
     .enum(["error_pattern", "convention", "decision", "learning", "ghost_knowledge", "all"])
     .optional()
@@ -63,6 +75,16 @@ const RecallInput = z.object({
    * Must be between 200 and 20000.
    */
   context_budget: z.number().int().min(200).max(20000).optional(),
+  /** For mode='single': the entry id to fetch. Alias: use query field. */
+  id: z.string().optional(),
+  /** For mode='conventions': directory prefix filter. */
+  directory: z.string().optional(),
+  /** For mode='conventions': tag filter. */
+  tags: z.array(z.string()).optional(),
+  /** For mode='failures': the error message to look up. */
+  error_message: z.string().optional(),
+  /** For mode='failures': optional error type for fingerprinting. */
+  error_type: z.string().optional(),
 });
 
 type RecallInputType = z.infer<typeof RecallInput>;
@@ -198,9 +220,251 @@ export function registerRecallTool(server: McpServer, ctx: ToolContext): void {
   const { db } = ctx;
   server.tool(
     "recall",
-    "Search team knowledge and return full entry content. Use before writing code to surface applicable team rules, errors, decisions, and conventions. Prefer search + get_entry for browsing multiple results (7× fewer tokens). Each result includes a gyst://entry/{id} citation URI.",
+    "Search team knowledge. mode='search' (default): full ranked results. mode='index': compact id/type/title list (7× fewer tokens). mode='single': full entry by id. mode='conventions': coding standards by directory/tags. mode='failures': known error patterns by error_message. Use before writing code to surface team rules, errors, and decisions.",
     RecallInput.shape,
     async (input: RecallInputType) => {
+      const mode = input.mode ?? "search";
+
+      // --- mode='index': delegate to search tool logic ---
+      if (mode === "index") {
+        emitEvent(db, "tool_use", { tool: "recall:index", query: input.query });
+        logger.info("recall[index] called", { query: input.query });
+
+        const { fetchEntriesByIds } = await import("../../store/entries.js");
+        const { formatAge } = await import("../../utils/age.js");
+        const config = loadConfig();
+        const typeFilter = input.type === "all" ? undefined : input.type;
+        const developerId = input.developer_id;
+        const includeAllPersonal = ctx.mode === "personal" && developerId === undefined;
+
+        const semanticPromise = canLoadExtensions()
+          ? searchByVector(db, input.query, 20, developerId).catch((err: unknown) => {
+              logger.warn("searchByVector failed", { error: err instanceof Error ? err.message : String(err) });
+              return [];
+            })
+          : Promise.resolve([]);
+
+        const [fileResults, bm25Results, graphResults, temporalResults, vectorResults] =
+          await Promise.all([
+            Promise.resolve(searchByFilePath(db, input.files ?? [])),
+            Promise.resolve(searchByBM25(db, input.query, typeFilter, developerId, includeAllPersonal)),
+            Promise.resolve(searchByGraph(db, input.query)),
+            Promise.resolve(searchByTemporal(db, input.query)),
+            semanticPromise,
+          ]);
+
+        const { classifyIntent, applyIntentBoost } = await import("../../store/intent.js");
+        const intent = classifyIntent(input.query);
+        const temporalWeight = (intent === "debugging" || intent === "history")
+          ? [temporalResults, temporalResults]
+          : [temporalResults];
+
+        const rawFused = reciprocalRankFusion([fileResults, bm25Results, graphResults, ...temporalWeight, vectorResults]);
+        const limit = input.max_results ?? 10;
+        const topIds = rawFused.slice(0, limit * 3).map((r) => r.id);
+        const entries = fetchEntriesByIds(db, topIds, developerId, includeAllPersonal);
+
+        const scoreMap = new Map(rawFused.map((r) => [r.id, r.score]));
+        const boostedScores = new Map(
+          entries.map((e) => {
+            const base = scoreMap.get(e.id) ?? 0;
+            let boosted = base;
+            if (e.type === "ghost_knowledge") boosted = Math.min(1.0, base + 0.1);
+            else if (e.type === "convention") boosted = Math.min(1.0, base + 0.05);
+            return [e.id, boosted] as const;
+          }),
+        );
+        const intentBoostedScores = applyIntentBoost(entries, boostedScores, intent);
+        const sortedEntries = [...entries].sort((a, b) => {
+          const aIsGhost = a.type === "ghost_knowledge" ? 0 : 1;
+          const bIsGhost = b.type === "ghost_knowledge" ? 0 : 1;
+          const tierDiff = aIsGhost - bIsGhost;
+          if (tierDiff !== 0) return tierDiff;
+          return (intentBoostedScores.get(b.id) ?? 0) - (intentBoostedScores.get(a.id) ?? 0);
+        });
+        const filtered = sortedEntries
+          .filter((e) => e.type === "ghost_knowledge" || e.confidence >= config.confidenceThreshold)
+          .slice(0, limit);
+
+        if (filtered.length === 0) {
+          return { content: [{ type: "text" as const, text: `No results found for: ${input.query}` }] };
+        }
+
+        const lines: string[] = [`Found ${filtered.length} results. Use recall(mode='single', id=...) for full detail.`, ""];
+        for (const entry of filtered) {
+          const confidence = `${(entry.confidence * 100).toFixed(0)}%`;
+          const age = formatAge(entry.createdAt);
+          lines.push(`${entry.id} · ${entry.type} · ${confidence} · ${age}`);
+          lines.push(entry.title);
+          lines.push(`ref: gyst://entry/${entry.id}`);
+          lines.push("");
+        }
+        return { content: [{ type: "text" as const, text: lines.join("\n").trimEnd() }] };
+      }
+
+      // --- mode='single': fetch full entry by id ---
+      if (mode === "single") {
+        const entryId = input.id ?? input.query;
+        emitEvent(db, "tool_use", { tool: "recall:single", id: entryId });
+        logger.info("recall[single] called", { id: entryId });
+
+        const { getEntryById } = await import("../../store/entries.js");
+        const { formatAge } = await import("../../utils/age.js");
+        const entry = getEntryById(db, entryId, input.developer_id);
+        if (entry === null) {
+          return { content: [{ type: "text" as const, text: `Entry not found: ${entryId}` }] };
+        }
+
+        const fileRows = db.query<{ file_path: string }, [string]>(
+          "SELECT file_path FROM entry_files WHERE entry_id = ?",
+        ).all(entryId);
+        const files = fileRows.map((r) => r.file_path);
+
+        const tagRows = db.query<{ tag: string }, [string]>(
+          "SELECT tag FROM entry_tags WHERE entry_id = ?",
+        ).all(entryId);
+        const ENTITY_PREFIX = "entity:";
+        const entities: string[] = [];
+        const plainTags: string[] = [];
+        for (const { tag } of tagRows) {
+          if (tag.startsWith(ENTITY_PREFIX)) entities.push(tag.slice(ENTITY_PREFIX.length));
+          else plainTags.push(tag);
+        }
+
+        const confidencePct = (entry.confidence * 100).toFixed(0);
+        const age = formatAge(entry.createdAt);
+        const lines: string[] = [
+          `# ${entry.title}`,
+          `**Type:** ${entry.type} · **Confidence:** ${confidencePct}% · **Age:** ${age} · **Scope:** ${entry.scope}`,
+          "",
+          entry.content,
+        ];
+        if (files.length > 0) { lines.push("", "## Files"); for (const f of files) lines.push(`- ${f}`); }
+        if (entities.length > 0) { lines.push("", "## Entities"); for (const e of entities) lines.push(`- ${e}`); }
+        if (plainTags.length > 0) { lines.push("", "## Tags"); for (const t of plainTags) lines.push(`- ${t}`); }
+        lines.push("", `ref: gyst://entry/${entry.id}`);
+
+        return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+      }
+
+      // --- mode='conventions': fetch team coding standards ---
+      if (mode === "conventions") {
+        emitEvent(db, "tool_use", { tool: "recall:conventions" });
+        logger.info("recall[conventions] called", { directory: input.directory, tags: input.tags });
+
+        const { truncateToTokenBudget } = await import("../../utils/tokens.js");
+        const config = loadConfig();
+        const directory = input.directory;
+        const tags = input.tags;
+
+        const hasDirectory = directory !== undefined && directory.length > 0;
+        const hasTags = tags !== undefined && tags.length > 0;
+
+        interface ConventionRow { id: string; title: string; content: string; confidence: number; }
+        let rows: ConventionRow[];
+
+        if (!hasDirectory && !hasTags) {
+          rows = db.query<ConventionRow, []>(
+            `SELECT e.id, e.title, e.content, e.confidence
+             FROM   entries e
+             WHERE  e.type = 'convention' AND e.status = 'active'
+             ORDER  BY e.confidence DESC`,
+          ).all();
+        } else {
+          const conditions: string[] = ["e.type = 'convention'", "e.status = 'active'"];
+          const params: string[] = [];
+          const joins: string[] = [];
+          if (hasDirectory) {
+            joins.push("LEFT JOIN entry_files ef ON ef.entry_id = e.id");
+            conditions.push("ef.file_path LIKE ?");
+            params.push(`${directory}%`);
+          }
+          if (hasTags) {
+            joins.push("LEFT JOIN entry_tags et ON et.entry_id = e.id");
+            const tagPlaceholders = tags!.map(() => "?").join(", ");
+            conditions.push(`et.tag IN (${tagPlaceholders})`);
+            params.push(...tags!);
+          }
+          const sql = `SELECT DISTINCT e.id, e.title, e.content, e.confidence FROM entries e ${joins.join(" ")} WHERE ${conditions.join(" AND ")} ORDER BY e.confidence DESC`;
+          rows = db.query<ConventionRow, string[]>(sql).all(...params);
+        }
+
+        logger.info("recall[conventions] results", { count: rows.length });
+        if (ctx.mode === "team" && ctx.developerId !== undefined && ctx.teamId !== undefined) {
+          const { logActivity } = await import("../../server/activity.js");
+          logActivity(ctx.db, ctx.teamId, ctx.developerId, "conventions");
+        }
+
+        if (rows.length === 0) {
+          return { content: [{ type: "text" as const, text: "No conventions found for the given context." }] };
+        }
+        const sections = rows.map((row) =>
+          [`## ${row.title} (confidence: ${row.confidence.toFixed(2)})`, row.content, "---"].join("\n"),
+        );
+        const formatted = truncateToTokenBudget(sections.join("\n\n"), config.maxRecallTokens);
+        return { content: [{ type: "text" as const, text: formatted }] };
+      }
+
+      // --- mode='failures': look up known error patterns ---
+      if (mode === "failures") {
+        const errorMessage = input.error_message ?? input.query;
+        emitEvent(db, "tool_use", { tool: "recall:failures" });
+        logger.info("recall[failures] called", { error_type: input.error_type });
+
+        const { normalizeErrorSignature, generateFingerprint } = await import("../../compiler/normalize.js");
+        const { truncateToTokenBudget } = await import("../../utils/tokens.js");
+        const config = loadConfig();
+
+        const normalised = normalizeErrorSignature(errorMessage);
+        // Fingerprint generated for future use (exact-match path); currently
+        // we rely on normalised signature for the exact-match query.
+        if (input.error_type !== undefined) {
+          generateFingerprint(input.error_type, normalised);
+        }
+
+        interface FailureRow { id: string; title: string; content: string; confidence: number; error_signature: string | null; }
+
+        let rows = db.query<FailureRow, [string]>(
+          `SELECT id, title, content, confidence, error_signature
+           FROM   entries
+           WHERE  error_signature = ? AND type = 'error_pattern' AND status = 'active'
+           ORDER  BY confidence DESC`,
+        ).all(normalised);
+
+        if (rows.length === 0) {
+          const bm25Results = searchByBM25(db, normalised, "error_pattern");
+          const ids = bm25Results.slice(0, 5).map((r) => r.id);
+          if (ids.length > 0) {
+            const placeholders = ids.map(() => "?").join(", ");
+            rows = db.query<FailureRow, string[]>(
+              `SELECT id, title, content, confidence, error_signature
+               FROM   entries
+               WHERE  id IN (${placeholders}) AND type = 'error_pattern' AND status = 'active'
+               ORDER  BY confidence DESC`,
+            ).all(...ids);
+          }
+        }
+
+        const filtered = rows.filter((r) => r.confidence >= config.confidenceThreshold);
+        logger.info("recall[failures] results", { total: rows.length, afterFilter: filtered.length });
+
+        if (ctx.mode === "team" && ctx.developerId !== undefined && ctx.teamId !== undefined) {
+          const { logActivity } = await import("../../server/activity.js");
+          logActivity(ctx.db, ctx.teamId, ctx.developerId, "failures");
+        }
+
+        if (filtered.length === 0) {
+          return { content: [{ type: "text" as const, text: "No known error patterns found matching this error." }] };
+        }
+        const header = `Found ${filtered.length} known error pattern(s):\n\n`;
+        const sections = filtered.map((row) =>
+          [`## ${row.title} (confidence: ${row.confidence.toFixed(2)})`, row.content, "---"].join("\n"),
+        );
+        const formatted = truncateToTokenBudget(header + sections.join("\n\n"), config.maxRecallTokens);
+        return { content: [{ type: "text" as const, text: formatted }] };
+      }
+
+      // --- mode='search' (default): original recall behavior, unchanged ---
       emitEvent(db, "tool_use", { tool: "recall", query: input.query });
 
       logger.info("recall tool called", {
