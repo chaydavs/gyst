@@ -191,3 +191,129 @@ export function installForDetectedTools(projectDir: string): string[] {
 
   return configured;
 }
+
+// ---------------------------------------------------------------------------
+// Hook installation
+// ---------------------------------------------------------------------------
+
+interface HookCommandEntry {
+  command: string;
+  type?: string;
+  timeout?: number;
+}
+
+interface HookToolDescriptor {
+  readonly name: string;
+  hookConfigPath(homeDir: string): string;
+  detectionDir(homeDir: string): string;
+  buildConfig(scriptsDir: string): Record<string, unknown>;
+}
+
+function cmd(scriptsDir: string, script: string): HookCommandEntry {
+  return { type: "command", command: `node ${join(scriptsDir, script)}` };
+}
+
+function cmdNoType(scriptsDir: string, script: string): HookCommandEntry {
+  return { command: `node ${join(scriptsDir, script)}` };
+}
+
+const HOOK_TOOL_DESCRIPTORS: readonly HookToolDescriptor[] = [
+  {
+    name: "Gemini CLI",
+    hookConfigPath: (h) => join(h, ".gemini", "settings.json"),
+    detectionDir:   (h) => join(h, ".gemini"),
+    buildConfig: (s) => ({
+      hooks: {
+        SessionStart: [cmd(s, "session-start.js")],
+        SessionEnd:   [cmd(s, "session-end.js")],
+        PreToolUse:   [cmd(s, "pre-tool.js")],
+        PostToolUse:  [cmd(s, "tool-use.js")],
+      },
+    }),
+  },
+  {
+    name: "Cursor",
+    hookConfigPath: (h) => join(h, ".cursor", "hooks.json"),
+    detectionDir:   (h) => join(h, ".cursor"),
+    buildConfig: (s) => ({
+      version: 1,
+      hooks: {
+        sessionStart: [{ ...cmd(s, "session-start.js"), timeout: 5 }],
+        sessionEnd:   [{ ...cmd(s, "session-end.js"),   timeout: 5 }],
+        preToolUse:   [{ ...cmd(s, "pre-tool.js"),      timeout: 1 }],
+        postToolUse:  [{ ...cmd(s, "tool-use.js"),      timeout: 1 }],
+      },
+    }),
+  },
+  {
+    name: "Windsurf",
+    hookConfigPath: (h) => join(h, ".codeium", "windsurf", "hooks.json"),
+    detectionDir:   (h) => join(h, ".codeium", "windsurf"),
+    buildConfig: (s) => ({
+      hooks: {
+        pre_session:    [cmdNoType(s, "session-start.js")],
+        post_session:   [cmdNoType(s, "session-end.js")],
+        pre_tool_call:  [cmdNoType(s, "pre-tool.js")],
+        post_tool_call: [cmdNoType(s, "tool-use.js")],
+      },
+    }),
+  },
+  {
+    name: "Codex CLI",
+    hookConfigPath: (h) => join(h, ".codex", "hooks.json"),
+    detectionDir:   (h) => join(h, ".codex"),
+    buildConfig: (s) => ({
+      hooks: {
+        SessionStart: [cmd(s, "session-start.js")],
+        SessionEnd:   [cmd(s, "session-end.js")],
+        PreToolUse:   [cmd(s, "pre-tool.js")],
+        PostToolUse:  [cmd(s, "tool-use.js")],
+      },
+    }),
+  },
+];
+
+/**
+ * Detects installed AI coding tools and writes gyst hook configs for each.
+ *
+ * Uses `homeDir` as the base for all home-directory tool paths so tests
+ * can inject a temp directory instead of the real home.
+ *
+ * @param homeDir    - Base directory standing in for `os.homedir()`.
+ * @param scriptsDir - Absolute path to `plugin/scripts/` containing the hook JS files.
+ * @returns List of tool names that received hook configs.
+ */
+export function installHooksForDetectedTools(
+  homeDir: string,
+  scriptsDir: string,
+): string[] {
+  const configured: string[] = [];
+
+  for (const tool of HOOK_TOOL_DESCRIPTORS) {
+    const detectionDir = tool.detectionDir(homeDir);
+
+    if (!existsSync(detectionDir)) {
+      logger.debug("installHooksForDetectedTools: skipping — detection dir absent", {
+        tool: tool.name,
+        detectionDir,
+      });
+      continue;
+    }
+
+    try {
+      const configPath = tool.hookConfigPath(homeDir);
+      const config = tool.buildConfig(scriptsDir);
+      writeJsonConfig(configPath, config as McpConfig);
+      logger.info("Hook config written", { tool: tool.name, configPath });
+      configured.push(tool.name);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.warn("installHooksForDetectedTools: failed to write hook config", {
+        tool: tool.name,
+        error: msg,
+      });
+    }
+  }
+
+  return configured;
+}
