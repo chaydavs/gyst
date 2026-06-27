@@ -1,0 +1,115 @@
+{
+  "provider": "gyst",
+  "benchmark": "longmemeval",
+  "runId": "gyst-baseline",
+  "judge": "sonnet-4.5",
+  "answeringModel": "sonnet-4.5",
+  "timestamp": "2026-06-26T19:32:13.617Z",
+  "summary": {
+    "totalQuestions": 500,
+    "correctCount": 69,
+    "accuracy": 0.138
+  },
+  "tokens": {
+    "totalTokens": 139881,
+    "basePromptTokens": 77706,
+    "contextTokens": 62175,
+    "avgTokensPerQuestion": 280,
+    "avgBasePromptTokens": 155,
+    "avgContextTokens": 124
+  },
+  "latency": {
+    "ingest": {
+      "min": 846,
+      "max": 1699,
+      "mean": 1208,
+      "median": 1187,
+      "p95": 1519,
+      "p99": 1649,
+      "stdDev": 177,
+      "count": 500
+    },
+    "indexing": {
+      "min": 1,
+      "max": 21,
+      "mean": 11,
+      "median": 18,
+      "p95": 21,
+      "p99": 21,
+      "stdDev": 9,
+      "count": 276
+    },
+    "search": {
+      "min": 2,
+      "max": 47,
+      "mean": 26,
+      "median": 32,
+      "p95": 39,
+      "p99": 43,
+      "stdDev": 12,
+      "count": 500
+    },
+    "answer": {
+      "min": 1513,
+      "max": 65004,
+      "mean": 5220,
+      "median": 2627,
+      "p95": 6258,
+      "p99": 64826,
+      "stdDev": 12154,
+      "count": 500
+    },
+    "evaluate": {
+      "min": 1383,
+      "max": 27245,
+      "mean": 2951,
+      "median": 2783,
+      "p95": 4228,
+      "p99": 6299,
+      "stdDev": 1355,
+      "count": 500
+    },
+    "total": {
+      "min": 4825,
+      "max": 70692,
+      "mean": 9412,
+      "median": 6757,
+      "p95": 11925,
+      "p99": 69264,
+      "stdDev": 12223,
+      "count": 500
+    }
+  },
+  "byQuestionType": {
+    "single-session-preference": {
+      "total": 30,
+      "correct": 16,
+      "accuracy": 0.5333333333333333
+    },
+    "single-session-user": {
+      "total": 70,
+      "correct": 21,
+      "accuracy": 0.3
+    },
+    "multi-session": {
+      "total": 133,
+      "correct": 9,
+      "accuracy": 0.06766917293233082
+    },
+    "temporal-reasoning": {
+      "total": 133,
+      "correct": 8,
+      "accuracy": 0.06015037593984962
+    },
+    "knowledge-update": {
+      "total": 78,
+      "correct": 14,
+      "accuracy": 0.1794871794871795
+    },
+    "single-session-assistant": {
+      "total": 56,
+      "correct": 1,
+      "accuracy": 0.017857142857142856
+    }
+  }
+}
