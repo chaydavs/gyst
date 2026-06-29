@@ -49,6 +49,50 @@ const FTS5_PROBLEM_WORDS = new Set([
   "for",
   "at",
   "by",
+  // H3: question words, pronouns, and auxiliaries. These almost never appear
+  // verbatim in entry text, so leaving them in only inflates the implicit-AND
+  // burden and adds noise to the H2 OR-fallback. Ambiguous words that can be
+  // real content (may/can/will/must/might) are deliberately NOT included.
+  // Question words
+  "what",
+  "why",
+  "how",
+  "which",
+  "when",
+  "where",
+  "who",
+  "whom",
+  "whose",
+  // Pronouns (first / second / third person + possessives)
+  "i",
+  "me",
+  "my",
+  "mine",
+  "you",
+  "your",
+  "yours",
+  "he",
+  "him",
+  "his",
+  "she",
+  "her",
+  "hers",
+  "they",
+  "them",
+  "their",
+  "theirs",
+  "us",
+  "its",
+  // Auxiliaries / modals (non-ambiguous)
+  "have",
+  "has",
+  "had",
+  "been",
+  "being",
+  "am",
+  "should",
+  "would",
+  "could",
 ]);
 
 /**

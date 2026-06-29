@@ -1,0 +1,115 @@
+{
+  "provider": "gyst",
+  "benchmark": "longmemeval",
+  "runId": "gyst-h2h3-haiku-100",
+  "judge": "haiku-4.5",
+  "answeringModel": "haiku-4.5",
+  "timestamp": "2026-06-26T21:15:03.087Z",
+  "summary": {
+    "totalQuestions": 100,
+    "correctCount": 55,
+    "accuracy": 0.55
+  },
+  "tokens": {
+    "totalTokens": 838424,
+    "basePromptTokens": 15510,
+    "contextTokens": 822914,
+    "avgTokensPerQuestion": 8384,
+    "avgBasePromptTokens": 155,
+    "avgContextTokens": 8229
+  },
+  "latency": {
+    "ingest": {
+      "min": 559,
+      "max": 1130,
+      "mean": 973,
+      "median": 979,
+      "p95": 1100,
+      "p99": 1130,
+      "stdDev": 99,
+      "count": 100
+    },
+    "indexing": {
+      "min": 1,
+      "max": 5,
+      "mean": 3,
+      "median": 4,
+      "p95": 4,
+      "p99": 5,
+      "stdDev": 1,
+      "count": 54
+    },
+    "search": {
+      "min": 6,
+      "max": 63,
+      "mean": 30,
+      "median": 29,
+      "p95": 55,
+      "p99": 63,
+      "stdDev": 13,
+      "count": 100
+    },
+    "answer": {
+      "min": 1199,
+      "max": 10689,
+      "mean": 3873,
+      "median": 3153,
+      "p95": 7989,
+      "p99": 10689,
+      "stdDev": 2030,
+      "count": 100
+    },
+    "evaluate": {
+      "min": 1070,
+      "max": 5682,
+      "mean": 1836,
+      "median": 1715,
+      "p95": 2501,
+      "p99": 5682,
+      "stdDev": 623,
+      "count": 100
+    },
+    "total": {
+      "min": 3742,
+      "max": 14953,
+      "mean": 6715,
+      "median": 5933,
+      "p95": 10935,
+      "p99": 14953,
+      "stdDev": 2346,
+      "count": 100
+    }
+  },
+  "byQuestionType": {
+    "single-session-preference": {
+      "total": 8,
+      "correct": 3,
+      "accuracy": 0.375
+    },
+    "single-session-user": {
+      "total": 13,
+      "correct": 12,
+      "accuracy": 0.9230769230769231
+    },
+    "multi-session": {
+      "total": 24,
+      "correct": 8,
+      "accuracy": 0.3333333333333333
+    },
+    "temporal-reasoning": {
+      "total": 29,
+      "correct": 13,
+      "accuracy": 0.4482758620689655
+    },
+    "knowledge-update": {
+      "total": 17,
+      "correct": 10,
+      "accuracy": 0.5882352941176471
+    },
+    "single-session-assistant": {
+      "total": 9,
+      "correct": 9,
+      "accuracy": 1
+    }
+  }
+}

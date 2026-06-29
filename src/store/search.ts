@@ -173,6 +173,23 @@ interface FtsRow {
  * @returns Ranked results ordered by descending BM25 score.
  * @throws {SearchError} If the FTS query fails (e.g. malformed syntax).
  */
+/**
+ * Build an OR-mode FTS5 expression from a plain-term match expression, for the
+ * BM25 zero-result fallback (H2). Returns null when the expression is not a flat
+ * list of bare terms (already contains an OR group, an explicit operator,
+ * quotes, or parentheses) or has fewer than two terms — in those cases an OR
+ * rewrite would be redundant or risk producing invalid FTS5 syntax.
+ */
+function toOrModeExpression(tokenised: string): string | null {
+  const trimmed = tokenised.trim();
+  if (trimmed.length === 0) return null;
+  if (/[()"]/.test(trimmed)) return null;
+  const terms = trimmed.split(/\s+/);
+  if (terms.length < 2) return null;
+  if (terms.some((t) => t === "AND" || t === "OR" || t === "NOT")) return null;
+  return terms.join(" OR ");
+}
+
 export function searchByBM25(
   db: Database,
   query: string,
@@ -264,7 +281,21 @@ export function searchByBM25(
       }
     }
 
-    const rows = db.query<FtsRow, SQLQueryBindings[]>(sql).all(...params);
+    let rows = db.query<FtsRow, SQLQueryBindings[]>(sql).all(...params);
+
+    // H2: OR-mode fallback. Implicit-AND requires every term to co-occur in a
+    // single entry, which makes natural-language queries miss ("vintage cameras
+    // hobby" finds nothing even when an entry clearly mentions cameras). When
+    // the AND match returns zero rows, retry once with the terms OR-joined so
+    // any term may match. Skipped for expressions that already contain an OR
+    // group or explicit operator, so the common case is completely unchanged.
+    if (rows.length === 0) {
+      const orExpr = toOrModeExpression(tokenised);
+      if (orExpr !== null) {
+        params[0] = orExpr;
+        rows = db.query<FtsRow, SQLQueryBindings[]>(sql).all(...params);
+      }
+    }
 
     return rows.map((row) => ({
       id: row.id,

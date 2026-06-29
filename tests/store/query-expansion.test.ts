@@ -59,11 +59,14 @@ describe("expandQuery", () => {
     expect(result).toBe("");
   });
 
-  test("strips FTS5 problem word 'did' from query", () => {
+  test("strips FTS5 problem word 'did' and question word 'why' from query", () => {
     const result = expandQuery("why did we choose bun");
     expect(result).not.toContain("did");
     expect(result).not.toContain("we");
-    expect(result).toContain("why");
+    // H3: question words are now stripped (per the module's documented intent —
+    // they inflate the implicit-AND burden and rarely appear verbatim in entry
+    // text). Reasoning-intent detection runs on the raw query, not this output.
+    expect(result).not.toContain("why");
     expect(result).toContain("bun");
   });
 
@@ -91,12 +94,13 @@ describe("expandQuery", () => {
     expect(result).toContain("(reranker OR ranker)");
   });
 
-  test("strips common stop words that rarely appear in entry text", () => {
+  test("strips question words and auxiliaries that rarely appear in entry text", () => {
     const result = expandQuery("how should we handle api errors");
     expect(result).not.toContain(" we ");
-    // "how" and "should" are not stop words — they remain
-    expect(result).toContain("how");
-    expect(result).toContain("should");
+    // H3: "how" (question word) and "should" (auxiliary) are now stripped, as
+    // the module doc always intended. Content terms remain.
+    expect(result).not.toContain("how");
+    expect(result).not.toContain("should");
     expect(result).toContain("handle");
     expect(result).toContain("api");
     expect(result).toContain("errors");

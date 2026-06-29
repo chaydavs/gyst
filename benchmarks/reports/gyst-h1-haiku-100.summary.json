@@ -1,0 +1,115 @@
+{
+  "provider": "gyst",
+  "benchmark": "longmemeval",
+  "runId": "gyst-h1-haiku-100",
+  "judge": "haiku-4.5",
+  "answeringModel": "haiku-4.5",
+  "timestamp": "2026-06-27T01:59:11.577Z",
+  "summary": {
+    "totalQuestions": 100,
+    "correctCount": 60,
+    "accuracy": 0.6
+  },
+  "tokens": {
+    "totalTokens": 978479,
+    "basePromptTokens": 15510,
+    "contextTokens": 962969,
+    "avgTokensPerQuestion": 9785,
+    "avgBasePromptTokens": 155,
+    "avgContextTokens": 9630
+  },
+  "latency": {
+    "ingest": {
+      "min": 25776,
+      "max": 56748,
+      "mean": 51155,
+      "median": 51853,
+      "p95": 55372,
+      "p99": 56748,
+      "stdDev": 5434,
+      "count": 100
+    },
+    "indexing": {
+      "min": 1,
+      "max": 5,
+      "mean": 4,
+      "median": 4,
+      "p95": 5,
+      "p99": 5,
+      "stdDev": 2,
+      "count": 55
+    },
+    "search": {
+      "min": 233,
+      "max": 3206,
+      "mean": 1316,
+      "median": 1239,
+      "p95": 2727,
+      "p99": 3206,
+      "stdDev": 679,
+      "count": 100
+    },
+    "answer": {
+      "min": 1929,
+      "max": 7349,
+      "mean": 3485,
+      "median": 3340,
+      "p95": 5551,
+      "p99": 7349,
+      "stdDev": 1068,
+      "count": 100
+    },
+    "evaluate": {
+      "min": 1299,
+      "max": 6613,
+      "mean": 2023,
+      "median": 1746,
+      "p95": 4444,
+      "p99": 6613,
+      "stdDev": 906,
+      "count": 100
+    },
+    "total": {
+      "min": 31514,
+      "max": 66302,
+      "mean": 57982,
+      "median": 58945,
+      "p95": 63694,
+      "p99": 66302,
+      "stdDev": 5781,
+      "count": 100
+    }
+  },
+  "byQuestionType": {
+    "single-session-preference": {
+      "total": 8,
+      "correct": 3,
+      "accuracy": 0.375
+    },
+    "single-session-user": {
+      "total": 13,
+      "correct": 10,
+      "accuracy": 0.7692307692307693
+    },
+    "multi-session": {
+      "total": 24,
+      "correct": 13,
+      "accuracy": 0.5416666666666666
+    },
+    "temporal-reasoning": {
+      "total": 29,
+      "correct": 13,
+      "accuracy": 0.4482758620689655
+    },
+    "knowledge-update": {
+      "total": 17,
+      "correct": 13,
+      "accuracy": 0.7647058823529411
+    },
+    "single-session-assistant": {
+      "total": 9,
+      "correct": 8,
+      "accuracy": 0.8888888888888888
+    }
+  }
+}
